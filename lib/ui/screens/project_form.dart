@@ -1,0 +1,286 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../data/models.dart';
+import '../../data/repository.dart';
+import '../format.dart';
+import '../widgets/common.dart';
+import 'client_form.dart';
+
+Future<void> openProjectForm(BuildContext context,
+    {Project? project, String? clientId}) {
+  return Navigator.push(
+    context,
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => ProjectForm(project: project, clientId: clientId),
+    ),
+  );
+}
+
+class ProjectForm extends StatefulWidget {
+  const ProjectForm({super.key, this.project, this.clientId});
+
+  final Project? project;
+  final String? clientId;
+
+  @override
+  State<ProjectForm> createState() => _ProjectFormState();
+}
+
+class _ProjectFormState extends State<ProjectForm> {
+  final _form = GlobalKey<FormState>();
+  late final TextEditingController _code;
+  late final TextEditingController _name;
+  late final TextEditingController _location;
+  late final TextEditingController _notes;
+  String? _clientId;
+  String? _stageId;
+  ServiceType _service = ServiceType.design;
+  ProjectStatus _status = ProjectStatus.active;
+  bool _abroad = false;
+  DateTime? _start;
+  DateTime? _due;
+  Set<String> _team = {};
+
+  @override
+  void initState() {
+    super.initState();
+    final repo = context.read<Repository>();
+    final p = widget.project;
+    _code = TextEditingController(text: p?.code ?? repo.nextProjectCode());
+    _name = TextEditingController(text: p?.name ?? '');
+    _location = TextEditingController(text: p?.location ?? '');
+    _notes = TextEditingController(text: p?.notes ?? '');
+    _clientId = p?.clientId ?? widget.clientId;
+    _stageId = p?.stageId ?? repo.stages.firstOrNull?.id;
+    _service = p?.service ?? ServiceType.design;
+    _status = p?.status ?? ProjectStatus.active;
+    _abroad = p?.abroad ?? false;
+    _start = p?.startDate ?? (p == null ? repo.now() : null);
+    _due = p?.dueDate;
+    _team = {...?p?.teamIds};
+  }
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _name.dispose();
+    _location.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
+    final repo = context.read<Repository>();
+    final p = widget.project;
+    final now = repo.now();
+    // Outside Lebanon AK only does consultancy.
+    final service = _abroad ? ServiceType.consultancy : _service;
+    await repo.saveProject(Project(
+      id: p?.id ?? repo.newId(),
+      createdAt: p?.createdAt ?? now,
+      updatedAt: now,
+      code: _code.text.trim(),
+      name: _name.text.trim(),
+      clientId: _clientId,
+      service: service,
+      location: _location.text.trim(),
+      abroad: _abroad,
+      stageId: _stageId,
+      status: _status,
+      startDate: _start,
+      dueDate: _due,
+      teamIds: _team.toList()..sort(),
+      notes: _notes.text.trim(),
+    ));
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _newClient() async {
+    final id = await openClientForm(context);
+    if (id != null) setState(() => _clientId = id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.watch<Repository>();
+    const gap = SizedBox(height: 14);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.project == null ? 'New project' : 'Edit project'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(onPressed: _save, child: const Text('Save')),
+          ),
+        ],
+      ),
+      body: Form(
+        key: _form,
+        child: Readable(
+          maxWidth: 640,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
+                children: [
+                  SizedBox(
+                    width: 130,
+                    child: TextFormField(
+                      controller: _code,
+                      decoration: const InputDecoration(labelText: 'Code'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _name,
+                      autofocus: widget.project == null,
+                      decoration:
+                          const InputDecoration(labelText: 'Project name'),
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Enter a name'
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              gap,
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      initialValue:
+                          repo.client(_clientId) == null ? null : _clientId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Client'),
+                      items: [
+                        const DropdownMenuItem(
+                            value: null, child: Text('No client yet')),
+                        for (final c in repo.clients)
+                          DropdownMenuItem(value: c.id, child: Text(c.name)),
+                      ],
+                      onChanged: (v) => setState(() => _clientId = v),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.outlined(
+                    tooltip: 'New client',
+                    onPressed: _newClient,
+                    icon: const Icon(Icons.person_add_alt),
+                  ),
+                ],
+              ),
+              gap,
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Outside Lebanon'),
+                subtitle: const Text('Consultancy only'),
+                value: _abroad,
+                onChanged: (v) => setState(() {
+                  _abroad = v;
+                  if (v) _service = ServiceType.consultancy;
+                }),
+              ),
+              SegmentedButton<ServiceType>(
+                segments: [
+                  for (final s in ServiceType.values)
+                    ButtonSegment(
+                      value: s,
+                      label: Text(serviceLabel(s)),
+                      enabled: !_abroad || s == ServiceType.consultancy,
+                    ),
+                ],
+                selected: {_service},
+                onSelectionChanged: (v) => setState(() => _service = v.first),
+              ),
+              gap,
+              TextFormField(
+                controller: _location,
+                decoration: const InputDecoration(
+                    labelText: 'Location', hintText: 'City, area or country'),
+              ),
+              gap,
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String?>(
+                      initialValue:
+                          repo.stage(_stageId) == null ? null : _stageId,
+                      isExpanded: true,
+                      decoration:
+                          const InputDecoration(labelText: 'Current stage'),
+                      items: [
+                        for (final s in repo.stages)
+                          DropdownMenuItem(value: s.id, child: Text(s.name)),
+                      ],
+                      onChanged: (v) => setState(() => _stageId = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<ProjectStatus>(
+                      initialValue: _status,
+                      decoration: const InputDecoration(labelText: 'Status'),
+                      items: [
+                        for (final s in ProjectStatus.values)
+                          DropdownMenuItem(
+                              value: s, child: Text(projectStatusLabel(s))),
+                      ],
+                      onChanged: (v) => setState(() => _status = v!),
+                    ),
+                  ),
+                ],
+              ),
+              gap,
+              Row(
+                children: [
+                  Expanded(
+                    child: DateField(
+                        label: 'Start date',
+                        value: _start,
+                        onChanged: (d) => setState(() => _start = d)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DateField(
+                        label: 'Deadline',
+                        value: _due,
+                        onChanged: (d) => setState(() => _due = d)),
+                  ),
+                ],
+              ),
+              if (repo.members.isNotEmpty) ...[
+                gap,
+                Text('Team on this project',
+                    style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final m in repo.members)
+                      FilterChip(
+                        label: Text(m.name),
+                        selected: _team.contains(m.id),
+                        onSelected: (v) => setState(
+                            () => v ? _team.add(m.id) : _team.remove(m.id)),
+                      ),
+                  ],
+                ),
+              ],
+              gap,
+              TextFormField(
+                controller: _notes,
+                minLines: 3,
+                maxLines: 8,
+                decoration: const InputDecoration(labelText: 'Notes'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
