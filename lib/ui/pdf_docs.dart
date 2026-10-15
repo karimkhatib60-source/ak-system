@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../data/boq_library.dart';
+import '../data/company_links.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/statement.dart';
@@ -74,23 +75,13 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
     ),
   );
 
-  final contact = [
-    info['address'],
-    info['phone'],
-    info['email'],
-    info['website'],
-  ].whereType<String>().where((s) => s.isNotEmpty).join('  ·  ');
-
   pdf.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      header: (ctx) => _header(
-        repo.companyName,
-        isInvoice ? 'INVOICE' : 'QUOTATION',
-        number,
-      ),
-      footer: (ctx) => _footer(ctx, contact),
+      header: (ctx) =>
+          _header(repo, isInvoice ? 'INVOICE' : 'QUOTATION', number),
+      footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         // Parties and dates.
         pw.Row(
@@ -412,35 +403,44 @@ pw.Widget _itemsTable(PricedDocument doc) {
   );
 }
 
-pw.Widget _header(String company, String title, String number) => pw.Column(
+pw.Widget _header(Repository repo, String title, String number) => pw.Column(
   children: [
     pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.Container(
-          width: 34,
-          height: 34,
-          alignment: pw.Alignment.center,
-          decoration: pw.BoxDecoration(
-            color: _blue,
-            borderRadius: pw.BorderRadius.circular(7),
-          ),
-          child: pw.Text(
-            'AK',
-            style: pw.TextStyle(
-              color: PdfColors.white,
-              fontWeight: pw.FontWeight.bold,
-              fontSize: 14,
+        if (repo.companyLogo != null)
+          pw.ConstrainedBox(
+            constraints: const pw.BoxConstraints(maxWidth: 120, maxHeight: 44),
+            child: pw.Image(
+              pw.MemoryImage(repo.companyLogo!),
+              fit: pw.BoxFit.contain,
+            ),
+          )
+        else
+          pw.Container(
+            width: 34,
+            height: 34,
+            alignment: pw.Alignment.center,
+            decoration: pw.BoxDecoration(
+              color: _blue,
+              borderRadius: pw.BorderRadius.circular(7),
+            ),
+            child: pw.Text(
+              'AK',
+              style: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+                fontSize: 14,
+              ),
             ),
           ),
-        ),
         pw.SizedBox(width: 10),
         pw.Expanded(
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                company,
+                repo.companyName,
                 style: pw.TextStyle(
                   fontWeight: pw.FontWeight.bold,
                   fontSize: 12,
@@ -480,33 +480,44 @@ pw.Widget _header(String company, String title, String number) => pw.Column(
   ],
 );
 
-pw.Widget _footer(pw.Context ctx, String contact) => pw.Column(
-  children: [
-    pw.Container(height: 0.6, color: _line),
-    pw.SizedBox(height: 6),
-    pw.Row(
-      children: [
-        pw.Expanded(
-          child: pw.Text(
-            contact,
-            style: const pw.TextStyle(fontSize: 7.5, color: _muted),
+pw.Widget _footer(pw.Context ctx, Repository repo) {
+  final links = companyLinks(repo.companyInfo);
+  final address = repo.companyInfo['address'] ?? '';
+  const style = pw.TextStyle(fontSize: 7.5, color: _muted);
+  return pw.Column(
+    children: [
+      pw.Container(height: 0.6, color: _line),
+      pw.SizedBox(height: 6),
+      pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Expanded(
+            child: pw.Wrap(
+              spacing: 10,
+              runSpacing: 2,
+              children: [
+                if (address.isNotEmpty)
+                  pw.Text(address.split('\n').first, style: style),
+                for (final l in links)
+                  pw.UrlLink(
+                    destination: l.url,
+                    child: pw.Text(
+                      '${_linkLabel(l.kind)}${l.display}',
+                      style: style,
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-        pw.Text(
-          'Page ${ctx.pageNumber} of ${ctx.pagesCount}',
-          style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-        ),
-      ],
-    ),
-  ],
-);
+          pw.SizedBox(width: 10),
+          pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}', style: style),
+        ],
+      ),
+    ],
+  );
+}
 
-String _contact(Map<String, String> info) => [
-  info['address'],
-  info['phone'],
-  info['email'],
-  info['website'],
-].whereType<String>().where((s) => s.isNotEmpty).join('  ·  ');
+String _linkLabel(String kind) => kind == 'instagram' ? 'Instagram ' : '';
 
 /// Builds the branded statement of account for a client.
 Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
@@ -631,9 +642,8 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      header: (ctx) =>
-          _header(repo.companyName, 'STATEMENT', 'As of ${fmtDate(st.to)}'),
-      footer: (ctx) => _footer(ctx, _contact(info)),
+      header: (ctx) => _header(repo, 'STATEMENT', 'As of ${fmtDate(st.to)}'),
+      footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,

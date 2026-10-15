@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -12,6 +14,10 @@ const companyInfoKeys = [
   'phone',
   'email',
   'website',
+  'whatsapp',
+  'instagram',
+  'facebook',
+  'linkedin',
   'tax_number',
   'bank',
   'terms',
@@ -19,7 +25,11 @@ const companyInfoKeys = [
 
 const companyInfoDefaults = {
   'address': 'Lebanon',
+  'phone': '+961 79 180 650',
+  'whatsapp': '+961 79 180 650',
   'website': 'www.ak-dac.com',
+  'instagram': '@ak.designconstruction',
+  'facebook': 'https://www.facebook.com/profile.php?id=61556269824537',
   'terms':
       'Prices in US dollars. Payment due within 14 days of the invoice date. '
       'Quotation valid for 30 days.',
@@ -55,6 +65,9 @@ class Repository extends ChangeNotifier {
   /// without cloud sync, and the user is treated as the owner.
   String? currentMemberId;
   String companyName = 'AK Design and Construction';
+
+  /// The company logo image (PNG or JPG), shown in the app and on PDFs.
+  Uint8List? companyLogo;
 
   DateTime now() => _clock();
   String newId() => _uuid.v4();
@@ -100,6 +113,8 @@ class Repository extends ChangeNotifier {
     };
     currentMemberId = await local.getSetting('current_member_id');
     companyName = await local.getSetting('company_name') ?? companyName;
+    final logo = await local.getSetting('company_logo');
+    companyLogo = logo == null || logo.isEmpty ? null : base64Decode(logo);
     notifyListeners();
   }
 
@@ -430,6 +445,14 @@ class Repository extends ChangeNotifier {
     }
     await reload();
     onLocalChange?.call();
+  }
+
+  Future<void> setCompanyLogo(Uint8List? bytes) async {
+    await local.setSetting(
+      'company_logo',
+      bytes == null ? '' : base64Encode(bytes),
+    );
+    await reload();
   }
 
   Future<void> setCompanyName(String name) async {

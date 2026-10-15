@@ -1,11 +1,16 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/company_links.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../../sync/cloud_account.dart';
 import '../../sync/sync_service.dart';
 import '../format.dart';
+import '../maps.dart';
+import '../theme.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -28,6 +33,7 @@ class SettingsScreen extends StatelessWidget {
             const _StagesSection(),
             if (repo.isOwner) ...[
               const SectionHeader('Company'),
+              const _CompanyCard(),
               ListTile(
                 leading: const Icon(Icons.business_outlined),
                 title: Text(repo.companyName),
@@ -69,7 +75,7 @@ class SettingsScreen extends StatelessWidget {
             const SectionHeader('About'),
             const ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('AK System · version 5'),
+              title: Text('AK System · version 6'),
               subtitle: Text(
                 'Projects, tasks, deliverables and finance. Works offline; syncs when online.',
               ),
@@ -86,6 +92,10 @@ String _infoLabel(String k) => switch (k) {
   'phone' => 'Phone',
   'email' => 'Email',
   'website' => 'Website',
+  'whatsapp' => 'WhatsApp',
+  'instagram' => 'Instagram',
+  'facebook' => 'Facebook page link',
+  'linkedin' => 'LinkedIn page link',
   'tax_number' => 'VAT / tax number',
   'bank' => 'Bank details (on invoices)',
   'terms' => 'Standard terms (on quotations and invoices)',
@@ -97,6 +107,10 @@ IconData _infoIcon(String k) => switch (k) {
   'phone' => Icons.phone_outlined,
   'email' => Icons.mail_outline,
   'website' => Icons.language,
+  'whatsapp' => Icons.chat_outlined,
+  'instagram' => Icons.camera_alt_outlined,
+  'facebook' => Icons.facebook,
+  'linkedin' => Icons.work_outline,
   'tax_number' => Icons.receipt_long_outlined,
   'bank' => Icons.account_balance_outlined,
   _ => Icons.gavel_outlined,
@@ -574,6 +588,137 @@ class _LoginDialogState extends State<_LoginDialog> {
           child: Text(_create ? 'Create' : 'Sign in'),
         ),
       ],
+    );
+  }
+}
+
+IconData linkIcon(String kind) => switch (kind) {
+  'website' => Icons.language,
+  'phone' => Icons.phone_outlined,
+  'whatsapp' => Icons.chat_outlined,
+  'email' => Icons.mail_outline,
+  'instagram' => Icons.camera_alt_outlined,
+  'facebook' => Icons.facebook,
+  _ => Icons.link,
+};
+
+/// Logo, name and links, as they appear on documents.
+class _CompanyCard extends StatelessWidget {
+  const _CompanyCard();
+
+  Future<void> _pickLogo(BuildContext context) async {
+    final repo = context.read<Repository>();
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'jpg', 'jpeg'],
+    );
+    if (files.isEmpty) return;
+    final bytes = await files.first.readAsBytes();
+    if (bytes.length > 1500000) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please choose a logo under 1.5 MB (PNG works best).',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    await repo.setCompanyLogo(bytes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.watch<Repository>();
+    final ak = AkColors.of(context);
+    final logo = repo.companyLogo;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: ak.line),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: logo == null
+                        ? const Center(child: AkMonogram(size: 48))
+                        : Image.memory(logo, fit: BoxFit.contain),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          repo.companyName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          'Design · Consultancy · Contracting',
+                          style: TextStyle(color: ak.muted, fontSize: 12),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 4,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => _pickLogo(context),
+                              icon: const Icon(Icons.upload_outlined, size: 18),
+                              label: Text(
+                                logo == null ? 'Upload logo' : 'Change logo',
+                              ),
+                            ),
+                            if (logo != null)
+                              TextButton(
+                                onPressed: () => repo.setCompanyLogo(null),
+                                child: const Text('Remove'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final l in companyLinks(repo.companyInfo))
+                    ActionChip(
+                      avatar: Icon(linkIcon(l.kind), size: 16),
+                      label: Text(l.display),
+                      onPressed: () => openUri(Uri.parse(l.url)),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'The logo and these details print on every quotation, '
+                'invoice and statement.',
+                style: TextStyle(color: ak.muted, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

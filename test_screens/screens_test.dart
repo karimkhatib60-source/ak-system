@@ -567,8 +567,6 @@ void main() {
     await pump(tester, const Size(400, 860));
     final repo = tester.element(find.byType(AppShell)).read<Repository>();
     await repo.setCompanyInfo({
-      'phone': '+961 3 000 000',
-      'email': 'info@ak-dac.com',
       'bank': 'Bank name · IBAN LB00 0000 0000 0000 0000 0000 0000',
     });
     await tester.runAsync(() async {
@@ -632,6 +630,28 @@ void main() {
     await expectLater(
       find.byType(AkApp),
       matchesGoldenFile('out/phone_statement_sheet.png'),
+    );
+  });
+
+  testWidgets('phone company settings', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(
+      find.text('Upload logo'),
+      find.byType(ListView).last,
+      const Offset(0, -300),
+    );
+    await tester.runAsync(
+      () => Scrollable.ensureVisible(
+        tester.element(find.text('Upload logo')),
+        alignment: 0.25,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_company_settings.png'),
     );
   });
 

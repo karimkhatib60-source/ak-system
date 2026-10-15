@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
+import '../../data/repository.dart';
 import '../theme.dart';
 
-/// The AK monogram: a blue square with the initials set in white.
+/// The company logo when one is set, otherwise the AK monogram: a blue
+/// square with the initials set in white.
 class AkMonogram extends StatelessWidget {
   const AkMonogram({super.key, this.size = 34});
 
@@ -11,6 +14,19 @@ class AkMonogram extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final logo = context.watch<Repository>().companyLogo;
+    if (logo != null) {
+      return Container(
+        width: size,
+        height: size,
+        padding: EdgeInsets.all(size * 0.08),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(size * 0.22),
+        ),
+        child: Image.memory(logo, fit: BoxFit.contain),
+      );
+    }
     return Container(
       width: size,
       height: size,
