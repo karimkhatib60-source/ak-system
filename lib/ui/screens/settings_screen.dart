@@ -75,7 +75,7 @@ class SettingsScreen extends StatelessWidget {
             const SectionHeader('About'),
             const ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('AK System · version 9'),
+              title: Text('AK System · version 10'),
               subtitle: Text(
                 'Projects, tasks, deliverables and finance. Works offline; syncs when online.',
               ),

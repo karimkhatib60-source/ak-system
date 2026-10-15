@@ -29,18 +29,29 @@ const syncedTables = <String, String>{
       'quotation_id TEXT, date TEXT, due_date TEXT, items TEXT, '
       'discount REAL, vat_rate REAL, status TEXT, notes TEXT, '
       'markup_rate REAL, show_markup INTEGER, stage_id TEXT, '
-      'term_index INTEGER',
+      'term_index INTEGER, extra INTEGER',
   'payments':
       'invoice_id TEXT, date TEXT, amount REAL, method TEXT, reference TEXT, '
       'number TEXT, client_id TEXT, project_id TEXT, quotation_id TEXT, '
       'term_index INTEGER, notes TEXT',
   'expenses':
       'project_id TEXT, date TEXT, category TEXT, amount REAL, vendor TEXT, '
-      'notes TEXT',
+      'notes TEXT, number TEXT, title TEXT, reference TEXT, items TEXT, '
+      'vat_rate REAL, paid INTEGER, method TEXT',
+  // Files kept with expenses (supplier invoices). Only the details are kept
+  // here; the file itself is in the device's file store and the cloud's
+  // file storage, so the database stays small.
+  'attachments': 'owner_id TEXT, name TEXT, mime TEXT, size INTEGER',
 };
 
 /// Money tables. Only the owner syncs these.
-const financeTables = {'quotations', 'invoices', 'payments', 'expenses'};
+const financeTables = {
+  'quotations',
+  'invoices',
+  'payments',
+  'expenses',
+  'attachments',
+};
 
 /// Local SQLite store. Everything the app shows is read from here, so the app
 /// works with no internet; the sync service copies changes to and from the
@@ -50,7 +61,7 @@ class LocalDb {
 
   final Database db;
 
-  static const _version = 6;
+  static const _version = 7;
 
   /// Columns added after the first release, by the version that added them.
   static const _added = {
@@ -80,12 +91,28 @@ class LocalDb {
       'payments ADD COLUMN term_index INTEGER',
       'payments ADD COLUMN notes TEXT',
     ],
+    7: [
+      'expenses ADD COLUMN number TEXT',
+      'expenses ADD COLUMN title TEXT',
+      'expenses ADD COLUMN reference TEXT',
+      'expenses ADD COLUMN items TEXT',
+      'expenses ADD COLUMN vat_rate REAL',
+      'expenses ADD COLUMN paid INTEGER',
+      'expenses ADD COLUMN method TEXT',
+      'invoices ADD COLUMN extra INTEGER',
+    ],
   };
 
   /// Tables added after the first release, by the version that added them.
   static const _newTables = {
     3: ['quotations', 'invoices', 'payments', 'expenses'],
+    7: ['attachments'],
   };
+
+  /// Files saved on this device that the cloud does not have yet. Never
+  /// synced itself.
+  static const _pendingFilesTable =
+      'CREATE TABLE IF NOT EXISTS pending_files (id TEXT PRIMARY KEY)';
 
   static Future<void> _createTable(Database db, String name) => db.execute(
     'CREATE TABLE IF NOT EXISTS $name ('
@@ -109,6 +136,7 @@ class LocalDb {
           await db.execute(
             'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)',
           );
+          await db.execute(_pendingFilesTable);
           await db.execute('CREATE INDEX tasks_project ON tasks(project_id)');
           await db.execute(
             'CREATE INDEX deliverables_project ON deliverables(project_id)',
@@ -129,14 +157,17 @@ class LocalDb {
               await _createTable(db, t);
             }
           }
+          await db.execute(_pendingFilesTable);
         },
       ),
     );
     return LocalDb(db);
   }
 
-  Future<List<Map<String, Object?>>> all(String table) =>
-      db.query(table, where: 'deleted = 0');
+  Future<List<Map<String, Object?>>> all(
+    String table, {
+    List<String>? columns,
+  }) => db.query(table, columns: columns, where: 'deleted = 0');
 
   /// Every row, deleted ones included.
   Future<List<Map<String, Object?>>> everything(String table) =>
@@ -172,6 +203,27 @@ class LocalDb {
     {...row, 'dirty': 0},
     conflictAlgorithm: ConflictAlgorithm.replace,
   );
+
+  /// Numbers of deleted documents, so a number is never given twice.
+  Future<List<String>> deletedNumbers(String table) async => [
+    for (final r in await db.query(
+      table,
+      columns: ['number'],
+      where: 'deleted = 1 AND number IS NOT NULL',
+    ))
+      r['number'] as String,
+  ];
+
+  Future<void> addPendingFile(String id) => db.insert('pending_files', {
+    'id': id,
+  }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+  Future<void> removePendingFile(String id) =>
+      db.delete('pending_files', where: 'id = ?', whereArgs: [id]);
+
+  Future<Set<String>> pendingFiles() async => {
+    for (final r in await db.query('pending_files')) r['id'] as String,
+  };
 
   Future<String?> getSetting(String key) async {
     final rows = await db.query('settings', where: 'key = ?', whereArgs: [key]);

@@ -299,3 +299,39 @@ alter table public.payments add column if not exists project_id text;
 alter table public.payments add column if not exists quotation_id text;
 alter table public.payments add column if not exists term_index integer;
 alter table public.payments add column if not exists notes text;
+
+-- v7: expenses as supplier bills, and files kept with them. Safe to re-run.
+alter table public.expenses add column if not exists number text;
+alter table public.expenses add column if not exists title text;
+alter table public.expenses add column if not exists reference text;
+alter table public.expenses add column if not exists items text;
+alter table public.expenses add column if not exists vat_rate double precision;
+alter table public.expenses add column if not exists paid boolean;
+alter table public.expenses add column if not exists method text;
+-- Invoices for extra work outside the contract.
+alter table public.invoices add column if not exists extra boolean;
+
+-- Details of each attached file. The file itself is in the private
+-- "attachments" storage bucket below, at files/<id>.
+create table if not exists public.attachments (
+  id uuid primary key, created_at timestamptz not null,
+  updated_at timestamptz not null, deleted boolean not null default false,
+  synced_at timestamptz not null default now(),
+  owner_id uuid, name text, mime text, size integer
+);
+drop trigger if exists stamp_synced_at on public.attachments;
+create trigger stamp_synced_at before insert or update on public.attachments
+  for each row execute function public.stamp_synced_at();
+alter table public.attachments enable row level security;
+drop policy if exists owner_all on public.attachments;
+create policy owner_all on public.attachments for all
+  using (public.is_owner()) with check (public.is_owner());
+
+-- Private file storage for attachments: only the owner can read or write.
+insert into storage.buckets (id, name, public)
+  values ('attachments', 'attachments', false)
+  on conflict (id) do nothing;
+drop policy if exists attachments_owner on storage.objects;
+create policy attachments_owner on storage.objects for all to authenticated
+  using (bucket_id = 'attachments' and public.is_owner())
+  with check (bucket_id = 'attachments' and public.is_owner());

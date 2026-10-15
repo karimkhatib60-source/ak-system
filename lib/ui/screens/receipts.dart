@@ -387,7 +387,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
                 terms.isEmpty
                     ? muted(
                         'No open payment terms. Add the payment terms on '
-                        'the accepted quotation first.',
+                        'the approved quotation first.',
                       )
                     : DropdownButtonFormField<String>(
                         key: ValueKey('t$_clientId$_projectId'),

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'sync_service.dart';
@@ -37,5 +39,25 @@ class SupabaseRemote implements RemoteStore {
       from += _page;
     }
     return out;
+  }
+
+  /// Private bucket; only the owner can read or write it (schema.sql).
+  StorageFileApi get _files => client.storage.from('attachments');
+
+  @override
+  Future<void> uploadFile(String path, Uint8List bytes, String mime) async {
+    await _files.uploadBinary(
+      path,
+      bytes,
+      fileOptions: FileOptions(contentType: mime, upsert: true),
+    );
+  }
+
+  @override
+  Future<Uint8List?> downloadFile(String path) => _files.download(path);
+
+  @override
+  Future<void> removeFile(String path) async {
+    await _files.remove([path]);
   }
 }

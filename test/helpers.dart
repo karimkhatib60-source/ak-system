@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:ak_system/data/db.dart';
 import 'package:ak_system/data/repository.dart';
 import 'package:ak_system/sync/sync_service.dart';
@@ -28,8 +30,34 @@ Future<Repository> memoryRepo(TestClock clock) async {
 /// clock like the real server trigger does.
 class FakeRemote implements RemoteStore {
   final tables = <String, Map<String, Map<String, Object?>>>{};
+  final files = <String, Uint8List>{};
   int _tick = 0;
   bool offline = false;
+
+  /// Tables whose upload fails, as if the server refused it.
+  final failing = <String>{};
+
+  /// File uploads fail, as if the storage refused them.
+  bool filesFail = false;
+
+  @override
+  Future<void> uploadFile(String path, Uint8List bytes, String mime) async {
+    if (offline) throw const SocketExceptionLike();
+    if (filesFail) throw Exception('413 Payload too large');
+    files[path] = bytes;
+  }
+
+  @override
+  Future<Uint8List?> downloadFile(String path) async {
+    if (offline) throw const SocketExceptionLike();
+    return files[path];
+  }
+
+  @override
+  Future<void> removeFile(String path) async {
+    if (offline) throw const SocketExceptionLike();
+    files.remove(path);
+  }
 
   String _stamp() => DateTime.utc(
     2030,
@@ -40,6 +68,7 @@ class FakeRemote implements RemoteStore {
   @override
   Future<void> upsert(String table, List<Map<String, Object?>> rows) async {
     if (offline) throw const SocketExceptionLike();
+    if (failing.contains(table)) throw Exception('500 refused $table');
     final t = tables.putIfAbsent(table, () => {});
     for (final r in rows) {
       t[r['id'] as String] = {...r, 'synced_at': _stamp()};

@@ -9,6 +9,7 @@ import '../format.dart';
 import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'expenses.dart';
 import 'money_doc_form.dart';
 import 'profit_view.dart';
 import 'receipts.dart';
@@ -183,7 +184,7 @@ class MoneyPanel extends StatelessWidget {
     final ak = AkColors.of(context);
     final tiles = [
       if (showQuoted)
-        ('Agreed fees', m.quoted, Icons.handshake_outlined, null, null),
+        ('Approved quotes', m.quoted, Icons.handshake_outlined, null, null),
       ('Invoiced', m.invoiced, Icons.receipt_long_outlined, null, null),
       ('Received', m.received, Icons.savings_outlined, ak.good, null),
       (
@@ -196,7 +197,15 @@ class MoneyPanel extends StatelessWidget {
             : null,
       ),
       if (showProfit) ...[
-        ('Expenses', m.expenses, Icons.shopping_bag_outlined, null, null),
+        (
+          'Expenses',
+          m.expenses,
+          Icons.shopping_bag_outlined,
+          null,
+          m.unpaidBills > 0.005
+              ? 'Unpaid bills ${fmtMoneyShort(m.unpaidBills)}'
+              : 'Without VAT',
+        ),
         (
           'Profit',
           m.profit,
@@ -377,49 +386,26 @@ class InvoiceTile extends StatelessWidget {
   }
 }
 
-class ExpenseTile extends StatelessWidget {
-  const ExpenseTile(this.e, {super.key, this.showProject = false});
-
-  final Expense e;
-  final bool showProject;
-
-  @override
-  Widget build(BuildContext context) {
-    final repo = context.read<Repository>();
-    final project = repo.project(e.projectId)?.name;
-    return ListTile(
-      leading: Icon(expenseCategoryIcon(e.category)),
-      title: Text(
-        e.vendor.isEmpty ? expenseCategoryLabel(e.category) : e.vendor,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        [
-          expenseCategoryLabel(e.category),
-          if (showProject) project ?? 'Company',
-          fmtDate(e.date),
-        ].join(' · '),
-      ),
-      trailing: Text(
-        fmtMoneyShort(e.amount),
-        style: const TextStyle(fontWeight: FontWeight.w800),
-      ),
-      onTap: () => openExpenseForm(context, expense: e),
-    );
-  }
-}
-
-/// The money tab inside a project.
-class ProjectMoneyTab extends StatelessWidget {
+/// The money tab inside a project, in two parts: the client's account
+/// (quotations, invoices, receipts and what is due, as the client sees
+/// them) and AK's internal side (expenses and profit), never shown to
+/// clients.
+class ProjectMoneyTab extends StatefulWidget {
   const ProjectMoneyTab({super.key, required this.project});
 
   final Project project;
 
   @override
+  State<ProjectMoneyTab> createState() => _ProjectMoneyTabState();
+}
+
+class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
+  var _internal = false;
+
+  @override
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
-    final p = project;
+    final p = widget.project;
     final quotes = repo.quotationsFor(p.id);
     final invoices = repo.invoicesFor(p.id);
     final expenses = repo.expensesFor(p.id);
@@ -431,6 +417,8 @@ class ProjectMoneyTab extends StatelessWidget {
         )
         .toList();
     final m = repo.money(projectId: p.id);
+    final client = repo.client(p.clientId);
+    final ak = AkColors.of(context);
 
     Widget header(String title, VoidCallback onAdd, String addLabel) =>
         SectionHeader(
@@ -446,10 +434,7 @@ class ProjectMoneyTab extends StatelessWidget {
         ? [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 16, 4),
-              child: Text(
-                empty,
-                style: TextStyle(color: AkColors.of(context).muted),
-              ),
+              child: Text(empty, style: TextStyle(color: ak.muted)),
             ),
           ]
         : [
@@ -457,89 +442,411 @@ class ProjectMoneyTab extends StatelessWidget {
               GroupedRow(index: i, count: tiles.length, child: tiles[i]),
           ];
 
-    return Readable(
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 40),
-        children: [
-          MoneyPanel(m, showProfit: false),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: ProfitCard(profitOf(repo, projectId: p.id)),
-          ),
-          if (p.clientId != null && repo.client(p.clientId) != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: FilledButton.tonalIcon(
+    final clientPart = <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ClientAccountCard(
+          m: m,
+          clientName: client?.name,
+          nextStep: projectNextStep(repo, quotes, invoices, m),
+        ),
+      ),
+      if (client != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.tonalIcon(
                 onPressed: () => shareProjectStatementPdf(
                   repo,
                   buildProjectStatement(repo, p.id),
                 ),
                 icon: const Icon(Icons.request_quote_outlined),
-                label: const Text('Project statement (by phase, trade, item)'),
+                label: const Text('Project statement'),
               ),
-            ),
-          if (m.quoted > 0)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: _Progress(
-                label: 'Invoiced of agreed fees',
-                value: m.invoiced / m.quoted,
+              OutlinedButton.icon(
+                onPressed: () => openReceiptForm(
+                  context,
+                  projectId: p.id,
+                  clientId: p.clientId,
+                ),
+                icon: const Icon(Icons.payments_outlined),
+                label: const Text('Receipt'),
               ),
-            ),
-          if (m.invoiced > 0)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: _Progress(
-                label: 'Collected of invoiced',
-                value: m.received / m.invoiced,
-              ),
-            ),
-          header(
-            'Quotations',
-            () => openQuotationForm(context, projectId: p.id),
-            'Quotation',
+            ],
           ),
-          ...rows([
-            for (final q in quotes) QuotationTile(q),
-          ], 'No quotation yet.'),
-          if (accepted.isNotEmpty) ...[
-            const SectionHeader('Payment schedule'),
-            ...rows([
-              for (final q in accepted)
-                for (var k = 0; k < q.paymentTerms.length; k++)
-                  TermStatusTile(
-                    quotation: q,
-                    index: k,
-                    showQuotation: accepted.length > 1,
-                  ),
-            ], ''),
+        ),
+      header(
+        'Quotations',
+        () => openQuotationForm(context, projectId: p.id),
+        'Quotation',
+      ),
+      ...rows([for (final q in quotes) QuotationTile(q)], 'No quotation yet.'),
+      if (accepted.isNotEmpty) ...[
+        const SectionHeader('Payment schedule'),
+        ...rows([
+          for (final q in accepted)
+            for (var k = 0; k < q.paymentTerms.length; k++)
+              TermStatusTile(
+                quotation: q,
+                index: k,
+                showQuotation: accepted.length > 1,
+              ),
+        ], ''),
+      ],
+      header(
+        'Invoices',
+        () => openInvoiceForm(context, projectId: p.id),
+        'Invoice',
+      ),
+      ...rows([for (final i in invoices) InvoiceTile(i)], 'No invoice yet.'),
+      header(
+        'Receipts',
+        () => openReceiptForm(context, projectId: p.id, clientId: p.clientId),
+        'Receipt',
+      ),
+      ...rows([
+        for (final r in receipts) ReceiptTile(r, projectId: p.id),
+      ], 'No money received yet.'),
+    ];
+
+    final internalPart = <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 16, 0),
+        child: Row(
+          children: [
+            Icon(Icons.lock_outline, size: 15, color: ak.muted),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'AK only. Expenses and profit never appear on client '
+                'documents.',
+                style: TextStyle(color: ak.muted, fontSize: 12.5),
+              ),
+            ),
           ],
-          header(
-            'Invoices',
-            () => openInvoiceForm(context, projectId: p.id),
-            'Invoice',
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        child: ProfitCard(profitOf(repo, projectId: p.id)),
+      ),
+      if (expenses.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          child: CostBreakdown(expenses),
+        ),
+      header(
+        'Expenses',
+        () => openExpenseForm(context, projectId: p.id),
+        'Expense',
+      ),
+      ...rows(
+        [for (final e in expenses) ExpenseTile(e)],
+        'No expenses yet. Add each supplier bill or cost you pay for this '
+        'project.',
+      ),
+    ];
+
+    return Readable(
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 40),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.handshake_outlined, size: 18),
+                    label: Text('Client account'),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.lock_outline, size: 18),
+                    label: Text('AK internal'),
+                  ),
+                ],
+                selected: {_internal},
+                onSelectionChanged: (v) => setState(() => _internal = v.first),
+              ),
+            ),
           ),
-          ...rows([
-            for (final i in invoices) InvoiceTile(i),
-          ], 'No invoice yet.'),
-          header(
-            'Receipts',
-            () =>
-                openReceiptForm(context, projectId: p.id, clientId: p.clientId),
-            'Receipt',
-          ),
-          ...rows([
-            for (final r in receipts) ReceiptTile(r, projectId: p.id),
-          ], 'No money received yet.'),
-          header(
-            'Expenses',
-            () => openExpenseForm(context, projectId: p.id),
-            'Expense',
-          ),
-          ...rows([
-            for (final e in expenses) ExpenseTile(e),
-          ], 'No expenses yet.'),
+          ...(_internal ? internalPart : clientPart),
         ],
+      ),
+    );
+  }
+}
+
+/// What to do next on a project's account, in one sentence.
+String projectNextStep(
+  Repository repo,
+  List<Quotation> quotes,
+  List<Invoice> invoices,
+  MoneySummary m,
+) {
+  final approved = quotes.where((q) => q.status == QuotationStatus.accepted);
+  final issued = invoices.where((i) => i.status == InvoiceStatus.sent);
+  final drafts = invoices.where((i) => i.status == InvoiceStatus.draft);
+  if (quotes.isEmpty && invoices.isEmpty) {
+    return 'Start with a quotation. When the client approves it, mark it '
+        'Approved and invoice from it.';
+  }
+  if (approved.isEmpty && issued.isEmpty) {
+    final open = quotes.where((q) => q.status != QuotationStatus.rejected);
+    return open.isEmpty
+        ? 'No approved quotation. Prepare a new one for the client.'
+        : 'Waiting for the client to approve ${open.first.number}. Mark it '
+              'Approved when they agree, then invoice from it.';
+  }
+  final due = [
+    for (final i in issued)
+      if (repo.balanceOf(i) > 0.005) i,
+  ]..sort((a, b) => a.date.compareTo(b.date));
+  if (due.isNotEmpty) {
+    final names = due.length <= 3
+        ? due.map((i) => i.number).join(', ')
+        : '${due.length} invoices';
+    final allLate = m.overdue >= m.outstanding - 0.005;
+    // Advances only stay unused while an invoice is due when that invoice
+    // bills extra work.
+    final held = m.advances > 0.005
+        ? ' The ${fmtMoney(m.advances)} received in advance is kept for '
+              'the contract invoices.'
+        : '';
+    return '${fmtMoney(m.outstanding)} is ${allLate ? 'overdue' : 'due'} on '
+        '$names'
+        '${m.overdue > 0.005 && !allLate ? ', ${fmtMoney(m.overdue)} of it overdue' : ''}. '
+        'Record a receipt when the client pays.$held';
+  }
+  if (drafts.isNotEmpty) {
+    return '${drafts.first.number} is still a draft. Send it to issue it; '
+        'money already received is set off automatically.';
+  }
+  if (approved.isNotEmpty && issued.isEmpty) {
+    return 'Raise the first invoice from ${approved.first.number}'
+        '${m.advances > 0.005 ? '; the ${fmtMoney(m.advances)} received in advance is deducted from it' : ''}.';
+  }
+  if (m.leftToInvoice > 0.005) {
+    return 'Nothing due now. ${fmtMoney(m.leftToInvoice)} of the contract is '
+        'left to invoice'
+        '${m.advances > 0.005 ? ', and the ${fmtMoney(m.advances)} received in advance is set off on the next invoices' : ''}.';
+  }
+  if (issued.isNotEmpty) {
+    return m.advances > 0.005
+        ? 'Fully invoiced and paid. ${fmtMoney(m.advances)} credit is held '
+              'for the client.'
+        : 'Fully invoiced and paid.';
+  }
+  return 'Raise the first invoice from the approved quotation.';
+}
+
+/// A project's account with the client, as the client's own documents
+/// show it (VAT included): the contract, what was invoiced and received,
+/// and what is still due.
+class ClientAccountCard extends StatelessWidget {
+  const ClientAccountCard({
+    super.key,
+    required this.m,
+    this.clientName,
+    this.nextStep,
+  });
+
+  final MoneySummary m;
+  final String? clientName;
+  final String? nextStep;
+
+  @override
+  Widget build(BuildContext context) {
+    final ak = AkColors.of(context);
+    String pct(double a, double b) => b <= 0 ? '' : '${(a / b * 100).round()}%';
+    Widget row(
+      String label,
+      double v, {
+      String? hint,
+      bool bold = false,
+      Color? color,
+    }) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(fontWeight: bold ? FontWeight.w800 : null),
+                ),
+                if (hint != null && hint.isNotEmpty)
+                  Text(hint, style: TextStyle(color: ak.muted, fontSize: 12)),
+              ],
+            ),
+          ),
+          Text(
+            fmtMoney(v),
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+              fontSize: bold ? 16 : null,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+    final due = m.outstanding;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              [
+                'CLIENT ACCOUNT',
+                if (clientName != null) clientName!.toUpperCase(),
+              ].join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w800,
+                color: ak.muted,
+              ),
+            ),
+            const SizedBox(height: 8),
+            row(
+              'Contract value',
+              m.quoted,
+              hint: m.quoted > 0
+                  ? 'Approved quotations'
+                  : 'No approved quotation yet',
+            ),
+            row(
+              'Invoiced',
+              m.invoiced,
+              hint: [
+                if (m.quoted > 0 && m.onContract > 0.005)
+                  '${pct(m.onContract, m.quoted)} of the contract',
+                if (m.extras > 0.005) '${fmtMoney(m.extras)} extra work',
+              ].join(' · '),
+            ),
+            row(
+              'Received',
+              m.received,
+              color: m.received > 0 ? ak.good : null,
+              hint: m.invoiced > 0 && m.received > 0
+                  ? '${pct(m.received, m.invoiced)} of invoiced'
+                  : null,
+            ),
+            const Divider(height: 16),
+            if (due > 0.005 || m.advances <= 0.005)
+              row(
+                'Due now',
+                due,
+                bold: true,
+                color: m.overdue > 0.005
+                    ? ak.bad
+                    : due > 0.005
+                    ? null
+                    : ak.good,
+                hint: m.overdue > 0.005
+                    ? '${fmtMoney(m.overdue)} overdue'
+                    : due > 0.005
+                    ? 'On issued invoices, after advances'
+                    : 'Nothing to collect on issued invoices',
+              ),
+            if (m.advances > 0.005)
+              row(
+                'Credit held',
+                m.advances,
+                bold: due <= 0.005,
+                color: ak.info,
+                hint: due > 0.005
+                    ? 'Received in advance; kept for the contract invoices'
+                    : 'Received in advance; set off on the next invoices',
+              ),
+            if (m.quoted > 0 || m.invoiced > 0) ...[
+              const SizedBox(height: 6),
+              if (m.quoted > 0)
+                row(
+                  'Left to invoice',
+                  m.leftToInvoice,
+                  hint: 'Contract less what was invoiced on it',
+                ),
+              row(
+                'Still to receive',
+                m.leftToReceive,
+                hint: m.quoted <= 0.005
+                    ? 'Invoiced less received'
+                    : m.extras > 0.005
+                    ? 'Contract and extra work, less received'
+                    : m.onContract > m.quoted + 0.005
+                    ? 'Invoiced less received (above the contract)'
+                    : 'Contract less received',
+              ),
+            ],
+            if (m.quoted > 0) ...[
+              const SizedBox(height: 10),
+              _Progress(
+                label: 'Invoiced of the contract',
+                value: m.onContract / m.quoted,
+              ),
+              const SizedBox(height: 8),
+              if (m.extras > 0.005)
+                _Progress(
+                  label: 'Received of the contract and extra work',
+                  value:
+                      m.received /
+                      ((m.onContract > m.quoted ? m.onContract : m.quoted) +
+                          m.extras),
+                )
+              else
+                _Progress(
+                  label: 'Received of the contract',
+                  value: m.received / m.quoted,
+                ),
+            ],
+            if (nextStep != null && nextStep!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ak.accent.withValues(alpha: .08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.arrow_forward, size: 16, color: ak.accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        nextStep!,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'Amounts include VAT, as on the client\'s documents.',
+              style: TextStyle(color: ak.muted, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -572,220 +879,6 @@ class _Progress extends StatelessWidget {
           child: LinearProgressIndicator(value: v, minHeight: 7),
         ),
       ],
-    );
-  }
-}
-
-// ------------------------------------------------------------ Expense form --
-
-Future<void> openExpenseForm(
-  BuildContext context, {
-  Expense? expense,
-  String? projectId,
-}) => Navigator.push(
-  context,
-  MaterialPageRoute(
-    fullscreenDialog: true,
-    builder: (_) => ExpenseForm(expense: expense, projectId: projectId),
-  ),
-);
-
-class ExpenseForm extends StatefulWidget {
-  const ExpenseForm({super.key, this.expense, this.projectId});
-
-  final Expense? expense;
-  final String? projectId;
-
-  @override
-  State<ExpenseForm> createState() => _ExpenseFormState();
-}
-
-class _ExpenseFormState extends State<ExpenseForm> {
-  final _form = GlobalKey<FormState>();
-  late final TextEditingController _amount;
-  late final TextEditingController _vendor;
-  late final TextEditingController _notes;
-  String? _projectId;
-  ExpenseCategory _category = ExpenseCategory.other;
-  DateTime _date = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    final e = widget.expense;
-    final repo = context.read<Repository>();
-    _amount = TextEditingController(
-      text: e == null ? '' : e.amount.toStringAsFixed(2),
-    );
-    _vendor = TextEditingController(text: e?.vendor ?? '');
-    _notes = TextEditingController(text: e?.notes ?? '');
-    _projectId = e?.projectId ?? widget.projectId;
-    _category =
-        e?.category ??
-        (_projectId == null
-            ? ExpenseCategory.rent
-            : ExpenseCategory.subcontractor);
-    _date = e?.date ?? repo.now();
-  }
-
-  @override
-  void dispose() {
-    _amount.dispose();
-    _vendor.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
-    final repo = context.read<Repository>();
-    final e = widget.expense;
-    final now = repo.now();
-    await repo.saveExpense(
-      Expense(
-        id: e?.id ?? repo.newId(),
-        createdAt: e?.createdAt ?? now,
-        updatedAt: now,
-        projectId: _projectId,
-        date: _date,
-        category: _category,
-        amount: double.parse(_amount.text.replaceAll(',', '').trim()),
-        vendor: _vendor.text.trim(),
-        notes: _notes.text.trim(),
-      ),
-    );
-    if (mounted) Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final repo = context.watch<Repository>();
-    const gap = SizedBox(height: 14);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.expense == null ? 'New expense' : 'Expense'),
-        actions: [
-          if (widget.expense != null)
-            IconButton(
-              tooltip: 'Delete',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () async {
-                if (!await confirmDelete(context, 'this expense')) return;
-                await repo.deleteExpense(widget.expense!);
-                if (context.mounted) Navigator.pop(context);
-              },
-            ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
-          ),
-        ],
-      ),
-      body: Form(
-        key: _form,
-        child: Readable(
-          maxWidth: 640,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _amount,
-                      autofocus: widget.expense == null,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Amount',
-                        prefixText: '\$ ',
-                      ),
-                      validator: (v) =>
-                          double.tryParse(
-                                (v ?? '').replaceAll(',', '').trim(),
-                              ) ==
-                              null
-                          ? 'Enter the amount'
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DateField(
-                      label: 'Date',
-                      value: _date,
-                      onChanged: (d) => setState(() => _date = d ?? _date),
-                    ),
-                  ),
-                ],
-              ),
-              gap,
-              DropdownButtonFormField<String?>(
-                initialValue: repo.project(_projectId) == null
-                    ? null
-                    : _projectId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'For',
-                  helperText: _projectId == null
-                      ? 'Company running cost, not on a project'
-                      : "Internal cost: it lowers this project's profit and "
-                            'never appears on client documents',
-                  helperMaxLines: 2,
-                ),
-                items: [
-                  const DropdownMenuItem(
-                    value: null,
-                    child: Text('Company (overheads)'),
-                  ),
-                  for (final p in repo.projects)
-                    DropdownMenuItem(
-                      value: p.id,
-                      child: Text('${p.code} · ${p.name}'),
-                    ),
-                ],
-                onChanged: (v) => setState(() => _projectId = v),
-              ),
-              gap,
-              DropdownButtonFormField<ExpenseCategory>(
-                initialValue: _category,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Category'),
-                items: [
-                  for (final c in ExpenseCategory.values)
-                    DropdownMenuItem(
-                      value: c,
-                      child: Row(
-                        children: [
-                          Icon(expenseCategoryIcon(c), size: 18),
-                          const SizedBox(width: 10),
-                          Text(expenseCategoryLabel(c)),
-                        ],
-                      ),
-                    ),
-                ],
-                onChanged: (v) => setState(() => _category = v!),
-              ),
-              gap,
-              TextFormField(
-                controller: _vendor,
-                decoration: const InputDecoration(
-                  labelText: 'Paid to',
-                  hintText: 'Supplier, subcontractor or person',
-                ),
-              ),
-              gap,
-              TextFormField(
-                controller: _notes,
-                minLines: 2,
-                maxLines: 6,
-                decoration: const InputDecoration(labelText: 'Notes'),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

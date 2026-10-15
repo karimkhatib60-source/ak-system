@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'db.dart';
+import 'file_store.dart';
 import 'models.dart';
 
 const _uuid = Uuid();
@@ -38,14 +39,25 @@ const companyInfoDefaults = {
 /// In-memory view of the local database that the screens read from.
 /// Every change is written to SQLite first, then the lists are reloaded.
 class Repository extends ChangeNotifier {
-  Repository(this.local, {DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now;
+  Repository(this.local, {DateTime Function()? clock, FileStore? files})
+    : _clock = clock ?? DateTime.now,
+      files = files ?? MemoryFileStore();
 
   final LocalDb local;
   final DateTime Function() _clock;
 
+  /// The bytes of attached files, kept outside the database.
+  final FileStore files;
+
   /// Called after any local change so the sync service can upload it.
   VoidCallback? onLocalChange;
+
+  /// Fetches a file this device does not have from the cloud. Set while
+  /// cloud sync is on.
+  Future<Uint8List?> Function(Attachment a)? downloadFile;
+
+  /// Numbers of deleted documents by table; never given out again.
+  final _deletedNumbers = <String, List<String>>{};
 
   List<Member> members = [];
   List<Stage> stages = [];
@@ -57,6 +69,9 @@ class Repository extends ChangeNotifier {
   List<Invoice> invoices = [];
   List<Payment> payments = [];
   List<Expense> expenses = [];
+
+  /// Files kept with expenses, without their contents.
+  List<Attachment> attachments = [];
 
   /// Company details printed on quotations and invoices.
   Map<String, String> companyInfo = {};
@@ -108,6 +123,12 @@ class Repository extends ChangeNotifier {
       ..sort((a, b) => b.date.compareTo(a.date));
     expenses = (await local.all('expenses')).map(Expense.fromMap).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
+    attachments =
+        (await local.all('attachments')).map(Attachment.fromMap).toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final t in const ['quotations', 'invoices', 'payments', 'expenses']) {
+      _deletedNumbers[t] = await local.deletedNumbers(t);
+    }
     companyInfo = {
       for (final k in companyInfoKeys)
         k: await local.getSetting('company_$k') ?? companyInfoDefaults[k] ?? '',
@@ -357,6 +378,14 @@ class Repository extends ChangeNotifier {
             (c.projectId == null ||
                 i.projectId == null ||
                 c.projectId == i.projectId),
+        // A contract invoice not linked to a quotation still takes the
+        // advances held on the project's payment terms.
+        if (i.quotationId == null && !i.extra)
+          (c) =>
+              c.onTerm &&
+              (c.projectId == null ||
+                  i.projectId == null ||
+                  c.projectId == i.projectId),
       ];
       for (final inGroup in groups) {
         for (var k = 0; k < credits.length && need > 0.005; k++) {
@@ -598,6 +627,9 @@ class Repository extends ChangeNotifier {
           inRange(i.date) &&
           i.status == InvoiceStatus.sent,
     );
+    final spent = expenses.where(
+      (e) => inProject(e.projectId) && inRange(e.date),
+    );
     return MoneySummary(
       quoted: quotations
           .where(
@@ -608,10 +640,13 @@ class Repository extends ChangeNotifier {
           )
           .fold(0.0, (s, q) => s + q.total),
       invoiced: live.fold(0.0, (s, i) => s + i.total),
+      extras: live.where((i) => i.extra).fold(0.0, (s, i) => s + i.total),
       revenue: live.fold(0.0, (s, i) => s + i.net),
       received: receivedOn(projectId: projectId, since: since),
-      expenses: expenses
-          .where((e) => inProject(e.projectId) && inRange(e.date))
+      expenses: spent.fold(0.0, (s, e) => s + e.net),
+      paidOut: spent.where((e) => e.paid).fold(0.0, (s, e) => s + e.amount),
+      unpaidBills: spent
+          .where((e) => !e.paid)
           .fold(0.0, (s, e) => s + e.amount),
       overdue: live
           .where((i) => paymentState(i) == PaymentState.overdue)
@@ -639,17 +674,30 @@ class Repository extends ChangeNotifier {
     return '$prefix${(max + 1).toString().padLeft(3, '0')}';
   }
 
+  /// Numbers in use, deleted documents included: a deleted document keeps
+  /// its number, so the next one never repeats it.
+  Iterable<String> _numbersOf(String table, Iterable<String> live) => [
+    ...live,
+    ...?_deletedNumbers[table],
+  ];
+
   /// e.g. QT-26-004
-  String nextQuotationNumber() =>
-      _nextNumber('QT', quotations.map((q) => q.number));
+  String nextQuotationNumber() => _nextNumber(
+    'QT',
+    _numbersOf('quotations', quotations.map((q) => q.number)),
+  );
 
   /// e.g. INV-26-012
   String nextInvoiceNumber() =>
-      _nextNumber('INV', invoices.map((i) => i.number));
+      _nextNumber('INV', _numbersOf('invoices', invoices.map((i) => i.number)));
+
+  /// Next expense number, e.g. EXP-26-007.
+  String nextExpenseNumber() =>
+      _nextNumber('EXP', _numbersOf('expenses', expenses.map((e) => e.number)));
 
   /// Next receipt number, e.g. RCT-26-004.
   String nextReceiptNumber() =>
-      _nextNumber('RCT', payments.map((p) => p.number));
+      _nextNumber('RCT', _numbersOf('payments', payments.map((p) => p.number)));
 
   /// Next project code for the current year, e.g. AK-26-004.
   String nextProjectCode() {
@@ -742,13 +790,97 @@ class Repository extends ChangeNotifier {
     );
   }
 
-  Future<void> saveExpense(Expense e) => _write('expenses', e.toMap());
+  /// Saves an expense, numbering a new one, with files added to it and
+  /// files removed from it.
+  Future<void> saveExpense(
+    Expense e, {
+    List<(Attachment, Uint8List)> attach = const [],
+    List<Attachment> detach = const [],
+  }) async {
+    final stamp = now().toUtc().toIso8601String();
+    for (final (a, bytes) in attach) {
+      // The file first: its details are only saved once it is safely kept.
+      await files.put(a.id, bytes);
+      await local.addPendingFile(a.id);
+      await local.save('attachments', {...a.toMap(), 'updated_at': stamp});
+    }
+    for (final a in detach) {
+      await _removeFile(a, stamp);
+    }
+    await _write(
+      'expenses',
+      (e.number.isEmpty ? e.copyWith(number: nextExpenseNumber()) : e).toMap(),
+    );
+  }
+
+  Future<void> _removeFile(Attachment a, String stamp) async {
+    await local.save('attachments', {
+      ...a.copyWith(deleted: true).toMap(),
+      'updated_at': stamp,
+    });
+    await local.removePendingFile(a.id);
+    await files.remove(a.id);
+  }
+
+  /// Two devices working offline can give the same number to two
+  /// expenses. After a sync the later one takes the next free number; every
+  /// device picks the same one, so they agree.
+  Future<void> renumberDuplicateExpenses() async {
+    final seen = <String>{};
+    final given = <String>[];
+    final byAge = [...expenses]
+      ..sort((a, b) {
+        final c = a.createdAt.compareTo(b.createdAt);
+        return c != 0 ? c : a.id.compareTo(b.id);
+      });
+    for (final e in byAge) {
+      if (e.number.isEmpty || seen.add(e.number)) continue;
+      final n = _nextNumber('EXP', [
+        ..._numbersOf('expenses', expenses.map((x) => x.number)),
+        ...given,
+      ]);
+      given.add(n);
+      await local.save('expenses', {
+        ...e.copyWith(number: n).toMap(),
+        'updated_at': now().toUtc().toIso8601String(),
+      });
+    }
+    if (given.isEmpty) return;
+    await reload();
+    onLocalChange?.call();
+  }
+
+  /// The files kept with a record.
+  List<Attachment> attachmentsOf(String ownerId) =>
+      attachments.where((a) => a.ownerId == ownerId).toList();
+
+  /// The contents of an attachment, read when it is opened. A file added
+  /// on another device is fetched from the cloud the first time and then
+  /// kept here.
+  Future<Uint8List?> attachmentBytes(String id) async {
+    final kept = await files.get(id);
+    if (kept != null) return kept;
+    final a = attachments.where((x) => x.id == id).firstOrNull;
+    final fetch = downloadFile;
+    if (a == null || fetch == null) return null;
+    final bytes = await fetch(a);
+    if (bytes != null) await files.put(id, bytes);
+    return bytes;
+  }
+
   Future<void> deleteQuotation(Quotation q) =>
       _write('quotations', q.copyWith(deleted: true).toMap());
   Future<void> deletePayment(Payment p) =>
       _write('payments', p.copyWith(deleted: true).toMap());
-  Future<void> deleteExpense(Expense e) =>
-      _write('expenses', e.copyWith(deleted: true).toMap());
+
+  /// Deletes an expense and the files kept with it.
+  Future<void> deleteExpense(Expense e) async {
+    final stamp = now().toUtc().toIso8601String();
+    for (final a in attachmentsOf(e.id)) {
+      await _removeFile(a, stamp);
+    }
+    await _write('expenses', e.copyWith(deleted: true).toMap());
+  }
 
   /// Deleting an invoice never loses money received: its receipts stay,
   /// moved to the client's account (or back to the payment term it billed).

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import 'ai/assistant.dart';
 import 'data/repository.dart';
+import 'data/file_store.dart';
+import 'platform/file_store.dart';
 import 'platform/open_db.dart';
 import 'sync/cloud_account.dart';
 import 'sync/sync_service.dart';
@@ -13,7 +15,12 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final local = await openLocalDb();
-  final repo = Repository(local);
+  // Without the device's file storage, files added now are kept until the
+  // app closes; saved records still open.
+  final files = await openFileStore().catchError(
+    (Object _) => MemoryFileStore(),
+  );
+  final repo = Repository(local, files: files);
   await repo.load();
   final sync = SyncService(local, repo);
   final cloud = CloudAccount(local, repo, sync);

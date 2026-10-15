@@ -169,7 +169,7 @@ String fmtMoneyShort(double v) => _moneyRound.format(v.abs() < .5 ? 0 : v);
 String quotationStatusLabel(QuotationStatus s) => switch (s) {
   QuotationStatus.draft => 'Draft',
   QuotationStatus.sent => 'Sent',
-  QuotationStatus.accepted => 'Accepted',
+  QuotationStatus.accepted => 'Approved',
   QuotationStatus.rejected => 'Rejected',
 };
 
@@ -207,8 +207,10 @@ String paymentMethodLabel(PaymentMethod m) => switch (m) {
 };
 
 String expenseCategoryLabel(ExpenseCategory c) => switch (c) {
-  ExpenseCategory.subcontractor => 'Subcontractor',
   ExpenseCategory.materials => 'Materials',
+  ExpenseCategory.subcontractor => 'Subcontractor',
+  ExpenseCategory.labour => 'Labour (daily workers)',
+  ExpenseCategory.equipment => 'Equipment and tool rental',
   ExpenseCategory.salaries => 'Salaries and fees to team',
   ExpenseCategory.rent => 'Office rent and utilities',
   ExpenseCategory.software => 'Software and licences',
@@ -220,8 +222,10 @@ String expenseCategoryLabel(ExpenseCategory c) => switch (c) {
 };
 
 IconData expenseCategoryIcon(ExpenseCategory c) => switch (c) {
-  ExpenseCategory.subcontractor => Icons.engineering_outlined,
   ExpenseCategory.materials => Icons.inventory_2_outlined,
+  ExpenseCategory.subcontractor => Icons.engineering_outlined,
+  ExpenseCategory.labour => Icons.construction_outlined,
+  ExpenseCategory.equipment => Icons.handyman_outlined,
   ExpenseCategory.salaries => Icons.badge_outlined,
   ExpenseCategory.rent => Icons.apartment_outlined,
   ExpenseCategory.software => Icons.computer_outlined,

@@ -153,7 +153,7 @@ List<Advice> reviewOffice(Repository repo, {String? projectId}) {
     if (accepted > 0 && invoices.isEmpty) {
       add(
         AdviceLevel.important,
-        'Accepted but not invoiced',
+        'Approved but not invoiced',
         'issue the first invoice (advance payment).',
       );
     }
@@ -186,6 +186,26 @@ List<Advice> reviewOffice(Repository repo, {String? projectId}) {
             'Add phone and email in Settings so they print on quotations.',
           ),
         );
+      }
+      // Two devices working offline can give one number twice.
+      for (final (kind, numbers) in [
+        ('Quotation', repo.quotations.map((q) => q.number)),
+        ('Invoice', repo.invoices.map((i) => i.number)),
+        ('Receipt', repo.payments.map((p) => p.number)),
+      ]) {
+        final seen = <String>{};
+        for (final n in numbers.where((n) => n.isNotEmpty)) {
+          if (!seen.add(n)) {
+            out.add(
+              Advice(
+                AdviceLevel.urgent,
+                '$kind number used twice',
+                '$n is on two documents. Give one of them a new number '
+                    'before sending it.',
+              ),
+            );
+          }
+        }
       }
       if ((info['bank'] ?? '').isEmpty && repo.invoices.isNotEmpty) {
         out.add(

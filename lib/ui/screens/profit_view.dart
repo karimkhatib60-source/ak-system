@@ -89,7 +89,10 @@ class ProfitCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             row('Invoiced, without VAT', fmtMoney(f.revenue)),
-            row('Expenses', fmtMoney(f.expenses == 0 ? 0 : -f.expenses)),
+            row(
+              f.expenseVat > 0.005 ? 'Expenses, without VAT' : 'Expenses',
+              fmtMoney(f.expenses == 0 ? 0 : -f.expenses),
+            ),
             const Divider(height: 14),
             row(
               'Profit on invoiced work',
@@ -106,12 +109,17 @@ class ProfitCard extends StatelessWidget {
               row(
                 'Contract, without VAT',
                 fmtMoney(f.contractNet),
-                hint: f.leftToInvoice > 0
-                    ? '${fmtMoney(f.leftToInvoice)} still to invoice'
-                    : f.revenue > f.contractNet + 0.005
-                    ? '${fmtMoney(f.revenue - f.contractNet)} invoiced above '
-                          'the contract'
-                    : 'Fully invoiced',
+                hint: [
+                  if (f.leftToInvoice > 0)
+                    '${fmtMoney(f.leftToInvoice)} still to invoice'
+                  else if (f.onContract > f.contractNet + 0.005)
+                    '${fmtMoney(f.onContract - f.contractNet)} invoiced above '
+                        'the contract'
+                  else
+                    'Fully invoiced',
+                  if (f.extrasNet > 0.005)
+                    '${fmtMoney(f.extrasNet)} extra work invoiced',
+                ].join(' · '),
               ),
               if (left != null)
                 row(
@@ -143,14 +151,41 @@ class ProfitCard extends StatelessWidget {
               'Cash in hand',
               fmtMoney(f.cash),
               color: tone(f.cash),
-              hint: 'Received ${fmtMoney(f.received)} less expenses',
+              hint: 'Received ${fmtMoney(f.received)} less expenses paid',
             ),
+            if (f.paidOut > 0.005)
+              row(
+                'Paid to suppliers',
+                fmtMoney(f.paidOut),
+                hint: 'Bills paid, VAT included',
+              ),
+            if (f.unpaidBills > 0.005)
+              row(
+                'Unpaid supplier bills',
+                fmtMoney(f.unpaidBills),
+                color: ak.warn,
+                hint:
+                    'Still to pay, VAT included; the cost without VAT is '
+                    'already in expenses',
+              ),
             const SizedBox(height: 8),
             Text(
               [
-                if (f.vat > 0.005)
+                if (f.vat > 0.005 && f.expenseVat > 0.005)
+                  'VAT: ${fmtMoney(f.vat)} on your invoices less '
+                      '${fmtMoney(f.expenseVat)} charged by suppliers, '
+                      '${f.netVat > 0.005
+                          ? 'so ${fmtMoney(f.netVat)} is owed to the tax office.'
+                          : f.netVat < -0.005
+                          ? 'so you have a VAT credit of ${fmtMoney(-f.netVat)} to set against VAT on future invoices.'
+                          : 'so no VAT is owed.'} '
+                      'VAT is not income or cost.'
+                else if (f.vat > 0.005)
                   'VAT of ${fmtMoney(f.vat)} on your invoices is owed to the '
-                      'tax office, so it is not counted as income.',
+                      'tax office, so it is not counted as income.'
+                else if (f.expenseVat > 0.005)
+                  'VAT of ${fmtMoney(f.expenseVat)} charged by suppliers is '
+                      'recoverable, so it is not counted as cost.',
                 'Expenses and profit never appear on client documents.',
               ].join(' '),
               style: TextStyle(color: ak.muted, fontSize: 12),

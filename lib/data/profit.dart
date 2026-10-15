@@ -12,6 +12,10 @@ class Profit {
     required this.expenses,
     required this.received,
     this.overheads = 0,
+    this.expenseVat = 0,
+    this.paidOut = 0,
+    this.unpaidBills = 0,
+    this.extrasNet = 0,
   });
 
   /// Accepted quotations, before VAT.
@@ -24,12 +28,29 @@ class Profit {
   /// Issued invoices, before VAT: the income earned so far.
   final double revenue;
 
+  /// The part of [revenue] billing extra work outside the contract.
+  final double extrasNet;
+
+  /// The part of [revenue] billing the contract.
+  double get onContract => revenue - extrasNet;
+
   /// VAT charged on those invoices. It is owed to the tax office, so it is
   /// not income.
   final double vat;
 
-  /// Expenses booked on the project (company-wide: all expenses).
+  /// Expenses booked on the project (company-wide: all expenses), without
+  /// the VAT suppliers charged, which is recovered.
   final double expenses;
+
+  /// VAT paid to suppliers on those expenses. It is set against the VAT
+  /// charged on invoices.
+  final double expenseVat;
+
+  /// Expenses actually paid, VAT included.
+  final double paidOut;
+
+  /// Supplier bills not paid yet, VAT included.
+  final double unpaidBills;
 
   /// Expenses not booked on any project (company-wide only).
   final double overheads;
@@ -44,18 +65,23 @@ class Profit {
   /// Profit as a share of income, in percent; null before any income.
   double? get margin => revenue.abs() < .005 ? null : profit / revenue * 100;
 
-  /// Money in hand from the project: received less spent.
-  double get cash => received - expenses;
+  /// Money in hand from the project: received less what was paid out.
+  double get cash => received - paidOut;
+
+  /// VAT to pay the tax office: charged on invoices less paid to suppliers.
+  double get netVat => vat - expenseVat;
 
   /// What the budget still allows; null when there is no cost-plus budget.
   double? get budgetLeft => budgetCost == 0 ? null : budgetCost - expenses;
 
-  /// The contract, or what was invoiced when extras took it above.
-  double get income => revenue > contractNet ? revenue : contractNet;
+  /// Expected income: the contract (or what was billed on it, if more)
+  /// plus extra work invoiced.
+  double get income =>
+      (onContract > contractNet ? onContract : contractNet) + extrasNet;
 
   /// Contract still to invoice.
   double get leftToInvoice =>
-      contractNet - revenue > 0.005 ? contractNet - revenue : 0;
+      contractNet - onContract > 0.005 ? contractNet - onContract : 0;
 
   /// Profit at completion if costs stay within the budget; a cost overrun
   /// lowers it. Null without a cost budget, since the cost of the work
@@ -68,7 +94,7 @@ class Profit {
   /// contract: costs of the invoiced work may not be booked yet.
   bool get costsMayBeMissing {
     final e = expectedProfit;
-    return e != null && revenue <= contractNet + 0.005 && profit > e + 0.5;
+    return e != null && onContract <= contractNet + 0.005 && profit > e + 0.5;
   }
 
   bool get isEmpty =>
@@ -104,13 +130,17 @@ Profit profitOf(Repository repo, {String? projectId, DateTime? since}) {
         .where((q) => q.markupRate != 0)
         .fold(0.0, (s, q) => s + q.subtotal),
     revenue: issued.fold(0.0, (s, i) => s + i.net),
+    extrasNet: issued.where((i) => i.extra).fold(0.0, (s, i) => s + i.net),
     vat: issued.fold(0.0, (s, i) => s + i.vat),
-    expenses: spent.fold(0.0, (s, e) => s + e.amount),
+    expenses: spent.fold(0.0, (s, e) => s + e.net),
+    expenseVat: spent.fold(0.0, (s, e) => s + e.vat),
+    paidOut: spent.where((e) => e.paid).fold(0.0, (s, e) => s + e.amount),
+    unpaidBills: spent.where((e) => !e.paid).fold(0.0, (s, e) => s + e.amount),
     overheads: projectId != null
         ? 0
         : spent
               .where((e) => e.projectId == null)
-              .fold(0.0, (s, e) => s + e.amount),
+              .fold(0.0, (s, e) => s + e.net),
     received: repo.receivedOn(projectId: projectId, since: since),
   );
 }
@@ -137,7 +167,7 @@ Profit profitOutsideProjects(Repository repo, {DateTime? since}) {
               repo.project(e.projectId) == null &&
               inRange(e.date),
         )
-        .fold(0.0, (s, e) => s + e.amount),
+        .fold(0.0, (s, e) => s + e.net),
     received: 0,
   );
 }

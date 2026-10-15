@@ -168,6 +168,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   String? _quotationId;
   String? _stageId;
   int? _termIndex;
+  bool _extra = false;
   DateTime _date = DateTime.now();
   DateTime? _until;
   QuotationStatus _qStatus = QuotationStatus.draft;
@@ -229,6 +230,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     _iStatus = i?.status ?? InvoiceStatus.draft;
     _quotationId = i?.quotationId;
     _termIndex = i?.termIndex;
+    _extra = i?.extra ?? false;
+    // A new invoice bills the project's approved quotation, so advances
+    // received on it are deducted.
+    if (widget.isInvoice && i == null) {
+      _quotationId = _defaultQuotation(repo, _projectId);
+    }
     _stageId = i?.stageId ?? (i == null ? project?.stageId : null);
     if (!widget.isInvoice) {
       // A new quotation starts with the usual schedule for its service.
@@ -301,6 +308,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     quotationId: _quotationId,
     stageId: _stageId,
     termIndex: _termIndex,
+    extra: _extra,
     date: _date,
     dueDate: _until,
     items: _items,
@@ -422,6 +430,89 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     if (_markup.text.trim().isEmpty && fee != null && fee != 0) {
       _markup.text = _Line._plain(fee);
     }
+    if (!widget.isInvoice) return;
+    final linked = repo.quotation(_quotationId);
+    if (linked != null && linked.projectId != id) {
+      _quotationId = null;
+      _termIndex = null;
+    }
+    if (_quotationId == null && !_extra) {
+      _quotationId = _defaultQuotation(repo, id);
+    }
+  }
+
+  /// The project's approved quotation, when it has exactly one.
+  static String? _defaultQuotation(Repository repo, String? projectId) {
+    if (projectId == null) return null;
+    final approved = _approvedOf(repo, projectId);
+    return approved.length == 1 ? approved.single.id : null;
+  }
+
+  static List<Quotation> _approvedOf(Repository repo, String? projectId) => [
+    for (final q in repo.quotationsFor(projectId ?? ''))
+      if (q.status == QuotationStatus.accepted) q,
+  ];
+
+  static const _extraWork = '__extra';
+
+  /// What the invoice bills: an approved quotation (the contract) or extra
+  /// work outside it.
+  Widget _billingFor(Repository repo) {
+    final linked = repo.quotation(_quotationId);
+    final choices = [
+      ..._approvedOf(repo, _projectId),
+      if (linked != null && linked.status != QuotationStatus.accepted) linked,
+    ];
+    final value = _extra
+        ? _extraWork
+        : choices.any((q) => q.id == _quotationId)
+        ? _quotationId
+        : null;
+    return DropdownButtonFormField<String?>(
+      key: ValueKey('bf$_projectId'),
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Billing for',
+        helperMaxLines: 3,
+        helperText: _extra
+            ? 'Not counted in the contract\'s progress. Advances paid on '
+                  'the contract stay for the contract invoices.'
+            : value != null
+            ? 'Advances received on this quotation are deducted from the '
+                  'invoice.'
+            : null,
+      ),
+      items: [
+        for (final q in choices)
+          DropdownMenuItem(
+            value: q.id,
+            child: Text(
+              '${q.number} · ${q.title.isEmpty ? 'contract' : q.title}',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (choices.isEmpty || value == null)
+          DropdownMenuItem(
+            value: null,
+            child: Text(
+              choices.isEmpty
+                  ? 'Project work (no approved quotation yet)'
+                  : 'Not linked to a quotation',
+            ),
+          ),
+        const DropdownMenuItem(
+          value: _extraWork,
+          child: Text('Extra work, outside the contract'),
+        ),
+      ],
+      onChanged: (v) => setState(() {
+        _extra = v == _extraWork;
+        final q = _extra ? null : v;
+        if (q != _quotationId) _termIndex = null;
+        _quotationId = q;
+      }),
+    );
   }
 
   Future<void> _addPayment() async {
@@ -668,6 +759,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 onChanged: (d) => setState(() => _until = d),
               ),
               if (widget.isInvoice && _projectId != null) ...[
+                gap,
+                _billingFor(repo),
                 gap,
                 DropdownButtonFormField<String?>(
                   key: ValueKey('ph$_projectId'),
@@ -1509,7 +1602,17 @@ DateTime _docDate(PricedDocument d) =>
     d is Invoice ? d.date : (d as Quotation).date;
 
 /// Takes BOQ lines pasted from Excel or a message and turns them into items.
-Future<List<LineItem>?> showPasteItems(BuildContext context) async {
+Future<List<LineItem>?> showPasteItems(
+  BuildContext context, {
+  String intro =
+      'Paste rows from Excel, or a BOQ written for you in the '
+      'chat. One item per line: description, unit, quantity, '
+      'rate. A line with only a name starts a new section.',
+  String example =
+      'Masonry\n'
+      'Block wall 20 cm | m² | 120 | 18\n'
+      'Block wall 10 cm | m² | 85 | 14',
+}) async {
   final ctrl = TextEditingController();
   final items = await showDialog<List<LineItem>>(
     context: context,
@@ -1524,11 +1627,7 @@ Future<List<LineItem>?> showPasteItems(BuildContext context) async {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Paste rows from Excel, or a BOQ written for you in the '
-                  'chat. One item per line: description, unit, quantity, '
-                  'rate. A line with only a name starts a new section.',
-                ),
+                Text(intro),
                 const SizedBox(height: 12),
                 TextField(
                   controller: ctrl,
@@ -1536,12 +1635,7 @@ Future<List<LineItem>?> showPasteItems(BuildContext context) async {
                   minLines: 6,
                   maxLines: 12,
                   style: const TextStyle(fontSize: 13),
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Masonry\n'
-                        'Block wall 20 cm | m² | 120 | 18\n'
-                        'Block wall 10 cm | m² | 85 | 14',
-                  ),
+                  decoration: InputDecoration(hintText: example),
                   onChanged: (_) => set(() {}),
                 ),
                 const SizedBox(height: 8),

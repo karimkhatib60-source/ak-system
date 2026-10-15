@@ -70,6 +70,7 @@ class ProjectStatement {
     required this.contractValue,
     required this.currentStageId,
     this.schedule = const [],
+    this.extras = 0,
   });
 
   final Project project;
@@ -84,8 +85,13 @@ class ProjectStatement {
   /// Payment schedules of the accepted quotations, term by term.
   final List<ScheduleLine> schedule;
 
-  double get billedPercent =>
-      contractValue == 0 ? 0 : account.invoiced / contractValue * 100;
+  /// Issued invoices for extra work outside the contract, VAT included.
+  final double extras;
+
+  /// Share of the contract billed so far; extra work does not count.
+  double get billedPercent => contractValue == 0
+      ? 0
+      : (account.invoiced - extras) / contractValue * 100;
 }
 
 ProjectStatement buildProjectStatement(Repository repo, String projectId) {
@@ -166,6 +172,7 @@ ProjectStatement buildProjectStatement(Repository repo, String projectId) {
     layers: layers.values.toList()
       ..sort((a, b) => _rank(a.name).compareTo(_rank(b.name))),
     contractValue: accepted.fold(0.0, (s, q) => s + q.total),
+    extras: issued.where((i) => i.extra).fold(0.0, (s, i) => s + i.total),
     currentStageId: project.stageId,
     schedule: [
       for (final q in accepted)

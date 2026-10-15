@@ -545,8 +545,77 @@ void main() {
       await exp('e1', 'p1', ExpenseCategory.printing, 120, 'Print House Jbeil');
       await exp('e2', null, ExpenseCategory.software, 290, 'AutoCAD licence');
       await exp('e3', 'p3', ExpenseCategory.subcontractor, 2400, 'Tiling team');
-      await exp('e4', 'p3', ExpenseCategory.materials, 9800, 'Porcelain tiles');
-      await exp('e5', 'p3', ExpenseCategory.subcontractor, 3100, 'Electrician');
+      // A supplier's bill entered line by line, with VAT and the bill kept.
+      await r.saveExpense(
+        Expense(
+          id: 'e4',
+          createdAt: t,
+          updatedAt: t,
+          projectId: 'p3',
+          date: DateTime(2026, 10, 6),
+          category: ExpenseCategory.materials,
+          title: 'Porcelain tiles, kitchen and bathrooms',
+          vendor: 'Ceramica Lebanon',
+          reference: 'CL-2291',
+          vatRate: 11,
+          items: const [
+            LineItem(
+              description: 'Porcelain tiles 60x60, matt grey',
+              unit: 'm²',
+              quantity: 320,
+              rate: 22,
+            ),
+            LineItem(
+              description: 'Tile adhesive C2TE',
+              unit: 'bag',
+              quantity: 180,
+              rate: 6.5,
+            ),
+            LineItem(
+              description: 'Epoxy grout',
+              unit: 'kg',
+              quantity: 120,
+              rate: 3.5,
+            ),
+            LineItem(description: 'Delivery to site', unit: 'trip', rate: 150),
+          ],
+          amount: Expense.totalOf(const [
+            LineItem(quantity: 320, rate: 22),
+            LineItem(quantity: 180, rate: 6.5),
+            LineItem(quantity: 120, rate: 3.5),
+            LineItem(rate: 150),
+          ], 11),
+          method: PaymentMethod.bankTransfer,
+        ),
+        attach: [
+          (
+            Attachment(
+              id: 'a1',
+              createdAt: t,
+              updatedAt: t,
+              ownerId: 'e4',
+              name: 'Ceramica CL-2291.pdf',
+              mime: 'application/pdf',
+              size: 184320,
+            ),
+            Uint8List.fromList('%PDF-1.4'.codeUnits),
+          ),
+        ],
+      );
+      await r.saveExpense(
+        Expense(
+          id: 'e5',
+          createdAt: t,
+          updatedAt: t,
+          projectId: 'p3',
+          date: DateTime(2026, 10, 9),
+          category: ExpenseCategory.subcontractor,
+          title: 'Electrical works, first fix',
+          vendor: 'Electrician',
+          amount: 3100,
+          paid: false,
+        ),
+      );
       return r;
     }))!;
     final sync = SyncService(repo.local, repo);
@@ -706,21 +775,61 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Finance').last);
     await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_project_account.png'),
+    );
+    await tester.tap(find.text('AK internal'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -60));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_project_profit.png'),
+    );
     await tester.dragUntilVisible(
-      find.text('PROFIT · INTERNAL'),
+      find.text('Porcelain tiles, kitchen and bathrooms'),
       find.byType(ListView).last,
-      const Offset(0, -200),
+      const Offset(0, -250),
+    );
+    await tester.drag(find.byType(ListView).last, const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_project_expenses.png'),
+    );
+    await tester.tap(find.text('Porcelain tiles, kitchen and bathrooms'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_expense_form.png'),
+    );
+    await tester.dragUntilVisible(
+      find.text('Total of the bill'),
+      find.byType(ListView).last,
+      const Offset(0, -250),
     );
     await tester.runAsync(
       () => Scrollable.ensureVisible(
-        tester.element(find.text('PROFIT · INTERNAL')),
-        alignment: 0.02,
+        tester.element(find.text('Epoxy grout')),
+        alignment: 0.05,
       ),
     );
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(AkApp),
-      matchesGoldenFile('out/phone_project_profit.png'),
+      matchesGoldenFile('out/phone_expense_items.png'),
+    );
+    await tester.dragUntilVisible(
+      find.text('Ceramica CL-2291.pdf'),
+      find.byType(ListView).last,
+      const Offset(0, -250),
+    );
+    await tester.drag(find.byType(ListView).last, const Offset(0, -150));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_expense_payment.png'),
     );
   });
 

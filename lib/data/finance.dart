@@ -13,8 +13,10 @@ enum PaymentState { draft, unpaid, partlyPaid, paid, overdue, cancelled }
 enum PaymentMethod { bankTransfer, cash, cheque, card, other }
 
 enum ExpenseCategory {
-  subcontractor,
   materials,
+  subcontractor,
+  labour,
+  equipment,
   salaries,
   rent,
   software,
@@ -377,6 +379,10 @@ class Invoice with PricedDocument implements Record {
 
   /// The payment term of [quotationId] this invoice bills, if any.
   final int? termIndex;
+
+  /// Bills extra work outside the contract (no approved quotation covers
+  /// it), so it does not count towards the contract's progress.
+  final bool extra;
   final DateTime date;
   final DateTime? dueDate;
   @override
@@ -404,6 +410,7 @@ class Invoice with PricedDocument implements Record {
     this.quotationId,
     this.stageId,
     this.termIndex,
+    this.extra = false,
     required this.date,
     this.dueDate,
     this.items = const [],
@@ -427,6 +434,7 @@ class Invoice with PricedDocument implements Record {
     quotationId: m['quotation_id'] as String?,
     stageId: m['stage_id'] as String?,
     termIndex: (m['term_index'] as num?)?.toInt(),
+    extra: m['extra'] == 1 || m['extra'] == true,
     date: _date(m['date']) ?? _date(m['created_at'])!,
     dueDate: _date(m['due_date']),
     items: _items(m['items']),
@@ -448,6 +456,7 @@ class Invoice with PricedDocument implements Record {
     'quotation_id': quotationId,
     'stage_id': stageId,
     'term_index': termIndex,
+    'extra': extra ? 1 : 0,
     'date': _dateStr(date),
     'due_date': _dateStr(dueDate),
     'items': _itemsStr(items),
@@ -477,6 +486,7 @@ class Invoice with PricedDocument implements Record {
     quotationId: quotationId,
     stageId: stageId ?? this.stageId,
     termIndex: termIndex,
+    extra: extra,
     date: date,
     dueDate: dueDate,
     items: items ?? this.items,
@@ -621,6 +631,12 @@ class Payment implements Record {
   );
 }
 
+/// A cost AK paid or owes: a supplier's bill, a subcontractor, rent. Never
+/// shown to clients.
+///
+/// A bill can be entered line by line ([items]) or as a total only
+/// ([amount]). VAT the supplier charged is recoverable, so the cost that
+/// lowers profit is the amount without VAT.
 class Expense implements Record {
   @override
   final String id;
@@ -631,12 +647,37 @@ class Expense implements Record {
   @override
   final bool deleted;
 
+  /// Expense number, e.g. EXP-26-004. Empty on expenses made before
+  /// numbering.
+  final String number;
+
   /// Null for company overheads such as rent or software.
   final String? projectId;
   final DateTime date;
   final ExpenseCategory category;
-  final double amount;
+
+  /// What was bought, in a few words.
+  final String title;
+
+  /// The supplier, subcontractor or person paid.
   final String vendor;
+
+  /// The supplier's own invoice or receipt number.
+  final String reference;
+
+  /// The bill's lines. Empty when only the total was entered.
+  final List<LineItem> items;
+
+  /// VAT the supplier charged, in percent; 0 when none.
+  final double vatRate;
+
+  /// The bill's total, VAT included. Worked out from [items] when there
+  /// are any.
+  final double amount;
+
+  /// False while the bill is still to be paid.
+  final bool paid;
+  final PaymentMethod? method;
   final String notes;
 
   const Expense({
@@ -644,19 +685,45 @@ class Expense implements Record {
     required this.createdAt,
     required this.updatedAt,
     this.deleted = false,
+    this.number = '',
     this.projectId,
     required this.date,
     this.category = ExpenseCategory.other,
-    required this.amount,
+    this.title = '',
     this.vendor = '',
+    this.reference = '',
+    this.items = const [],
+    this.vatRate = 0,
+    required this.amount,
+    this.paid = true,
+    this.method,
     this.notes = '',
   });
+
+  /// Total of a bill entered line by line, to the cent.
+  static double totalOf(List<LineItem> items, double vatRate) {
+    final sub = _cents(items.fold(0.0, (s, i) => s + i.amount));
+    return sub + _cents(sub * vatRate / 100);
+  }
+
+  static double _cents(double v) => (v * 100).round() / 100;
+
+  /// Before VAT: the cost to AK.
+  double get net => items.isNotEmpty
+      ? _cents(items.fold(0.0, (s, i) => s + i.amount))
+      : vatRate == 0
+      ? amount
+      : _cents(amount / (1 + vatRate / 100));
+
+  /// VAT paid to the supplier, recoverable from the VAT AK charges.
+  double get vat => amount - net;
 
   factory Expense.fromMap(Map<String, Object?> m) => Expense(
     id: m['id'] as String,
     createdAt: _date(m['created_at'])!,
     updatedAt: _date(m['updated_at'])!,
     deleted: m['deleted'] == 1 || m['deleted'] == true,
+    number: (m['number'] ?? '') as String,
     projectId: m['project_id'] as String?,
     date: _date(m['date']) ?? _date(m['created_at'])!,
     category: _enumByName(
@@ -664,34 +731,140 @@ class Expense implements Record {
       m['category'],
       ExpenseCategory.other,
     ),
-    amount: _num(m['amount']),
+    title: (m['title'] ?? '') as String,
     vendor: (m['vendor'] ?? '') as String,
+    reference: (m['reference'] ?? '') as String,
+    items: _items(m['items']),
+    vatRate: _num(m['vat_rate']),
+    amount: _num(m['amount']),
+    paid: m['paid'] == null || m['paid'] == 1 || m['paid'] == true,
+    method: m['method'] == null
+        ? null
+        : _enumByName(PaymentMethod.values, m['method'], PaymentMethod.other),
     notes: (m['notes'] ?? '') as String,
   );
 
   @override
   Map<String, Object?> toMap() => {
     ..._base(this),
+    'number': number,
     'project_id': projectId,
     'date': _dateStr(date),
     'category': category.name,
-    'amount': amount,
+    'title': title,
     'vendor': vendor,
+    'reference': reference,
+    'items': _itemsStr(items),
+    'vat_rate': vatRate,
+    'amount': amount,
+    'paid': paid ? 1 : 0,
+    'method': method?.name,
     'notes': notes,
   };
 
-  Expense copyWith({bool? deleted}) => Expense(
+  Expense copyWith({bool? deleted, bool? paid, String? number}) => Expense(
     id: id,
     createdAt: createdAt,
     updatedAt: updatedAt,
     deleted: deleted ?? this.deleted,
+    number: number ?? this.number,
     projectId: projectId,
     date: date,
     category: category,
-    amount: amount,
+    title: title,
     vendor: vendor,
+    reference: reference,
+    items: items,
+    vatRate: vatRate,
+    amount: amount,
+    paid: paid ?? this.paid,
+    method: method,
     notes: notes,
   );
+}
+
+/// A file kept with a record, such as the supplier's invoice behind an
+/// expense. The file itself is loaded only when opened.
+class Attachment implements Record {
+  @override
+  final String id;
+  @override
+  final DateTime createdAt;
+  @override
+  final DateTime updatedAt;
+  @override
+  final bool deleted;
+
+  /// The record it belongs to, e.g. an expense id.
+  final String ownerId;
+  final String name;
+  final String mime;
+  final int size;
+
+  const Attachment({
+    required this.id,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deleted = false,
+    required this.ownerId,
+    required this.name,
+    required this.mime,
+    required this.size,
+  });
+
+  bool get isImage => mime.startsWith('image/');
+  bool get isPdf => mime == 'application/pdf';
+
+  factory Attachment.fromMap(Map<String, Object?> m) => Attachment(
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    ownerId: (m['owner_id'] ?? '') as String,
+    name: (m['name'] ?? '') as String,
+    mime: (m['mime'] ?? 'application/octet-stream') as String,
+    size: (m['size'] as num?)?.toInt() ?? 0,
+  );
+
+  /// Without the file; [Repository.saveAttachment] adds it.
+  @override
+  Map<String, Object?> toMap() => {
+    ..._base(this),
+    'owner_id': ownerId,
+    'name': name,
+    'mime': mime,
+    'size': size,
+  };
+
+  Attachment copyWith({bool? deleted}) => Attachment(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    deleted: deleted ?? this.deleted,
+    ownerId: ownerId,
+    name: name,
+    mime: mime,
+    size: size,
+  );
+}
+
+/// The file type of a name, for attachments.
+String mimeOf(String name) {
+  final ext = name.split('.').last.toLowerCase();
+  return switch (ext) {
+    'pdf' => 'application/pdf',
+    'jpg' || 'jpeg' => 'image/jpeg',
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' => 'image/heic',
+    'xlsx' =>
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'xls' => 'application/vnd.ms-excel',
+    'csv' => 'text/csv',
+    'docx' =>
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    _ => 'application/octet-stream',
+  };
 }
 
 /// One payment term with what has been invoiced and received on it.
@@ -723,16 +896,35 @@ class MoneySummary {
     required this.outstanding,
     this.advances = 0,
     this.revenue = 0,
+    this.paidOut = 0,
+    this.unpaidBills = 0,
+    this.extras = 0,
   });
 
-  /// Total of accepted quotations: the agreed fee.
+  /// Total of approved quotations: the agreed fee.
   final double quoted;
+
+  /// Issued invoices, extras included.
   final double invoiced;
+
+  /// Issued invoices for extra work outside the contract.
+  final double extras;
+
+  /// Issued invoices billing the contract.
+  double get onContract => invoiced - extras;
 
   /// Every receipt: on invoices, on payment terms and on account.
   final double received;
+
+  /// Expenses without recoverable VAT: the cost to AK.
   final double expenses;
   final double overdue;
+
+  /// Expenses actually paid, VAT included.
+  final double paidOut;
+
+  /// Supplier bills not paid yet, VAT included.
+  final double unpaidBills;
 
   /// Still to collect on issued invoices.
   final double outstanding;
@@ -751,8 +943,20 @@ class MoneySummary {
   /// Profit as a share of income, in percent; null before any income.
   double? get margin => revenue.abs() < .005 ? null : profit / revenue * 100;
 
-  /// Money in hand: received less spent.
-  double get cash => received - expenses;
+  /// Money in hand: received less what was paid out.
+  double get cash => received - paidOut;
+
+  /// Contract still to invoice.
+  double get leftToInvoice =>
+      quoted - onContract > 0.005 ? quoted - onContract : 0;
+
+  /// Still to receive: the contract (or what was billed on it, if more)
+  /// plus extra work invoiced, less what was received.
+  double get leftToReceive {
+    final contract = onContract > quoted ? onContract : quoted;
+    final v = contract + extras - received;
+    return v > 0.005 ? v : 0;
+  }
 }
 
 /// Standard stages per service. Design keeps its original names so existing
