@@ -279,3 +279,10 @@ begin
       'with check (public.is_owner())', t);
   end loop;
 end $$;
+
+-- v4: cost-plus percentage. Safe to re-run.
+alter table public.projects add column if not exists markup_rate double precision;
+alter table public.quotations add column if not exists markup_rate double precision;
+alter table public.quotations add column if not exists show_markup boolean;
+alter table public.invoices add column if not exists markup_rate double precision;
+alter table public.invoices add column if not exists show_markup boolean;

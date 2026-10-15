@@ -117,6 +117,7 @@ void main() {
           service: ServiceType.contracting,
           stageId: ks[6].id,
           areaSqm: 180,
+          markupRate: 15,
           location: 'Beirut',
           dueDate: DateTime(2026, 11, 5),
         ),
@@ -285,6 +286,131 @@ void main() {
           ],
         ),
       );
+      LineItem li(String s, String d, String u, double q, double r) =>
+          LineItem(section: s, description: d, unit: u, quantity: q, rate: r);
+      await r.saveQuotation(
+        Quotation(
+          id: 'q2',
+          createdAt: t,
+          updatedAt: t,
+          number: 'QT-26-002',
+          title: 'Fit-out works, apartment Achrafieh',
+          clientId: 'c3',
+          projectId: 'p3',
+          date: DateTime(2026, 10, 10),
+          validUntil: DateTime(2026, 11, 10),
+          status: QuotationStatus.sent,
+          markupRate: 15,
+          terms: r.companyInfo['terms'] ?? '',
+          items: [
+            li(
+              'Demolition',
+              'Removal of existing floor tiles and screed down to slab',
+              'm²',
+              150,
+              4,
+            ),
+            li(
+              'Demolition',
+              'Demolition of existing block walls including removal of debris',
+              'm²',
+              36,
+              9,
+            ),
+            li(
+              'Demolition',
+              'Debris removal and disposal to an approved dump site',
+              'trip',
+              6,
+              90,
+            ),
+            li(
+              'Masonry',
+              'Concrete block wall, 10 cm thick, in cement mortar',
+              'm²',
+              48,
+              14,
+            ),
+            li(
+              'Masonry',
+              'Internal cement plaster, two coats, 2 cm, on walls',
+              'm²',
+              96,
+              9,
+            ),
+            li(
+              'Tiling and flooring',
+              'Cement screed 5 cm for floor finishes',
+              'm²',
+              150,
+              7,
+            ),
+            li(
+              'Tiling and flooring',
+              'Porcelain floor tiles 60x60 cm, supply and installation, with grout',
+              'm²',
+              150,
+              32,
+            ),
+            li(
+              'Tiling and flooring',
+              'Porcelain wall tiles for bathrooms and kitchen, full height',
+              'm²',
+              70,
+              30,
+            ),
+            li(
+              'Gypsum and ceilings',
+              'Gypsum board false ceiling on galvanized steel frame, painted',
+              'm²',
+              120,
+              22,
+            ),
+            li(
+              'Gypsum and ceilings',
+              'Gypsum cornice / light cove with concealed LED profile',
+              'lin. m',
+              45,
+              18,
+            ),
+            li(
+              'Painting',
+              'Internal walls: sealer, two coats putty, primer and two coats emulsion paint',
+              'm²',
+              420,
+              6.5,
+            ),
+            li(
+              'Electrical',
+              'Lighting point including conduit, wiring and switch',
+              'point',
+              38,
+              35,
+            ),
+            li(
+              'Electrical',
+              'Power socket 13 A including conduit and wiring',
+              'point',
+              44,
+              32,
+            ),
+            li(
+              'Plumbing and sanitary',
+              'Water supply network (hot and cold), PPR pipes, per wet point',
+              'point',
+              14,
+              85,
+            ),
+            li(
+              'Plumbing and sanitary',
+              'Wall-hung WC with concealed cistern and flush plate',
+              'no.',
+              2,
+              420,
+            ),
+          ],
+        ),
+      );
       Future<void> exp(
         String id,
         String? p,
@@ -388,7 +514,42 @@ void main() {
           .writeAsBytesSync(await buildPdf(repo, repo.quotation('q1')!));
       File('test_screens/out/sample_invoice.pdf')
           .writeAsBytesSync(await buildPdf(repo, repo.invoice('i1')!));
+      final boq = repo.quotation('q2')!;
+      File('test_screens/out/sample_boq.pdf')
+          .writeAsBytesSync(await buildPdf(repo, boq));
+      File(
+        'test_screens/out/sample_boq_fee_in_rates.pdf',
+      ).writeAsBytesSync(await buildPdf(repo, boq.copyWith(showMarkup: false)));
     });
+  });
+
+  testWidgets('phone BOQ quotation', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Quotes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fit-out works, apartment Achrafieh'));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(
+      find.text('From BOQ library'),
+      find.byType(ListView).last,
+      const Offset(0, -300),
+    );
+    await tester.drag(find.byType(ListView).last, const Offset(0, -250));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_boq_quote.png'),
+    );
+    await tester.tap(find.text('From BOQ library'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Masonry').last);
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_boq_library.png'),
+    );
   });
 
   testWidgets('phone assistant', (tester) async {

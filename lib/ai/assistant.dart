@@ -363,6 +363,7 @@ class Assistant extends ChangeNotifier {
             old?.type ?? ProjectType.residential,
           ),
           areaSqm: n('area_sqm') ?? old?.areaSqm,
+          markupRate: n('markup_rate') ?? old?.markupRate,
         );
         await repo.saveProject(p);
         done.add(
@@ -455,6 +456,10 @@ class Assistant extends ChangeNotifier {
           items: items,
           discount: n('discount') ?? 0,
           vatRate: n('vat_rate') ?? 11,
+          markupRate:
+              n('markup_rate') ??
+              repo.project(s('project_id'))?.markupRate ??
+              0,
           terms: s('terms').isEmpty
               ? repo.companyInfo['terms'] ?? ''
               : s('terms'),
@@ -605,6 +610,7 @@ class Assistant extends ChangeNotifier {
         quantity: (e['quantity'] as num?)?.toDouble() ?? 1,
         unit: (e['unit'] ?? 'lump sum') as String,
         rate: (e['rate'] as num?)?.toDouble() ?? 0,
+        section: (e['section'] ?? '') as String,
       ),
   ];
 }
@@ -647,7 +653,11 @@ final _items = {
       'description': {'type': 'string'},
       'quantity': {'type': 'number'},
       'unit': {'type': 'string', 'description': 'e.g. lump sum, m², visit'},
-      'rate': {'type': 'number', 'description': 'USD per unit'},
+      'rate': {'type': 'number', 'description': 'USD cost per unit'},
+      'section': {
+        'type': 'string',
+        'description': 'BOQ section or trade, e.g. Masonry',
+      },
     },
     'required': ['description', 'rate'],
   },
@@ -681,6 +691,7 @@ List<Map<String, Object?>> _tools(bool owner) => [
       'location': _str(),
       'map_link': _str('Google Maps link'),
       'area_sqm': _num('Built-up area in m²'),
+      'markup_rate': _num('Cost-plus fee percent for this project'),
       'stage': _str('Stage name from that service\'s list'),
       'status': _enum(ProjectStatus.values),
       'start_date': _str(_date),
@@ -727,6 +738,9 @@ List<Map<String, Object?>> _tools(bool owner) => [
         'items': _items,
         'discount': _num('USD'),
         'vat_rate': _num('Percent, default 11'),
+        'markup_rate': _num(
+          'Cost-plus fee percent; defaults to the project fee',
+        ),
         'valid_days': _num(),
         'terms': _str(),
         'notes': _str(),

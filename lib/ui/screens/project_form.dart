@@ -40,6 +40,7 @@ class _ProjectFormState extends State<ProjectForm> {
   late final TextEditingController _notes;
   late final TextEditingController _area;
   late final TextEditingController _mapLink;
+  late final TextEditingController _fee;
   ProjectType _type = ProjectType.residential;
   String? _clientId;
   String? _stageId;
@@ -69,6 +70,8 @@ class _ProjectFormState extends State<ProjectForm> {
     _due = p?.dueDate;
     _team = {...?p?.teamIds};
     _type = p?.type ?? ProjectType.residential;
+    final f = p?.markupRate;
+    _fee = TextEditingController(text: f == null ? '' : _plain(f));
     final a = p?.areaSqm;
     _area = TextEditingController(
       text: a == null
@@ -84,6 +87,7 @@ class _ProjectFormState extends State<ProjectForm> {
     _location.dispose();
     _area.dispose();
     _mapLink.dispose();
+    _fee.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -114,6 +118,9 @@ class _ProjectFormState extends State<ProjectForm> {
         type: _type,
         areaSqm: double.tryParse(_area.text.replaceAll(',', '').trim()),
         mapLink: _mapLink.text.trim(),
+        markupRate: repo.isOwner
+            ? double.tryParse(_fee.text.replaceAll('%', '').trim())
+            : p?.markupRate,
         notes: _notes.text.trim(),
       ),
     );
@@ -320,6 +327,30 @@ class _ProjectFormState extends State<ProjectForm> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
+              if (repo.isOwner) ...[
+                gap,
+                TextFormField(
+                  controller: _fee,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Cost-plus fee',
+                    hintText: 'For example 15',
+                    suffixText: '%',
+                    prefixIcon: Icon(Icons.percent),
+                    helperText:
+                        'Added on top of cost in this project\'s quotations '
+                        'and invoices.',
+                  ),
+                  validator: (v) =>
+                      v == null ||
+                          v.trim().isEmpty ||
+                          double.tryParse(v.replaceAll('%', '').trim()) != null
+                      ? null
+                      : 'Numbers only',
+                ),
+              ],
               gap,
               Row(
                 children: [
@@ -416,3 +447,5 @@ class _ProjectFormState extends State<ProjectForm> {
     );
   }
 }
+
+String _plain(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';

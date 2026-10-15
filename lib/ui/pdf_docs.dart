@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -248,56 +246,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
           pw.SizedBox(height: 14),
         ],
         // Items.
-        pw.TableHelper.fromTextArray(
-          headers: ['#', 'Description', 'Qty', 'Unit', 'Rate', 'Amount'],
-          data: [
-            for (var i = 0; i < doc.items.length; i++)
-              [
-                '${i + 1}',
-                doc.items[i].description,
-                _qty(doc.items[i].quantity),
-                doc.items[i].unit,
-                fmtMoney(doc.items[i].rate),
-                fmtMoney(doc.items[i].amount),
-              ],
-          ],
-          headerStyle: pw.TextStyle(
-            color: PdfColors.white,
-            fontWeight: pw.FontWeight.bold,
-            fontSize: 8.5,
-          ),
-          headerDecoration: const pw.BoxDecoration(color: _graphite),
-          cellStyle: const pw.TextStyle(fontSize: 9),
-          cellPadding: const pw.EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 6,
-          ),
-          rowDecoration: const pw.BoxDecoration(
-            border: pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
-          ),
-          columnWidths: {
-            0: const pw.FixedColumnWidth(22),
-            1: const pw.FlexColumnWidth(5),
-            2: const pw.FixedColumnWidth(36),
-            3: const pw.FixedColumnWidth(54),
-            4: const pw.FixedColumnWidth(70),
-            5: const pw.FixedColumnWidth(76),
-          },
-          cellAlignments: {
-            0: pw.Alignment.centerLeft,
-            1: pw.Alignment.centerLeft,
-            2: pw.Alignment.centerRight,
-            4: pw.Alignment.centerRight,
-            5: pw.Alignment.centerRight,
-          },
-          headerAlignments: {
-            0: pw.Alignment.centerLeft,
-            1: pw.Alignment.centerLeft,
-            2: pw.Alignment.centerRight,
-            4: pw.Alignment.centerRight,
-            5: pw.Alignment.centerRight,
-          },
-        ),
+        _itemsTable(doc),
         pw.SizedBox(height: 10),
         // Totals.
         pw.Row(
@@ -307,7 +256,14 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
               width: 220,
               child: pw.Column(
                 children: [
-                  moneyRow('Subtotal', doc.subtotal),
+                  if (doc.showMarkup && doc.markupRate != 0) ...[
+                    moneyRow('Cost subtotal', doc.subtotal),
+                    moneyRow(
+                      'Cost-plus fee ${_qty(doc.markupRate)}%',
+                      doc.markup,
+                    ),
+                  ] else
+                    moneyRow('Subtotal', doc.subtotal + doc.markup),
                   if (doc.discount != 0) moneyRow('Discount', -doc.discount),
                   moneyRow('VAT ${_qty(doc.vatRate)}%', doc.vat),
                   pw.Container(
@@ -405,4 +361,120 @@ Future<void> sharePdf(Repository repo, PricedDocument doc) async {
   final bytes = await buildPdf(repo, doc);
   final number = doc is Invoice ? doc.number : (doc as Quotation).number;
   await Printing.sharePdf(bytes: bytes, filename: '$number.pdf');
+}
+
+/// The priced lines, grouped under their sections with a subtotal after
+/// each. When the cost-plus fee is not shown, it is spread into the rates
+/// so the lines add up to the same total.
+pw.Widget _itemsTable(PricedDocument doc) {
+  final factor = doc.showMarkup ? 1.0 : 1 + doc.markupRate / 100;
+  final sectioned = doc.items.any((i) => i.section.isNotEmpty);
+  const cell = pw.TextStyle(fontSize: 9);
+  final bold = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
+  final head = pw.TextStyle(
+    color: PdfColors.white,
+    fontWeight: pw.FontWeight.bold,
+    fontSize: 8.5,
+  );
+  const pad = pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6);
+  const rightCols = {2, 4, 5};
+
+  pw.Widget c(String t, int col, pw.TextStyle style) => pw.Padding(
+    padding: pad,
+    child: pw.Text(
+      t,
+      style: style,
+      textAlign: rightCols.contains(col) ? pw.TextAlign.right : null,
+    ),
+  );
+  pw.TableRow row(
+    List<String> cells, {
+    pw.TextStyle style = cell,
+    PdfColor? fill,
+  }) => pw.TableRow(
+    decoration: pw.BoxDecoration(
+      color: fill,
+      border: const pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
+    ),
+    children: [for (var k = 0; k < 6; k++) c(cells[k], k, style)],
+  );
+
+  final rows = <pw.TableRow>[
+    pw.TableRow(
+      decoration: const pw.BoxDecoration(color: _graphite),
+      children: [
+        for (final (k, h) in [
+          '#',
+          'Description',
+          'Qty',
+          'Unit',
+          'Rate',
+          'Amount',
+        ].indexed)
+          c(h, k, head),
+      ],
+    ),
+  ];
+
+  // Keep the order items were entered, gathering each section together.
+  final groups = <String, List<LineItem>>{};
+  for (final i in doc.items) {
+    (groups[i.section] ??= []).add(i);
+  }
+  var g = 0;
+  var n = 0;
+  for (final MapEntry(key: name, value: items) in groups.entries) {
+    g++;
+    final showHead = sectioned;
+    if (showHead) {
+      rows.add(
+        row(
+          ['$g', name.isEmpty ? 'General' : name.toUpperCase(), '', '', '', ''],
+          style: bold,
+          fill: _soft,
+        ),
+      );
+    }
+    var sum = 0.0;
+    for (var k = 0; k < items.length; k++) {
+      final i = items[k];
+      n++;
+      final amount = i.amount * factor;
+      sum += amount;
+      rows.add(
+        row([
+          sectioned ? '$g.${k + 1}' : '$n',
+          i.description,
+          _qty(i.quantity),
+          i.unit,
+          fmtMoney(i.rate * factor),
+          fmtMoney(amount),
+        ]),
+      );
+    }
+    if (showHead && groups.length > 1) {
+      rows.add(
+        row([
+          '',
+          'Total ${name.isEmpty ? 'general' : name}',
+          '',
+          '',
+          '',
+          fmtMoney(sum),
+        ], style: bold),
+      );
+    }
+  }
+
+  return pw.Table(
+    columnWidths: {
+      0: const pw.FixedColumnWidth(26),
+      1: const pw.FlexColumnWidth(5),
+      2: const pw.FixedColumnWidth(36),
+      3: const pw.FixedColumnWidth(50),
+      4: const pw.FixedColumnWidth(68),
+      5: const pw.FixedColumnWidth(76),
+    },
+    children: rows,
+  );
 }

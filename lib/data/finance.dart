@@ -32,8 +32,11 @@ class LineItem {
     this.quantity = 1,
     this.unit = 'lump sum',
     this.rate = 0,
+    this.section = '',
   });
 
+  /// BOQ heading this line belongs to, e.g. "Masonry works".
+  final String section;
   final String description;
   final double quantity;
   final String unit;
@@ -46,6 +49,7 @@ class LineItem {
     quantity: (m['q'] as num?)?.toDouble() ?? 1,
     unit: (m['u'] ?? '') as String,
     rate: (m['r'] as num?)?.toDouble() ?? 0,
+    section: (m['s'] ?? '') as String,
   );
 
   Map<String, Object?> toJson() => {
@@ -53,6 +57,7 @@ class LineItem {
     'q': quantity,
     'u': unit,
     'r': rate,
+    if (section.isNotEmpty) 's': section,
   };
 
   LineItem copyWith({
@@ -60,11 +65,13 @@ class LineItem {
     double? quantity,
     String? unit,
     double? rate,
+    String? section,
   }) => LineItem(
     description: description ?? this.description,
     quantity: quantity ?? this.quantity,
     unit: unit ?? this.unit,
     rate: rate ?? this.rate,
+    section: section ?? this.section,
   );
 }
 
@@ -89,8 +96,17 @@ mixin PricedDocument {
   double get discount;
   double get vatRate;
 
+  /// Cost-plus percentage added on top of the cost of the items.
+  double get markupRate;
+
+  /// Whether the PDF shows the cost-plus fee as its own line. When false the
+  /// fee is spread into the item rates and the client sees final prices.
+  bool get showMarkup;
+
+  /// Cost of the items before the cost-plus fee.
   double get subtotal => items.fold(0, (s, i) => s + i.amount);
-  double get net => subtotal - discount;
+  double get markup => subtotal * markupRate / 100;
+  double get net => subtotal + markup - discount;
   double get vat => net * vatRate / 100;
   double get total => net + vat;
 }
@@ -118,6 +134,10 @@ class Quotation with PricedDocument implements Record {
   final double discount;
   @override
   final double vatRate;
+  @override
+  final double markupRate;
+  @override
+  final bool showMarkup;
   final QuotationStatus status;
   final String terms;
   final String notes;
@@ -136,6 +156,8 @@ class Quotation with PricedDocument implements Record {
     this.items = const [],
     this.discount = 0,
     this.vatRate = 11,
+    this.markupRate = 0,
+    this.showMarkup = true,
     this.status = QuotationStatus.draft,
     this.terms = '',
     this.notes = '',
@@ -155,6 +177,8 @@ class Quotation with PricedDocument implements Record {
     items: _items(m['items']),
     discount: _num(m['discount']),
     vatRate: _num(m['vat_rate'], 11),
+    markupRate: _num(m['markup_rate']),
+    showMarkup: m['show_markup'] != 0 && m['show_markup'] != false,
     status: _enumByName(
       QuotationStatus.values,
       m['status'],
@@ -176,6 +200,8 @@ class Quotation with PricedDocument implements Record {
     'items': _itemsStr(items),
     'discount': discount,
     'vat_rate': vatRate,
+    'markup_rate': markupRate,
+    'show_markup': showMarkup ? 1 : 0,
     'status': status.name,
     'terms': terms,
     'notes': notes,
@@ -185,6 +211,9 @@ class Quotation with PricedDocument implements Record {
     QuotationStatus? status,
     String? projectId,
     bool? deleted,
+    List<LineItem>? items,
+    double? markupRate,
+    bool? showMarkup,
   }) => Quotation(
     id: id,
     createdAt: createdAt,
@@ -196,9 +225,11 @@ class Quotation with PricedDocument implements Record {
     projectId: projectId ?? this.projectId,
     date: date,
     validUntil: validUntil,
-    items: items,
+    items: items ?? this.items,
     discount: discount,
     vatRate: vatRate,
+    markupRate: markupRate ?? this.markupRate,
+    showMarkup: showMarkup ?? this.showMarkup,
     status: status ?? this.status,
     terms: terms,
     notes: notes,
@@ -229,6 +260,10 @@ class Invoice with PricedDocument implements Record {
   final double discount;
   @override
   final double vatRate;
+  @override
+  final double markupRate;
+  @override
+  final bool showMarkup;
   final InvoiceStatus status;
   final String notes;
 
@@ -247,6 +282,8 @@ class Invoice with PricedDocument implements Record {
     this.items = const [],
     this.discount = 0,
     this.vatRate = 11,
+    this.markupRate = 0,
+    this.showMarkup = true,
     this.status = InvoiceStatus.draft,
     this.notes = '',
   });
@@ -266,6 +303,8 @@ class Invoice with PricedDocument implements Record {
     items: _items(m['items']),
     discount: _num(m['discount']),
     vatRate: _num(m['vat_rate'], 11),
+    markupRate: _num(m['markup_rate']),
+    showMarkup: m['show_markup'] != 0 && m['show_markup'] != false,
     status: _enumByName(InvoiceStatus.values, m['status'], InvoiceStatus.draft),
     notes: (m['notes'] ?? '') as String,
   );
@@ -283,6 +322,8 @@ class Invoice with PricedDocument implements Record {
     'items': _itemsStr(items),
     'discount': discount,
     'vat_rate': vatRate,
+    'markup_rate': markupRate,
+    'show_markup': showMarkup ? 1 : 0,
     'status': status.name,
     'notes': notes,
   };
@@ -302,6 +343,8 @@ class Invoice with PricedDocument implements Record {
     items: items,
     discount: discount,
     vatRate: vatRate,
+    markupRate: markupRate,
+    showMarkup: showMarkup,
     status: status ?? this.status,
     notes: notes,
   );

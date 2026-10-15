@@ -351,6 +351,8 @@ class Repository extends ChangeNotifier {
       items: q.items,
       discount: q.discount,
       vatRate: q.vatRate,
+      markupRate: q.markupRate,
+      showMarkup: q.showMarkup,
     );
   }
 

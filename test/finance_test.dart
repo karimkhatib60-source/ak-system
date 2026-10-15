@@ -71,6 +71,40 @@ void main() {
     expect(back.total, closeTo(3330, 1e-9));
   });
 
+  test('cost-plus fee is added on top of cost, before VAT', () async {
+    final q = quote(await project()).copyWith(markupRate: 15);
+    expect(q.subtotal, 4000);
+    expect(q.markup, 600);
+    expect(q.net, 3600);
+    expect(q.total, closeTo(3996, 1e-9));
+  });
+
+  test('sections and the fee survive saving and invoicing', () async {
+    final pr = await project();
+    final q = quote(pr).copyWith(
+      markupRate: 20,
+      showMarkup: false,
+      items: const [
+        LineItem(
+          description: 'Block wall',
+          unit: 'm²',
+          quantity: 10,
+          rate: 18,
+          section: 'Masonry',
+        ),
+      ],
+    );
+    await repo.saveQuotation(q);
+    final back = repo.quotation(q.id)!;
+    expect(back.items.single.section, 'Masonry');
+    expect(back.markupRate, 20);
+    expect(back.showMarkup, isFalse);
+    final inv = repo.invoiceFromQuotation(back);
+    expect(inv.markupRate, 20);
+    expect(inv.showMarkup, isFalse);
+    expect(inv.total, closeTo(back.total, 1e-9));
+  });
+
   test('numbers count up per year: QT-26-001, INV-26-001', () async {
     final pr = await project();
     expect(repo.nextQuotationNumber(), 'QT-26-001');
@@ -161,9 +195,12 @@ void main() {
         onCreate: (db, _) async {
           for (final e in syncedTables.entries) {
             if (financeTables.contains(e.key)) continue;
-            final cols = e.value
-                .replaceAll(', service TEXT', '')
-                .replaceAll(', map_link TEXT', '');
+            // Strip the columns added in versions 3 and 4.
+            var cols = e.value;
+            if (e.key == 'stages') cols = cols.replaceAll(', service TEXT', '');
+            cols = cols
+                .replaceAll(', map_link TEXT', '')
+                .replaceAll(', markup_rate REAL', '');
             await db.execute(
               'CREATE TABLE ${e.key} (id TEXT PRIMARY KEY, created_at TEXT '
               'NOT NULL, updated_at TEXT NOT NULL, deleted INTEGER NOT NULL '
@@ -201,6 +238,9 @@ void main() {
     expect(r.stagesFor(ServiceType.design), hasLength(1));
     expect(r.stagesFor(ServiceType.contracting), isNotEmpty);
     expect(r.quotations, isEmpty);
+    // Version 4 columns were added on the way up.
+    await r.saveProject(r.project('p1')!.copyWith(markupRate: 15));
+    expect(r.project('p1')!.markupRate, 15);
     await local.close();
     await dir.delete(recursive: true);
   });

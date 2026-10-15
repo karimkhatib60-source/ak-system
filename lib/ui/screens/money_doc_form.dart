@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/boq_library.dart';
+import '../../data/boq_paste.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../format.dart';
@@ -51,11 +53,13 @@ Future<void> openInvoiceForm(
 
 class _Line {
   _Line(LineItem i)
-    : description = TextEditingController(text: i.description),
+    : section = TextEditingController(text: i.section),
+      description = TextEditingController(text: i.description),
       quantity = TextEditingController(text: _plain(i.quantity)),
       unit = TextEditingController(text: i.unit),
       rate = TextEditingController(text: i.rate == 0 ? '' : _plain(i.rate));
 
+  final TextEditingController section;
   final TextEditingController description;
   final TextEditingController quantity;
   final TextEditingController unit;
@@ -69,9 +73,13 @@ class _Line {
     quantity: _parse(quantity.text) ?? 1,
     unit: unit.text.trim(),
     rate: _parse(rate.text) ?? 0,
+    section: section.text.trim(),
   );
 
+  bool get isBlank => item.description.isEmpty && item.rate == 0;
+
   void dispose() {
+    section.dispose();
     description.dispose();
     quantity.dispose();
     unit.dispose();
@@ -113,6 +121,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   late final TextEditingController _title;
   late final TextEditingController _discount;
   late final TextEditingController _vat;
+  late final TextEditingController _markup;
+  bool _showMarkup = true;
   late final TextEditingController _terms;
   late final TextEditingController _notes;
   final _lines = <_Line>[];
@@ -164,6 +174,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       text: doc == null || doc.discount == 0 ? '' : _Line._plain(doc.discount),
     );
     _vat = TextEditingController(text: _Line._plain(doc?.vatRate ?? 11));
+    final fee = doc?.markupRate ?? (doc == null ? project?.markupRate : null);
+    _markup = TextEditingController(
+      text: fee == null || fee == 0 ? '' : _Line._plain(fee),
+    );
+    _showMarkup = doc?.showMarkup ?? true;
     _terms = TextEditingController(
       text: q?.terms ?? (q == null ? repo.companyInfo['terms'] ?? '' : ''),
     );
@@ -178,7 +193,15 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
 
   @override
   void dispose() {
-    for (final c in [_number, _title, _discount, _vat, _terms, _notes]) {
+    for (final c in [
+      _number,
+      _title,
+      _discount,
+      _vat,
+      _markup,
+      _terms,
+      _notes,
+    ]) {
       c.dispose();
     }
     for (final l in _lines) {
@@ -205,6 +228,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     items: _items,
     discount: _parse(_discount.text) ?? 0,
     vatRate: _parse(_vat.text) ?? 0,
+    markupRate: _parse(_markup.text.replaceAll('%', '')) ?? 0,
+    showMarkup: _showMarkup,
     status: _qStatus,
     terms: _terms.text.trim(),
     notes: _notes.text.trim(),
@@ -224,6 +249,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     items: _items,
     discount: _parse(_discount.text) ?? 0,
     vatRate: _parse(_vat.text) ?? 0,
+    markupRate: _parse(_markup.text.replaceAll('%', '')) ?? 0,
+    showMarkup: _showMarkup,
     status: _iStatus,
     notes: _notes.text.trim(),
   );
@@ -279,6 +306,40 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     final nav = Navigator.of(context);
     nav.pop();
     await openInvoiceForm(nav.context, draft: repo.invoiceFromQuotation(q));
+  }
+
+  /// Adds lines, replacing the single empty line a new document starts with.
+  void _addItems(List<LineItem> items) {
+    if (items.isEmpty) return;
+    setState(() {
+      if (_lines.length == 1 && _lines.first.isBlank) {
+        _lines.removeAt(0).dispose();
+      }
+      _lines.addAll(items.map(_Line.new));
+    });
+  }
+
+  void _addBlank() {
+    final last = _lines.isEmpty ? '' : _lines.last.section.text;
+    setState(() => _lines.add(_Line(LineItem(section: last))));
+  }
+
+  Future<void> _fromLibrary() async {
+    final picked = await showBoqLibrary(context);
+    if (picked != null) _addItems(picked);
+  }
+
+  Future<void> _paste() async {
+    final items = await showPasteItems(context);
+    if (items != null) _addItems(items);
+  }
+
+  void _projectChanged(Repository repo, String? id) {
+    _projectId = id;
+    final fee = repo.project(id)?.markupRate;
+    if (_markup.text.trim().isEmpty && fee != null && fee != 0) {
+      _markup.text = _Line._plain(fee);
+    }
   }
 
   Future<void> _addPayment() async {
@@ -492,7 +553,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       child: Text('${p.code} · ${p.name}'),
                     ),
                 ],
-                onChanged: (v) => setState(() => _projectId = v),
+                onChanged: (v) => setState(() => _projectChanged(repo, v)),
               ),
               gap,
               DateField(
@@ -511,16 +572,63 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       ? null
                       : () => setState(() => _lines.removeAt(i).dispose()),
                 ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () =>
-                      setState(() => _lines.add(_Line(const LineItem()))),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add item'),
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  TextButton.icon(
+                    onPressed: _addBlank,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add item'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _fromLibrary,
+                    icon: const Icon(Icons.menu_book_outlined),
+                    label: const Text('From BOQ library'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _paste,
+                    icon: const Icon(Icons.content_paste),
+                    label: const Text('Paste items'),
+                  ),
+                ],
               ),
               gap,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _markup,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Cost-plus fee',
+                        suffixText: '%',
+                        hintText: 'e.g. 15',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SwitchListTile(
+                      contentPadding: const EdgeInsets.only(left: 4),
+                      dense: true,
+                      value: _showMarkup,
+                      onChanged: (v) => setState(() => _showMarkup = v),
+                      title: const Text('Show fee on PDF'),
+                      subtitle: Text(
+                        _showMarkup
+                            ? 'As its own line'
+                            : 'Included in the rates',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
@@ -650,6 +758,17 @@ class _LineEditor extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8, bottom: 10),
+              child: TextFormField(
+                controller: line.section,
+                decoration: const InputDecoration(
+                  labelText: 'Section',
+                  hintText: 'e.g. Masonry (optional)',
+                  isDense: true,
+                ),
+              ),
+            ),
             Row(
               children: [
                 Expanded(
@@ -758,7 +877,9 @@ class _Totals extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
-            row('Subtotal', doc.subtotal),
+            row(doc.markupRate == 0 ? 'Subtotal' : 'Cost', doc.subtotal),
+            if (doc.markupRate != 0)
+              row('Cost-plus fee ${_Line._plain(doc.markupRate)}%', doc.markup),
             if (doc.discount != 0) row('Discount', -doc.discount),
             row('VAT ${_Line._plain(doc.vatRate)}%', doc.vat),
             const Divider(height: 18),
@@ -862,4 +983,149 @@ Future<void> showPaymentDialog(
       ),
     );
   }
+}
+
+/// Lets the user tick standard BOQ items by trade. Returns the chosen items
+/// with quantity 1 and no rate, each under its trade as the section.
+Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
+  final picked = <BoqItem, String>{};
+  return showModalBottomSheet<List<LineItem>>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * .85,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'BOQ library',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: picked.isEmpty
+                        ? null
+                        : () => Navigator.pop(ctx, [
+                            for (final e in picked.entries)
+                              LineItem(
+                                description: e.key.description,
+                                unit: e.key.unit,
+                                section: e.value,
+                              ),
+                          ]),
+                    child: Text(
+                      picked.isEmpty ? 'Add' : 'Add ${picked.length}',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                children: [
+                  for (final t in boqLibrary)
+                    ExpansionTile(
+                      title: Text(t.name),
+                      subtitle: Text(
+                        '${t.items.where(picked.containsKey).length} of '
+                        '${t.items.length} chosen',
+                      ),
+                      children: [
+                        for (final item in t.items)
+                          CheckboxListTile(
+                            dense: true,
+                            value: picked.containsKey(item),
+                            onChanged: (v) => set(() {
+                              if (v == true) {
+                                picked[item] = t.name;
+                              } else {
+                                picked.remove(item);
+                              }
+                            }),
+                            title: Text(item.description),
+                            subtitle: Text(item.unit),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Takes BOQ lines pasted from Excel or a message and turns them into items.
+Future<List<LineItem>?> showPasteItems(BuildContext context) async {
+  final ctrl = TextEditingController();
+  final items = await showDialog<List<LineItem>>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) {
+        final found = parseBoq(ctrl.text);
+        return AlertDialog(
+          title: const Text('Paste items'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Paste rows from Excel, or a BOQ written for you in the '
+                  'chat. One item per line: description, unit, quantity, '
+                  'rate. A line with only a name starts a new section.',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  minLines: 6,
+                  maxLines: 12,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Masonry\n'
+                        'Block wall 20 cm | m² | 120 | 18\n'
+                        'Block wall 10 cm | m² | 85 | 14',
+                  ),
+                  onChanged: (_) => set(() {}),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  found.isEmpty
+                      ? 'No items found yet.'
+                      : '${found.length} item${found.length == 1 ? '' : 's'} '
+                            'found',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: found.isEmpty ? null : () => Navigator.pop(ctx, found),
+              child: const Text('Add items'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+  return items;
 }

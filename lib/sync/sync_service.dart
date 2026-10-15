@@ -146,7 +146,7 @@ class SyncService extends ChangeNotifier {
   static Map<String, Object?> toRemote(Map<String, Object?> row) {
     final out = Map<String, Object?>.from(row)..remove('dirty');
     for (final k in _boolColumns) {
-      if (out.containsKey(k)) out[k] = out[k] == 1 || out[k] == true;
+      if (out[k] != null) out[k] = out[k] == 1 || out[k] == true;
     }
     return out;
   }
@@ -157,7 +157,7 @@ class SyncService extends ChangeNotifier {
   static Map<String, Object?> fromRemote(Map<String, Object?> row) {
     final out = Map<String, Object?>.from(row)..remove('synced_at');
     for (final k in _boolColumns) {
-      if (out.containsKey(k)) out[k] = out[k] == true || out[k] == 1 ? 1 : 0;
+      if (out[k] != null) out[k] = out[k] == true || out[k] == 1 ? 1 : 0;
     }
     // Timestamps come back with a +00:00 suffix; store them in the same
     // form the app writes so string comparison stays correct.
@@ -171,7 +171,7 @@ class SyncService extends ChangeNotifier {
     return out;
   }
 
-  static const _boolColumns = ['deleted', 'abroad'];
+  static const _boolColumns = ['deleted', 'abroad', 'show_markup'];
 
   @override
   void dispose() {

@@ -191,6 +191,9 @@ class Project implements Record {
   /// Google Maps link to the site.
   final String mapLink;
 
+  /// Cost-plus percentage agreed for this project, used on its quotations.
+  final double? markupRate;
+
   const Project({
     required this.id,
     required this.createdAt,
@@ -211,6 +214,7 @@ class Project implements Record {
     this.type = ProjectType.residential,
     this.areaSqm,
     this.mapLink = '',
+    this.markupRate,
   });
 
   factory Project.fromMap(Map<String, Object?> m) => Project(
@@ -241,6 +245,7 @@ class Project implements Record {
     ),
     areaSqm: (m['area_sqm'] as num?)?.toDouble(),
     mapLink: (m['map_link'] ?? '') as String,
+    markupRate: (m['markup_rate'] as num?)?.toDouble(),
   );
 
   @override
@@ -261,6 +266,7 @@ class Project implements Record {
     'project_type': type.name,
     'area_sqm': areaSqm,
     'map_link': mapLink,
+    'markup_rate': markupRate,
   };
 
   Project copyWith({
@@ -278,6 +284,7 @@ class Project implements Record {
     String? notes,
     bool? deleted,
     DateTime? updatedAt,
+    double? markupRate,
   }) => Project(
     id: id,
     createdAt: createdAt,
@@ -298,6 +305,7 @@ class Project implements Record {
     type: type,
     areaSqm: areaSqm,
     mapLink: mapLink,
+    markupRate: markupRate ?? this.markupRate,
   );
 }
 

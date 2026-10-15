@@ -10,7 +10,7 @@ const syncedTables = <String, String>{
       'code TEXT, name TEXT, client_id TEXT, service TEXT, '
       'location TEXT, abroad INTEGER, stage_id TEXT, status TEXT, '
       'start_date TEXT, due_date TEXT, team_ids TEXT, notes TEXT, '
-      'project_type TEXT, area_sqm REAL, map_link TEXT',
+      'project_type TEXT, area_sqm REAL, map_link TEXT, markup_rate REAL',
   'tasks':
       'project_id TEXT, title TEXT, assignee_id TEXT, due_date TEXT, '
       'status TEXT, priority TEXT, stage_id TEXT, notes TEXT, category TEXT',
@@ -22,11 +22,13 @@ const syncedTables = <String, String>{
   'quotations':
       'number TEXT, title TEXT, client_id TEXT, project_id TEXT, date TEXT, '
       'valid_until TEXT, items TEXT, discount REAL, vat_rate REAL, '
-      'status TEXT, terms TEXT, notes TEXT',
+      'status TEXT, terms TEXT, notes TEXT, markup_rate REAL, '
+      'show_markup INTEGER',
   'invoices':
       'number TEXT, title TEXT, client_id TEXT, project_id TEXT, '
       'quotation_id TEXT, date TEXT, due_date TEXT, items TEXT, '
-      'discount REAL, vat_rate REAL, status TEXT, notes TEXT',
+      'discount REAL, vat_rate REAL, status TEXT, notes TEXT, '
+      'markup_rate REAL, show_markup INTEGER',
   'payments':
       'invoice_id TEXT, date TEXT, amount REAL, method TEXT, reference TEXT',
   'expenses':
@@ -45,7 +47,7 @@ class LocalDb {
 
   final Database db;
 
-  static const _version = 3;
+  static const _version = 4;
 
   /// Columns added after the first release, by the version that added them.
   static const _added = {
@@ -58,6 +60,13 @@ class LocalDb {
       'deliverables ADD COLUMN doc_number INTEGER',
     ],
     3: ['stages ADD COLUMN service TEXT', 'projects ADD COLUMN map_link TEXT'],
+    4: [
+      'projects ADD COLUMN markup_rate REAL',
+      'quotations ADD COLUMN markup_rate REAL',
+      'quotations ADD COLUMN show_markup INTEGER',
+      'invoices ADD COLUMN markup_rate REAL',
+      'invoices ADD COLUMN show_markup INTEGER',
+    ],
   };
 
   /// Tables added after the first release, by the version that added them.
@@ -95,7 +104,13 @@ class LocalDb {
         onUpgrade: (db, from, to) async {
           for (var v = from + 1; v <= to; v++) {
             for (final change in _added[v] ?? const <String>[]) {
-              await db.execute('ALTER TABLE $change');
+              // A table created by a later step already has the column.
+              final table = change.split(' ').first;
+              final column = change.split(' ')[3];
+              final cols = await db.rawQuery('PRAGMA table_info($table)');
+              if (cols.every((c) => c['name'] != column)) {
+                await db.execute('ALTER TABLE $change');
+              }
             }
             for (final t in _newTables[v] ?? const <String>[]) {
               await _createTable(db, t);
