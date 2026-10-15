@@ -63,6 +63,7 @@ jobs:
           channel: stable
           cache: true
       - name: Set up signing key
+        id: signing
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -72,15 +73,19 @@ jobs:
             echo "$KEYSTORE_B64" | base64 -d > android/app/upload.jks
             printf 'storeFile=upload.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
               "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEYSTORE_PASSWORD" > android/key.properties
+            echo "apk=AK-System-android.apk" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No signing key secret set; the APK is signed with a temporary key and cannot update an earlier install."
+            # A temporary key could never update an earlier install, so this
+            # APK keeps another name and is left out of the release.
+            echo "::warning::No signing key secret set; the APK is signed with a temporary key and is not released."
+            echo "apk=AK-System-android-unsigned.apk" >> "$GITHUB_OUTPUT"
           fi
       - run: flutter build apk --release
-      - run: mv build/app/outputs/flutter-apk/app-release.apk AK-System-android.apk
+      - run: mv build/app/outputs/flutter-apk/app-release.apk ${{ steps.signing.outputs.apk }}
       - uses: actions/upload-artifact@v4
         with:
           name: AK-System-android
-          path: AK-System-android.apk
+          path: ${{ steps.signing.outputs.apk }}
 
   windows:
     needs: test
@@ -143,11 +148,14 @@ jobs:
         with:
           path: out
           merge-multiple: true
+      - name: The Windows installer was built
+        run: test -f out/AK-System-Setup.exe
       - uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
           make_latest: true
-          fail_on_unmatched_files: true
+          # The APK is there only when it was signed with the AK key.
+          fail_on_unmatched_files: false
           files: |
             out/AK-System-Setup.exe
             out/AK-System-android.apk

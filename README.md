@@ -53,7 +53,8 @@ there without a login.
   `%APPDATA%\com.akdac\AK System` is kept. If an older copy was unzipped by
   hand (for example to `C:\AK System`), delete that folder and its shortcut.
 - **Android:** download `AK-System-android.apk` on the phone and open it. Allow
-  "install unknown apps" for your browser or file manager when asked.
+  "install unknown apps" for your browser or file manager when asked. The APK
+  is in a release only once the signing key below is stored.
 
 ### Releasing a new version
 
