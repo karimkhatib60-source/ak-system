@@ -217,3 +217,12 @@ create policy deliverables_owner on public.deliverables for all to authenticated
 drop policy if exists deliverables_team on public.deliverables;
 create policy deliverables_team on public.deliverables for all to authenticated
   using (public.on_project(project_id)) with check (public.on_project(project_id));
+
+-- v2: professional structure (project type and area, task category,
+-- document numbering). Safe to re-run.
+alter table projects add column if not exists project_type text;
+alter table projects add column if not exists area_sqm double precision;
+alter table tasks add column if not exists category text;
+alter table deliverables add column if not exists discipline text;
+alter table deliverables add column if not exists doc_type text;
+alter table deliverables add column if not exists doc_number integer;

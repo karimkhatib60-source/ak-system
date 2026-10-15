@@ -14,6 +14,46 @@ enum DeliverableStatus { draft, internalReview, submitted, approved, revise }
 
 enum MemberRole { owner, architect }
 
+enum ProjectType {
+  residential,
+  commercial,
+  hospitality,
+  interior,
+  mixedUse,
+  industrial,
+  landscape,
+  other,
+}
+
+enum TaskCategory { design, drawings, siteVisit, meeting, coordination, admin }
+
+/// Discipline codes used in document numbers, e.g. ARC.
+enum Discipline {
+  architecture('ARC'),
+  interior('INT'),
+  structure('STR'),
+  mep('MEP'),
+  landscape('LAN'),
+  general('GEN');
+
+  const Discipline(this.code);
+  final String code;
+}
+
+/// Document type codes used in document numbers, e.g. DWG.
+enum DocType {
+  drawing('DWG'),
+  report('RPT'),
+  presentation('PRS'),
+  model('MOD'),
+  boq('BOQ'),
+  specification('SPC'),
+  letter('LTR');
+
+  const DocType(this.code);
+  final String code;
+}
+
 T _enumByName<T extends Enum>(List<T> values, Object? name, T fallback) {
   for (final v in values) {
     if (v.name == name) return v;
@@ -36,11 +76,11 @@ abstract class Record {
 }
 
 Map<String, Object?> _base(Record r) => {
-      'id': r.id,
-      'created_at': r.createdAt.toUtc().toIso8601String(),
-      'updated_at': r.updatedAt.toUtc().toIso8601String(),
-      'deleted': r.deleted ? 1 : 0,
-    };
+  'id': r.id,
+  'created_at': r.createdAt.toUtc().toIso8601String(),
+  'updated_at': r.updatedAt.toUtc().toIso8601String(),
+  'deleted': r.deleted ? 1 : 0,
+};
 
 class Client implements Record {
   @override
@@ -72,28 +112,28 @@ class Client implements Record {
   });
 
   factory Client.fromMap(Map<String, Object?> m) => Client(
-        id: m['id'] as String,
-        createdAt: _date(m['created_at'])!,
-        updatedAt: _date(m['updated_at'])!,
-        deleted: m['deleted'] == 1 || m['deleted'] == true,
-        name: (m['name'] ?? '') as String,
-        company: (m['company'] ?? '') as String,
-        phone: (m['phone'] ?? '') as String,
-        email: (m['email'] ?? '') as String,
-        country: (m['country'] ?? '') as String,
-        notes: (m['notes'] ?? '') as String,
-      );
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    name: (m['name'] ?? '') as String,
+    company: (m['company'] ?? '') as String,
+    phone: (m['phone'] ?? '') as String,
+    email: (m['email'] ?? '') as String,
+    country: (m['country'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
+  );
 
   @override
   Map<String, Object?> toMap() => {
-        ..._base(this),
-        'name': name,
-        'company': company,
-        'phone': phone,
-        'email': email,
-        'country': country,
-        'notes': notes,
-      };
+    ..._base(this),
+    'name': name,
+    'company': company,
+    'phone': phone,
+    'email': email,
+    'country': country,
+    'notes': notes,
+  };
 
   Client copyWith({
     String? name,
@@ -104,19 +144,18 @@ class Client implements Record {
     String? notes,
     bool? deleted,
     DateTime? updatedAt,
-  }) =>
-      Client(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        deleted: deleted ?? this.deleted,
-        name: name ?? this.name,
-        company: company ?? this.company,
-        phone: phone ?? this.phone,
-        email: email ?? this.email,
-        country: country ?? this.country,
-        notes: notes ?? this.notes,
-      );
+  }) => Client(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deleted: deleted ?? this.deleted,
+    name: name ?? this.name,
+    company: company ?? this.company,
+    phone: phone ?? this.phone,
+    email: email ?? this.email,
+    country: country ?? this.country,
+    notes: notes ?? this.notes,
+  );
 }
 
 class Project implements Record {
@@ -140,6 +179,10 @@ class Project implements Record {
   final DateTime? dueDate;
   final List<String> teamIds;
   final String notes;
+  final ProjectType type;
+
+  /// Built-up area in square metres.
+  final double? areaSqm;
 
   const Project({
     required this.id,
@@ -158,45 +201,57 @@ class Project implements Record {
     this.dueDate,
     this.teamIds = const [],
     this.notes = '',
+    this.type = ProjectType.residential,
+    this.areaSqm,
   });
 
   factory Project.fromMap(Map<String, Object?> m) => Project(
-        id: m['id'] as String,
-        createdAt: _date(m['created_at'])!,
-        updatedAt: _date(m['updated_at'])!,
-        deleted: m['deleted'] == 1 || m['deleted'] == true,
-        code: (m['code'] ?? '') as String,
-        name: (m['name'] ?? '') as String,
-        clientId: m['client_id'] as String?,
-        service:
-            _enumByName(ServiceType.values, m['service'], ServiceType.design),
-        location: (m['location'] ?? '') as String,
-        abroad: m['abroad'] == 1 || m['abroad'] == true,
-        stageId: m['stage_id'] as String?,
-        status: _enumByName(
-            ProjectStatus.values, m['status'], ProjectStatus.active),
-        startDate: _date(m['start_date']),
-        dueDate: _date(m['due_date']),
-        teamIds: _splitIds(m['team_ids']),
-        notes: (m['notes'] ?? '') as String,
-      );
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    code: (m['code'] ?? '') as String,
+    name: (m['name'] ?? '') as String,
+    clientId: m['client_id'] as String?,
+    service: _enumByName(ServiceType.values, m['service'], ServiceType.design),
+    location: (m['location'] ?? '') as String,
+    abroad: m['abroad'] == 1 || m['abroad'] == true,
+    stageId: m['stage_id'] as String?,
+    status: _enumByName(
+      ProjectStatus.values,
+      m['status'],
+      ProjectStatus.active,
+    ),
+    startDate: _date(m['start_date']),
+    dueDate: _date(m['due_date']),
+    teamIds: _splitIds(m['team_ids']),
+    notes: (m['notes'] ?? '') as String,
+    type: _enumByName(
+      ProjectType.values,
+      m['project_type'],
+      ProjectType.residential,
+    ),
+    areaSqm: (m['area_sqm'] as num?)?.toDouble(),
+  );
 
   @override
   Map<String, Object?> toMap() => {
-        ..._base(this),
-        'code': code,
-        'name': name,
-        'client_id': clientId,
-        'service': service.name,
-        'location': location,
-        'abroad': abroad ? 1 : 0,
-        'stage_id': stageId,
-        'status': status.name,
-        'start_date': _dateStr(startDate),
-        'due_date': _dateStr(dueDate),
-        'team_ids': teamIds.join(','),
-        'notes': notes,
-      };
+    ..._base(this),
+    'code': code,
+    'name': name,
+    'client_id': clientId,
+    'service': service.name,
+    'location': location,
+    'abroad': abroad ? 1 : 0,
+    'stage_id': stageId,
+    'status': status.name,
+    'start_date': _dateStr(startDate),
+    'due_date': _dateStr(dueDate),
+    'team_ids': teamIds.join(','),
+    'notes': notes,
+    'project_type': type.name,
+    'area_sqm': areaSqm,
+  };
 
   Project copyWith({
     String? code,
@@ -213,25 +268,26 @@ class Project implements Record {
     String? notes,
     bool? deleted,
     DateTime? updatedAt,
-  }) =>
-      Project(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        deleted: deleted ?? this.deleted,
-        code: code ?? this.code,
-        name: name ?? this.name,
-        clientId: clientId ?? this.clientId,
-        service: service ?? this.service,
-        location: location ?? this.location,
-        abroad: abroad ?? this.abroad,
-        stageId: stageId ?? this.stageId,
-        status: status ?? this.status,
-        startDate: startDate ?? this.startDate,
-        dueDate: dueDate ?? this.dueDate,
-        teamIds: teamIds ?? this.teamIds,
-        notes: notes ?? this.notes,
-      );
+  }) => Project(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deleted: deleted ?? this.deleted,
+    code: code ?? this.code,
+    name: name ?? this.name,
+    clientId: clientId ?? this.clientId,
+    service: service ?? this.service,
+    location: location ?? this.location,
+    abroad: abroad ?? this.abroad,
+    stageId: stageId ?? this.stageId,
+    status: status ?? this.status,
+    startDate: startDate ?? this.startDate,
+    dueDate: dueDate ?? this.dueDate,
+    teamIds: teamIds ?? this.teamIds,
+    notes: notes ?? this.notes,
+    type: type,
+    areaSqm: areaSqm,
+  );
 }
 
 List<String> _splitIds(Object? v) {
@@ -258,6 +314,7 @@ class Task implements Record {
   final TaskPriority priority;
   final String? stageId;
   final String notes;
+  final TaskCategory category;
 
   const Task({
     required this.id,
@@ -272,6 +329,7 @@ class Task implements Record {
     this.priority = TaskPriority.normal,
     this.stageId,
     this.notes = '',
+    this.category = TaskCategory.design,
   });
 
   bool isOverdue(DateTime now) =>
@@ -280,33 +338,42 @@ class Task implements Record {
       dueDate!.isBefore(DateTime(now.year, now.month, now.day));
 
   factory Task.fromMap(Map<String, Object?> m) => Task(
-        id: m['id'] as String,
-        createdAt: _date(m['created_at'])!,
-        updatedAt: _date(m['updated_at'])!,
-        deleted: m['deleted'] == 1 || m['deleted'] == true,
-        projectId: m['project_id'] as String,
-        title: (m['title'] ?? '') as String,
-        assigneeId: m['assignee_id'] as String?,
-        dueDate: _date(m['due_date']),
-        status: _enumByName(TaskStatus.values, m['status'], TaskStatus.todo),
-        priority: _enumByName(
-            TaskPriority.values, m['priority'], TaskPriority.normal),
-        stageId: m['stage_id'] as String?,
-        notes: (m['notes'] ?? '') as String,
-      );
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    projectId: m['project_id'] as String,
+    title: (m['title'] ?? '') as String,
+    assigneeId: m['assignee_id'] as String?,
+    dueDate: _date(m['due_date']),
+    status: _enumByName(TaskStatus.values, m['status'], TaskStatus.todo),
+    priority: _enumByName(
+      TaskPriority.values,
+      m['priority'],
+      TaskPriority.normal,
+    ),
+    stageId: m['stage_id'] as String?,
+    notes: (m['notes'] ?? '') as String,
+    category: _enumByName(
+      TaskCategory.values,
+      m['category'],
+      TaskCategory.design,
+    ),
+  );
 
   @override
   Map<String, Object?> toMap() => {
-        ..._base(this),
-        'project_id': projectId,
-        'title': title,
-        'assignee_id': assigneeId,
-        'due_date': _dateStr(dueDate),
-        'status': status.name,
-        'priority': priority.name,
-        'stage_id': stageId,
-        'notes': notes,
-      };
+    ..._base(this),
+    'project_id': projectId,
+    'title': title,
+    'assignee_id': assigneeId,
+    'due_date': _dateStr(dueDate),
+    'status': status.name,
+    'priority': priority.name,
+    'stage_id': stageId,
+    'notes': notes,
+    'category': category.name,
+  };
 
   Task copyWith({
     String? projectId,
@@ -319,21 +386,21 @@ class Task implements Record {
     String? notes,
     bool? deleted,
     DateTime? updatedAt,
-  }) =>
-      Task(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        deleted: deleted ?? this.deleted,
-        projectId: projectId ?? this.projectId,
-        title: title ?? this.title,
-        assigneeId: assigneeId ?? this.assigneeId,
-        dueDate: dueDate ?? this.dueDate,
-        status: status ?? this.status,
-        priority: priority ?? this.priority,
-        stageId: stageId ?? this.stageId,
-        notes: notes ?? this.notes,
-      );
+  }) => Task(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deleted: deleted ?? this.deleted,
+    projectId: projectId ?? this.projectId,
+    title: title ?? this.title,
+    assigneeId: assigneeId ?? this.assigneeId,
+    dueDate: dueDate ?? this.dueDate,
+    status: status ?? this.status,
+    priority: priority ?? this.priority,
+    stageId: stageId ?? this.stageId,
+    notes: notes ?? this.notes,
+    category: category,
+  );
 }
 
 class Deliverable implements Record {
@@ -355,6 +422,11 @@ class Deliverable implements Record {
   final DateTime? approvedAt;
   final String fileLink;
   final String notes;
+  final Discipline discipline;
+  final DocType docType;
+
+  /// Running number within the project, discipline and type.
+  final int number;
 
   const Deliverable({
     required this.id,
@@ -371,7 +443,18 @@ class Deliverable implements Record {
     this.approvedAt,
     this.fileLink = '',
     this.notes = '',
+    this.discipline = Discipline.architecture,
+    this.docType = DocType.drawing,
+    this.number = 1,
   });
+
+  /// Document number, e.g. AK-26-001-ARC-DWG-003.
+  String docCode(String projectCode) => [
+    if (projectCode.isNotEmpty) projectCode,
+    discipline.code,
+    docType.code,
+    number.toString().padLeft(3, '0'),
+  ].join('-');
 
   /// Revision label used on submissions: R00, R01, ...
   String get revisionLabel => 'R${(version - 1).toString().padLeft(2, '0')}';
@@ -384,37 +467,50 @@ class Deliverable implements Record {
       dueDate!.isBefore(DateTime(now.year, now.month, now.day));
 
   factory Deliverable.fromMap(Map<String, Object?> m) => Deliverable(
-        id: m['id'] as String,
-        createdAt: _date(m['created_at'])!,
-        updatedAt: _date(m['updated_at'])!,
-        deleted: m['deleted'] == 1 || m['deleted'] == true,
-        projectId: m['project_id'] as String,
-        title: (m['title'] ?? '') as String,
-        stageId: m['stage_id'] as String?,
-        version: (m['version'] as num?)?.toInt() ?? 1,
-        status: _enumByName(
-            DeliverableStatus.values, m['status'], DeliverableStatus.draft),
-        dueDate: _date(m['due_date']),
-        submittedAt: _date(m['submitted_at']),
-        approvedAt: _date(m['approved_at']),
-        fileLink: (m['file_link'] ?? '') as String,
-        notes: (m['notes'] ?? '') as String,
-      );
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    projectId: m['project_id'] as String,
+    title: (m['title'] ?? '') as String,
+    stageId: m['stage_id'] as String?,
+    version: (m['version'] as num?)?.toInt() ?? 1,
+    status: _enumByName(
+      DeliverableStatus.values,
+      m['status'],
+      DeliverableStatus.draft,
+    ),
+    dueDate: _date(m['due_date']),
+    submittedAt: _date(m['submitted_at']),
+    approvedAt: _date(m['approved_at']),
+    fileLink: (m['file_link'] ?? '') as String,
+    notes: (m['notes'] ?? '') as String,
+    discipline: _enumByName(
+      Discipline.values,
+      m['discipline'],
+      Discipline.architecture,
+    ),
+    docType: _enumByName(DocType.values, m['doc_type'], DocType.drawing),
+    number: (m['doc_number'] as num?)?.toInt() ?? 1,
+  );
 
   @override
   Map<String, Object?> toMap() => {
-        ..._base(this),
-        'project_id': projectId,
-        'title': title,
-        'stage_id': stageId,
-        'version': version,
-        'status': status.name,
-        'due_date': _dateStr(dueDate),
-        'submitted_at': _dateStr(submittedAt),
-        'approved_at': _dateStr(approvedAt),
-        'file_link': fileLink,
-        'notes': notes,
-      };
+    ..._base(this),
+    'project_id': projectId,
+    'title': title,
+    'stage_id': stageId,
+    'version': version,
+    'status': status.name,
+    'due_date': _dateStr(dueDate),
+    'submitted_at': _dateStr(submittedAt),
+    'approved_at': _dateStr(approvedAt),
+    'file_link': fileLink,
+    'notes': notes,
+    'discipline': discipline.name,
+    'doc_type': docType.name,
+    'doc_number': number,
+  };
 
   Deliverable copyWith({
     String? title,
@@ -428,23 +524,25 @@ class Deliverable implements Record {
     String? notes,
     bool? deleted,
     DateTime? updatedAt,
-  }) =>
-      Deliverable(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        deleted: deleted ?? this.deleted,
-        projectId: projectId,
-        title: title ?? this.title,
-        stageId: stageId ?? this.stageId,
-        version: version ?? this.version,
-        status: status ?? this.status,
-        dueDate: dueDate ?? this.dueDate,
-        submittedAt: submittedAt ?? this.submittedAt,
-        approvedAt: approvedAt ?? this.approvedAt,
-        fileLink: fileLink ?? this.fileLink,
-        notes: notes ?? this.notes,
-      );
+  }) => Deliverable(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deleted: deleted ?? this.deleted,
+    projectId: projectId,
+    title: title ?? this.title,
+    stageId: stageId ?? this.stageId,
+    version: version ?? this.version,
+    status: status ?? this.status,
+    dueDate: dueDate ?? this.dueDate,
+    submittedAt: submittedAt ?? this.submittedAt,
+    approvedAt: approvedAt ?? this.approvedAt,
+    fileLink: fileLink ?? this.fileLink,
+    notes: notes ?? this.notes,
+    discipline: discipline,
+    docType: docType,
+    number: number,
+  );
 }
 
 class Stage implements Record {
@@ -469,28 +567,34 @@ class Stage implements Record {
   });
 
   factory Stage.fromMap(Map<String, Object?> m) => Stage(
-        id: m['id'] as String,
-        createdAt: _date(m['created_at'])!,
-        updatedAt: _date(m['updated_at'])!,
-        deleted: m['deleted'] == 1 || m['deleted'] == true,
-        name: (m['name'] ?? '') as String,
-        position: (m['position'] as num?)?.toInt() ?? 0,
-      );
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    name: (m['name'] ?? '') as String,
+    position: (m['position'] as num?)?.toInt() ?? 0,
+  );
 
   @override
-  Map<String, Object?> toMap() =>
-      {..._base(this), 'name': name, 'position': position};
+  Map<String, Object?> toMap() => {
+    ..._base(this),
+    'name': name,
+    'position': position,
+  };
 
-  Stage copyWith(
-          {String? name, int? position, bool? deleted, DateTime? updatedAt}) =>
-      Stage(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        deleted: deleted ?? this.deleted,
-        name: name ?? this.name,
-        position: position ?? this.position,
-      );
+  Stage copyWith({
+    String? name,
+    int? position,
+    bool? deleted,
+    DateTime? updatedAt,
+  }) => Stage(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deleted: deleted ?? this.deleted,
+    name: name ?? this.name,
+    position: position ?? this.position,
+  );
 }
 
 class Member implements Record {
@@ -519,38 +623,38 @@ class Member implements Record {
   bool get isOwner => role == MemberRole.owner;
 
   factory Member.fromMap(Map<String, Object?> m) => Member(
-        id: m['id'] as String,
-        createdAt: _date(m['created_at'])!,
-        updatedAt: _date(m['updated_at'])!,
-        deleted: m['deleted'] == 1 || m['deleted'] == true,
-        name: (m['name'] ?? '') as String,
-        email: (m['email'] ?? '') as String,
-        role: _enumByName(MemberRole.values, m['role'], MemberRole.architect),
-      );
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    name: (m['name'] ?? '') as String,
+    email: (m['email'] ?? '') as String,
+    role: _enumByName(MemberRole.values, m['role'], MemberRole.architect),
+  );
 
   @override
   Map<String, Object?> toMap() => {
-        ..._base(this),
-        'name': name,
-        'email': email,
-        'role': role.name,
-      };
+    ..._base(this),
+    'name': name,
+    'email': email,
+    'role': role.name,
+  };
 
-  Member copyWith(
-          {String? name,
-          String? email,
-          MemberRole? role,
-          bool? deleted,
-          DateTime? updatedAt}) =>
-      Member(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        deleted: deleted ?? this.deleted,
-        name: name ?? this.name,
-        email: email ?? this.email,
-        role: role ?? this.role,
-      );
+  Member copyWith({
+    String? name,
+    String? email,
+    MemberRole? role,
+    bool? deleted,
+    DateTime? updatedAt,
+  }) => Member(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    deleted: deleted ?? this.deleted,
+    name: name ?? this.name,
+    email: email ?? this.email,
+    role: role ?? this.role,
+  );
 }
 
 const defaultStages = [

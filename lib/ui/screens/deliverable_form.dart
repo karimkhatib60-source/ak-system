@@ -7,8 +7,11 @@ import '../../data/repository.dart';
 import '../format.dart';
 import '../widgets/common.dart';
 
-Future<void> openDeliverableForm(BuildContext context,
-    {Deliverable? deliverable, String? projectId}) {
+Future<void> openDeliverableForm(
+  BuildContext context, {
+  Deliverable? deliverable,
+  String? projectId,
+}) {
   return Navigator.push(
     context,
     MaterialPageRoute(
@@ -34,6 +37,8 @@ class _DeliverableFormState extends State<DeliverableForm> {
   late final TextEditingController _title;
   late final TextEditingController _link;
   late final TextEditingController _notes;
+  Discipline _discipline = Discipline.architecture;
+  DocType _docType = DocType.drawing;
   String? _projectId;
   String? _stageId;
   DateTime? _due;
@@ -49,6 +54,8 @@ class _DeliverableFormState extends State<DeliverableForm> {
     _projectId = d?.projectId ?? widget.projectId;
     _stageId = d?.stageId ?? repo.project(_projectId)?.stageId;
     _due = d?.dueDate;
+    _discipline = d?.discipline ?? Discipline.architecture;
+    _docType = d?.docType ?? DocType.drawing;
   }
 
   @override
@@ -76,22 +83,40 @@ class _DeliverableFormState extends State<DeliverableForm> {
     final repo = context.read<Repository>();
     final d = _current;
     final now = repo.now();
-    await repo.saveDeliverable(Deliverable(
-      id: d?.id ?? repo.newId(),
-      createdAt: d?.createdAt ?? now,
-      updatedAt: now,
-      projectId: _projectId!,
-      title: _title.text.trim(),
-      stageId: _stageId,
-      version: d?.version ?? 1,
-      status: d?.status ?? DeliverableStatus.draft,
-      dueDate: _due,
-      submittedAt: d?.submittedAt,
-      approvedAt: d?.approvedAt,
-      fileLink: _link.text.trim(),
-      notes: _notes.text.trim(),
-    ));
+    await repo.saveDeliverable(
+      Deliverable(
+        id: d?.id ?? repo.newId(),
+        createdAt: d?.createdAt ?? now,
+        updatedAt: now,
+        projectId: _projectId!,
+        title: _title.text.trim(),
+        stageId: _stageId,
+        discipline: _discipline,
+        docType: _docType,
+        number: _number(repo),
+        version: d?.version ?? 1,
+        status: d?.status ?? DeliverableStatus.draft,
+        dueDate: _due,
+        submittedAt: d?.submittedAt,
+        approvedAt: d?.approvedAt,
+        fileLink: _link.text.trim(),
+        notes: _notes.text.trim(),
+      ),
+    );
     if (mounted) Navigator.pop(context);
+  }
+
+  /// Keeps the existing number unless the discipline or type changed.
+  int _number(Repository repo) {
+    final d = _current;
+    if (d != null &&
+        d.discipline == _discipline &&
+        d.docType == _docType &&
+        d.projectId == _projectId) {
+      return d.number;
+    }
+    if (_projectId == null) return 1;
+    return repo.nextDocNumber(_projectId!, _discipline, _docType);
   }
 
   Future<void> _delete() async {
@@ -113,9 +138,10 @@ class _DeliverableFormState extends State<DeliverableForm> {
         actions: [
           if (d != null)
             IconButton(
-                tooltip: 'Delete',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: _delete),
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _delete,
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(onPressed: _save, child: const Text('Save')),
@@ -129,19 +155,80 @@ class _DeliverableFormState extends State<DeliverableForm> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (d != null) ...[
-                _Workflow(d: d),
-                const SizedBox(height: 20),
-              ],
+              if (d != null) ...[_Workflow(d: d), const SizedBox(height: 20)],
               TextFormField(
                 controller: _title,
                 autofocus: d == null,
                 decoration: const InputDecoration(
-                    labelText: 'Deliverable',
-                    hintText: 'e.g. Ground floor plan, Permit set'),
+                  labelText: 'Deliverable',
+                  hintText: 'e.g. Ground floor plan, Permit set',
+                ),
                 validator: (v) => v == null || v.trim().isEmpty
                     ? 'Enter the deliverable'
                     : null,
+              ),
+              gap,
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<Discipline>(
+                      initialValue: _discipline,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Discipline',
+                      ),
+                      items: [
+                        for (final x in Discipline.values)
+                          DropdownMenuItem(
+                            value: x,
+                            child: Text('${x.code} · ${disciplineLabel(x)}'),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _discipline = v!),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<DocType>(
+                      initialValue: _docType,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Document type',
+                      ),
+                      items: [
+                        for (final x in DocType.values)
+                          DropdownMenuItem(
+                            value: x,
+                            child: Text('${x.code} · ${docTypeLabel(x)}'),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _docType = v!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Builder(
+                builder: (context) {
+                  final code = Deliverable(
+                    id: '',
+                    createdAt: DateTime(2000),
+                    updatedAt: DateTime(2000),
+                    projectId: _projectId ?? '',
+                    title: '',
+                    discipline: _discipline,
+                    docType: _docType,
+                    number: _number(repo),
+                  ).docCode(repo.project(_projectId)?.code ?? '');
+                  return Text(
+                    'Document number: $code',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: c.onSurfaceVariant,
+                    ),
+                  );
+                },
               ),
               gap,
               DropdownButtonFormField<String>(
@@ -162,13 +249,16 @@ class _DeliverableFormState extends State<DeliverableForm> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      initialValue:
-                          repo.stage(_stageId) == null ? null : _stageId,
+                      initialValue: repo.stage(_stageId) == null
+                          ? null
+                          : _stageId,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Stage'),
                       items: [
                         const DropdownMenuItem(
-                            value: null, child: Text('None')),
+                          value: null,
+                          child: Text('None'),
+                        ),
                         for (final s in repo.stages)
                           DropdownMenuItem(value: s.id, child: Text(s.name)),
                       ],
@@ -197,7 +287,8 @@ class _DeliverableFormState extends State<DeliverableForm> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: _link.text));
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Link copied')));
+                        const SnackBar(content: Text('Link copied')),
+                      );
                     },
                   ),
                 ),
@@ -208,7 +299,9 @@ class _DeliverableFormState extends State<DeliverableForm> {
                 minLines: 3,
                 maxLines: 8,
                 decoration: const InputDecoration(
-                    labelText: 'Notes', hintText: 'Client comments, scope…'),
+                  labelText: 'Notes',
+                  hintText: 'Client comments, scope…',
+                ),
               ),
               if (d != null) ...[
                 const SizedBox(height: 20),
@@ -239,41 +332,77 @@ class _Workflow extends StatelessWidget {
     final repo = context.read<Repository>();
     final c = Theme.of(context).colorScheme;
     final actions = <Widget>[];
-    void add(String label, IconData icon, VoidCallback onTap,
-        {bool primary = false}) {
-      actions.add(primary
-          ? FilledButton.icon(
-              onPressed: onTap, icon: Icon(icon), label: Text(label))
-          : OutlinedButton.icon(
-              onPressed: onTap, icon: Icon(icon), label: Text(label)));
+    void add(
+      String label,
+      IconData icon,
+      VoidCallback onTap, {
+      bool primary = false,
+    }) {
+      actions.add(
+        primary
+            ? FilledButton.icon(
+                onPressed: onTap,
+                icon: Icon(icon),
+                label: Text(label),
+              )
+            : OutlinedButton.icon(
+                onPressed: onTap,
+                icon: Icon(icon),
+                label: Text(label),
+              ),
+      );
     }
 
     switch (d.status) {
       case DeliverableStatus.draft:
-        add('Ready for review', Icons.rate_review_outlined,
-            () => repo.setDeliverableStatus(d, DeliverableStatus.internalReview));
-        add('Send to client', Icons.send_outlined,
-            () => repo.setDeliverableStatus(d, DeliverableStatus.submitted),
-            primary: true);
+        add(
+          'Ready for review',
+          Icons.rate_review_outlined,
+          () => repo.setDeliverableStatus(d, DeliverableStatus.internalReview),
+        );
+        add(
+          'Send to client',
+          Icons.send_outlined,
+          () => repo.setDeliverableStatus(d, DeliverableStatus.submitted),
+          primary: true,
+        );
       case DeliverableStatus.internalReview:
-        add('Back to draft', Icons.undo,
-            () => repo.setDeliverableStatus(d, DeliverableStatus.draft));
-        add('Send to client', Icons.send_outlined,
-            () => repo.setDeliverableStatus(d, DeliverableStatus.submitted),
-            primary: true);
+        add(
+          'Back to draft',
+          Icons.undo,
+          () => repo.setDeliverableStatus(d, DeliverableStatus.draft),
+        );
+        add(
+          'Send to client',
+          Icons.send_outlined,
+          () => repo.setDeliverableStatus(d, DeliverableStatus.submitted),
+          primary: true,
+        );
       case DeliverableStatus.submitted:
-        add('Client asked for changes', Icons.edit_note,
-            () => repo.setDeliverableStatus(d, DeliverableStatus.revise));
-        add('Client approved', Icons.verified_outlined,
-            () => repo.setDeliverableStatus(d, DeliverableStatus.approved),
-            primary: true);
+        add(
+          'Client asked for changes',
+          Icons.edit_note,
+          () => repo.setDeliverableStatus(d, DeliverableStatus.revise),
+        );
+        add(
+          'Client approved',
+          Icons.verified_outlined,
+          () => repo.setDeliverableStatus(d, DeliverableStatus.approved),
+          primary: true,
+        );
       case DeliverableStatus.revise:
-        add('Start revision ${_next(d)}', Icons.restart_alt,
-            () => repo.newRevision(d),
-            primary: true);
+        add(
+          'Start revision ${_next(d)}',
+          Icons.restart_alt,
+          () => repo.newRevision(d),
+          primary: true,
+        );
       case DeliverableStatus.approved:
-        add('Reopen as new revision', Icons.restart_alt,
-            () => repo.newRevision(d));
+        add(
+          'Reopen as new revision',
+          Icons.restart_alt,
+          () => repo.newRevision(d),
+        );
     }
 
     return Card(
@@ -284,10 +413,14 @@ class _Workflow extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('${d.revisionLabel}  ',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-                Pill(deliverableStatusLabel(d.status),
-                    color: deliverableStatusColor(d.status, c)),
+                Text(
+                  '${d.revisionLabel}  ',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                Pill(
+                  deliverableStatusLabel(d.status),
+                  color: deliverableStatusColor(d.status, c),
+                ),
               ],
             ),
             const SizedBox(height: 12),

@@ -63,8 +63,8 @@ class SyncService extends ChangeNotifier {
   }
 
   Future<void> syncNow() => _running ??= _sync().whenComplete(() {
-        _running = null;
-      });
+    _running = null;
+  });
 
   Future<void> _sync() async {
     final r = remote;
@@ -111,7 +111,10 @@ class SyncService extends ChangeNotifier {
     await r.upsert(table, payload);
     for (final row in rows) {
       await local.markClean(
-          table, row['id'] as String, row['updated_at'] as String);
+        table,
+        row['id'] as String,
+        row['updated_at'] as String,
+      );
     }
   }
 
@@ -128,7 +131,8 @@ class SyncService extends ChangeNotifier {
       final row = fromRemote(remoteRow);
       final updated = row['updated_at'] as String;
       final mine = await local.byId(table, row['id'] as String);
-      final mineIsNewer = mine != null &&
+      final mineIsNewer =
+          mine != null &&
           mine['dirty'] == 1 &&
           (mine['updated_at'] as String).compareTo(updated) > 0;
       if (!mineIsNewer) await local.putRemote(table, row);

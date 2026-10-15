@@ -24,13 +24,16 @@ class SettingsScreen extends StatelessWidget {
             const _CloudSection(),
             const SectionHeader('Team'),
             const _TeamSection(),
-            SectionHeader('Project stages',
-                trailing: repo.isOwner
-                    ? TextButton.icon(
-                        onPressed: () => _editStage(context, null),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add stage'))
-                    : null),
+            SectionHeader(
+              'Project stages',
+              trailing: repo.isOwner
+                  ? TextButton.icon(
+                      onPressed: () => _editStage(context, null),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add stage'),
+                    )
+                  : null,
+            ),
             const _StagesSection(),
             if (repo.isOwner) ...[
               const SectionHeader('Company'),
@@ -40,7 +43,11 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: const Text('Shown in the app header'),
                 trailing: const Icon(Icons.edit_outlined),
                 onTap: () async {
-                  final v = await _ask(context, 'Company name', repo.companyName);
+                  final v = await _ask(
+                    context,
+                    'Company name',
+                    repo.companyName,
+                  );
                   if (v != null && v.isNotEmpty) await repo.setCompanyName(v);
                 },
               ),
@@ -50,7 +57,8 @@ class SettingsScreen extends StatelessWidget {
               leading: Icon(Icons.info_outline),
               title: Text('AK System · Phase 1'),
               subtitle: Text(
-                  'Projects, tasks and deliverables. Works offline; syncs when online.'),
+                'Projects, tasks and deliverables. Works offline; syncs when online.',
+              ),
             ),
           ],
         ),
@@ -72,10 +80,13 @@ Future<String?> _ask(BuildContext context, String title, String initial) {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save')),
+          onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+          child: const Text('Save'),
+        ),
       ],
     ),
   );
@@ -83,18 +94,23 @@ Future<String?> _ask(BuildContext context, String title, String initial) {
 
 Future<void> _editStage(BuildContext context, Stage? s) async {
   final repo = context.read<Repository>();
-  final name = await _ask(context, s == null ? 'New stage' : 'Rename stage',
-      s?.name ?? '');
+  final name = await _ask(
+    context,
+    s == null ? 'New stage' : 'Rename stage',
+    s?.name ?? '',
+  );
   if (name == null || name.isEmpty) return;
   final now = repo.now();
-  await repo.saveStage(s?.copyWith(name: name) ??
-      Stage(
-        id: repo.newId(),
-        createdAt: now,
-        updatedAt: now,
-        name: name,
-        position: repo.stages.length,
-      ));
+  await repo.saveStage(
+    s?.copyWith(name: name) ??
+        Stage(
+          id: repo.newId(),
+          createdAt: now,
+          updatedAt: now,
+          name: name,
+          position: repo.stages.length,
+        ),
+  );
 }
 
 class _StagesSection extends StatelessWidget {
@@ -109,8 +125,10 @@ class _StagesSection extends StatelessWidget {
         for (var i = 0; i < stages.length; i++)
           ListTile(
             dense: true,
-            leading: CircleAvatar(radius: 12, child: Text('${i + 1}',
-                style: const TextStyle(fontSize: 11))),
+            leading: CircleAvatar(
+              radius: 12,
+              child: Text('${i + 1}', style: const TextStyle(fontSize: 11)),
+            ),
             title: Text(stages[i].name),
             onTap: repo.isOwner ? () => _editStage(context, stages[i]) : null,
             trailing: !repo.isOwner
@@ -136,17 +154,23 @@ class _StagesSection extends StatelessWidget {
                         tooltip: 'Delete stage',
                         icon: const Icon(Icons.delete_outline, size: 18),
                         onPressed: () async {
-                          final used = repo.projects
-                              .any((p) => p.stageId == stages[i].id);
+                          final used = repo.projects.any(
+                            (p) => p.stageId == stages[i].id,
+                          );
                           if (used) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'A project is at this stage. Move it first.')));
+                              const SnackBar(
+                                content: Text(
+                                  'A project is at this stage. Move it first.',
+                                ),
+                              ),
+                            );
                             return;
                           }
                           if (await confirmDelete(
-                              context, 'the stage "${stages[i].name}"')) {
+                            context,
+                            'the stage "${stages[i].name}"',
+                          )) {
                             await repo.deleteStage(stages[i]);
                           }
                         },
@@ -170,9 +194,10 @@ class _TeamSection extends StatelessWidget {
         leading: Icon(Icons.group_outlined),
         title: Text('No team logins yet'),
         subtitle: Text(
-            'Once cloud sync is set up, each person creates a login from this '
-            'screen. The first login becomes the owner; the next ones join as '
-            'architects.'),
+          'Once cloud sync is set up, each person creates a login from this '
+          'screen. The first login becomes the owner; the next ones join as '
+          'architects.',
+        ),
       );
     }
     return Column(
@@ -180,8 +205,11 @@ class _TeamSection extends StatelessWidget {
         for (final m in repo.members)
           ListTile(
             leading: CircleAvatar(
-                child: Text(m.name.isEmpty ? '?' : m.name[0].toUpperCase())),
-            title: Text(m.id == repo.currentMemberId ? '${m.name} (you)' : m.name),
+              child: Text(m.name.isEmpty ? '?' : m.name[0].toUpperCase()),
+            ),
+            title: Text(
+              m.id == repo.currentMemberId ? '${m.name} (you)' : m.name,
+            ),
             subtitle: Text('${roleLabel(m.role)} · ${m.email}'),
             trailing: repo.isOwner && m.id != repo.currentMemberId
                 ? DropdownButton<MemberRole>(
@@ -212,11 +240,14 @@ class _CloudSection extends StatelessWidget {
         leading: const Icon(Icons.cloud_outlined),
         title: const Text('Not connected'),
         subtitle: const Text(
-            'Everything is saved on this device. Connect the company cloud '
-            'database to sync between phone and laptop and add your team.'),
+          'Everything is saved on this device. Connect the company cloud '
+          'database to sync between phone and laptop and add your team.',
+        ),
         trailing: FilledButton.tonal(
           onPressed: () => showDialog(
-              context: context, builder: (_) => const _ConnectDialog()),
+            context: context,
+            builder: (_) => const _ConnectDialog(),
+          ),
           child: const Text('Connect'),
         ),
       );
@@ -228,7 +259,9 @@ class _CloudSection extends StatelessWidget {
         subtitle: Text(cloud.url ?? ''),
         trailing: FilledButton(
           onPressed: () => showDialog(
-              context: context, builder: (_) => const _LoginDialog()),
+            context: context,
+            builder: (_) => const _LoginDialog(),
+          ),
           child: const Text('Sign in'),
         ),
       );
@@ -244,9 +277,10 @@ class _CloudSection extends StatelessWidget {
             SyncState.offline =>
               'Offline. Changes are kept on this device until you reconnect.',
             SyncState.error => 'Sync problem: ${sync.lastError}',
-            _ => last == null
-                ? 'Signed in'
-                : 'Last synced ${TimeOfDay.fromDateTime(last).format(context)}',
+            _ =>
+              last == null
+                  ? 'Signed in'
+                  : 'Last synced ${TimeOfDay.fromDateTime(last).format(context)}',
           }),
           trailing: IconButton(
             tooltip: 'Sync now',
@@ -292,30 +326,37 @@ class _ConnectDialogState extends State<_ConnectDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-                'Paste the Project URL and the anon public key from your '
-                'Supabase project (Project Settings > API).'),
+              'Paste the Project URL and the anon public key from your '
+              'Supabase project (Project Settings > API).',
+            ),
             const SizedBox(height: 12),
             TextField(
-                controller: _url,
-                decoration: const InputDecoration(
-                    labelText: 'Project URL',
-                    hintText: 'https://xxxx.supabase.co')),
+              controller: _url,
+              decoration: const InputDecoration(
+                labelText: 'Project URL',
+                hintText: 'https://xxxx.supabase.co',
+              ),
+            ),
             const SizedBox(height: 12),
             TextField(
-                controller: _key,
-                decoration: const InputDecoration(labelText: 'Anon public key')),
+              controller: _key,
+              decoration: const InputDecoration(labelText: 'Anon public key'),
+            ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ],
           ],
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _busy
               ? null
@@ -327,7 +368,10 @@ class _ConnectDialogState extends State<_ConnectDialog> {
                   }
                   setState(() => _busy = true);
                   try {
-                    await context.read<CloudAccount>().configure(url, _key.text);
+                    await context.read<CloudAccount>().configure(
+                      url,
+                      _key.text,
+                    );
                     if (context.mounted) Navigator.pop(context);
                   } catch (e) {
                     setState(() {
@@ -371,7 +415,8 @@ class _LoginDialogState extends State<_LoginDialog> {
           setState(() {
             _busy = false;
             _create = false;
-            _message = 'Login created. Confirm it from the email, then sign in.';
+            _message =
+                'Login created. Confirm it from the email, then sign in.';
           });
           return;
         }
@@ -398,20 +443,23 @@ class _LoginDialogState extends State<_LoginDialog> {
           children: [
             if (_create) ...[
               TextField(
-                  controller: _name,
-                  decoration: const InputDecoration(labelText: 'Your name')),
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Your name'),
+              ),
               const SizedBox(height: 12),
             ],
             TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email')),
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
             const SizedBox(height: 12),
             TextField(
-                controller: _password,
-                obscureText: true,
-                onSubmitted: (_) => _submit(),
-                decoration: const InputDecoration(labelText: 'Password')),
+              controller: _password,
+              obscureText: true,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
             if (_message != null) ...[
               const SizedBox(height: 8),
               Text(_message!),
@@ -421,9 +469,11 @@ class _LoginDialogState extends State<_LoginDialog> {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: () => setState(() => _create = !_create),
-                child: Text(_create
-                    ? 'I already have a login'
-                    : 'New here? Create a login'),
+                child: Text(
+                  _create
+                      ? 'I already have a login'
+                      : 'New here? Create a login',
+                ),
               ),
             ),
           ],
@@ -431,11 +481,13 @@ class _LoginDialogState extends State<_LoginDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-            onPressed: _busy ? null : _submit,
-            child: Text(_create ? 'Create' : 'Sign in')),
+          onPressed: _busy ? null : _submit,
+          child: Text(_create ? 'Create' : 'Sign in'),
+        ),
       ],
     );
   }

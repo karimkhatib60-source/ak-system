@@ -6,6 +6,8 @@ import 'screens/client_detail_screen.dart';
 import 'screens/lists_screens.dart';
 import 'screens/overview_screen.dart';
 import 'screens/settings_screen.dart';
+import 'theme.dart';
+import 'widgets/brand.dart';
 import 'widgets/common.dart';
 
 /// Main navigation: a side rail on a laptop, a bottom bar on a phone.
@@ -28,42 +30,44 @@ class _AppShellState extends State<AppShell> {
   ];
 
   Widget _body() => switch (_index) {
-        0 => const OverviewScreen(),
-        1 => const ProjectsScreen(),
-        2 => const TasksScreen(),
-        3 => const DeliverablesScreen(),
-        _ => const ClientsScreen(),
-      };
+    0 => const OverviewScreen(),
+    1 => const ProjectsScreen(),
+    2 => const TasksScreen(),
+    3 => const DeliverablesScreen(),
+    _ => const ClientsScreen(),
+  };
 
   void _openSettings() => Navigator.push(
-      context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    context,
+    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+  );
 
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    final title = wide ? repo.companyName : _pages[_index].$3;
-    final appBar = AppBar(
-      title: Text(title),
-      actions: [
-        const SyncBadge(),
-        IconButton(
-          tooltip: 'Settings',
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: _openSettings,
-        ),
-        const SizedBox(width: 4),
-      ],
-    );
+    final actions = [
+      const SyncBadge(),
+      IconButton(
+        tooltip: 'Settings',
+        icon: const Icon(Icons.settings_outlined),
+        onPressed: _openSettings,
+      ),
+      const SizedBox(width: 4),
+    ];
 
     if (wide) {
       return Scaffold(
-        appBar: appBar,
         body: Row(
           children: [
             NavigationRail(
               selectedIndex: _index,
               labelType: NavigationRailLabelType.all,
+              minWidth: 92,
+              leading: const Padding(
+                padding: EdgeInsets.only(top: 20, bottom: 28),
+                child: AkMonogram(size: 44),
+              ),
               onDestinationSelected: (i) => setState(() => _index = i),
               destinations: [
                 for (final p in _pages)
@@ -71,22 +75,56 @@ class _AppShellState extends State<AppShell> {
                     icon: Icon(p.$1),
                     selectedIcon: Icon(p.$2),
                     label: Text(p.$3),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                   ),
               ],
             ),
-            const VerticalDivider(width: 1),
-            Expanded(child: _body()),
+            Expanded(
+              child: Scaffold(
+                appBar: AppBar(
+                  toolbarHeight: 64,
+                  title: Row(
+                    children: [
+                      Text(_pages[_index].$3),
+                      const SizedBox(width: 12),
+                      Text(
+                        repo.companyName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AkColors.of(context).onChromeMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  actions: actions,
+                ),
+                body: _body(),
+              ),
+            ),
           ],
         ),
       );
     }
 
     return Scaffold(
-      appBar: appBar,
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: Row(
+          children: [
+            const AkMonogram(size: 30),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(_pages[_index].$3, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+        actions: actions,
+      ),
       body: _body(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: [
           for (final p in _pages)

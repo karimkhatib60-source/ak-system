@@ -6,8 +6,11 @@ import '../../data/repository.dart';
 import '../format.dart';
 import '../widgets/common.dart';
 
-Future<void> openTaskForm(BuildContext context,
-    {Task? task, String? projectId}) {
+Future<void> openTaskForm(
+  BuildContext context, {
+  Task? task,
+  String? projectId,
+}) {
   return Navigator.push(
     context,
     MaterialPageRoute(
@@ -37,6 +40,7 @@ class _TaskFormState extends State<TaskForm> {
   DateTime? _due;
   TaskStatus _status = TaskStatus.todo;
   TaskPriority _priority = TaskPriority.normal;
+  TaskCategory _category = TaskCategory.design;
 
   @override
   void initState() {
@@ -51,6 +55,7 @@ class _TaskFormState extends State<TaskForm> {
     _due = t?.dueDate;
     _status = t?.status ?? TaskStatus.todo;
     _priority = t?.priority ?? TaskPriority.normal;
+    _category = t?.category ?? TaskCategory.design;
   }
 
   @override
@@ -65,19 +70,22 @@ class _TaskFormState extends State<TaskForm> {
     final repo = context.read<Repository>();
     final t = widget.task;
     final now = repo.now();
-    await repo.saveTask(Task(
-      id: t?.id ?? repo.newId(),
-      createdAt: t?.createdAt ?? now,
-      updatedAt: now,
-      projectId: _projectId!,
-      title: _title.text.trim(),
-      assigneeId: _assigneeId,
-      dueDate: _due,
-      status: _status,
-      priority: _priority,
-      stageId: _stageId,
-      notes: _notes.text.trim(),
-    ));
+    await repo.saveTask(
+      Task(
+        id: t?.id ?? repo.newId(),
+        createdAt: t?.createdAt ?? now,
+        updatedAt: now,
+        projectId: _projectId!,
+        title: _title.text.trim(),
+        assigneeId: _assigneeId,
+        dueDate: _due,
+        status: _status,
+        priority: _priority,
+        category: _category,
+        stageId: _stageId,
+        notes: _notes.text.trim(),
+      ),
+    );
     if (mounted) Navigator.pop(context);
   }
 
@@ -98,9 +106,10 @@ class _TaskFormState extends State<TaskForm> {
         actions: [
           if (widget.task != null)
             IconButton(
-                tooltip: 'Delete',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: _delete),
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _delete,
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton(onPressed: _save, child: const Text('Save')),
@@ -120,6 +129,20 @@ class _TaskFormState extends State<TaskForm> {
                 decoration: const InputDecoration(labelText: 'Task'),
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? 'Enter the task' : null,
+              ),
+              gap,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final c in TaskCategory.values)
+                    ChoiceChip(
+                      avatar: Icon(taskCategoryIcon(c), size: 16),
+                      label: Text(taskCategoryLabel(c)),
+                      selected: _category == c,
+                      onSelected: (_) => setState(() => _category = c),
+                    ),
+                ],
               ),
               gap,
               DropdownButtonFormField<String>(
@@ -151,7 +174,9 @@ class _TaskFormState extends State<TaskForm> {
                       items: [
                         for (final p in TaskPriority.values)
                           DropdownMenuItem(
-                              value: p, child: Text(priorityLabel(p))),
+                            value: p,
+                            child: Text(priorityLabel(p)),
+                          ),
                       ],
                       onChanged: (v) => setState(() => _priority = v!),
                     ),
@@ -167,7 +192,9 @@ class _TaskFormState extends State<TaskForm> {
                   decoration: const InputDecoration(labelText: 'Assigned to'),
                   items: [
                     const DropdownMenuItem(
-                        value: null, child: Text('Nobody yet')),
+                      value: null,
+                      child: Text('Nobody yet'),
+                    ),
                     for (final m in repo.members)
                       DropdownMenuItem(value: m.id, child: Text(m.name)),
                   ],

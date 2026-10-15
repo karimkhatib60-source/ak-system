@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../format.dart';
+import '../theme.dart';
 import '../screens/deliverable_form.dart';
 import '../screens/project_detail_screen.dart';
 import '../screens/task_form.dart';
+import 'brand.dart';
 import 'common.dart';
 
 class TaskTile extends StatelessWidget {
@@ -25,6 +27,7 @@ class TaskTile extends StatelessWidget {
     final project = repo.project(task.projectId);
     final who = repo.member(task.assigneeId)?.name;
     final parts = [
+      taskCategoryLabel(task.category),
       if (showProject && project != null) project.name,
       ?who,
       if (task.status == TaskStatus.inProgress) 'In progress',
@@ -88,18 +91,39 @@ class DeliverableTile extends StatelessWidget {
     return ListTile(
       leading: CircleAvatar(
         radius: 18,
-        backgroundColor: c.secondaryContainer,
-        child: Text(d.revisionLabel,
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: c.onSecondaryContainer)),
+        backgroundColor: c.primaryContainer,
+        child: Text(
+          d.revisionLabel,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: c.onPrimaryContainer,
+          ),
+        ),
       ),
-      title: Text(d.title),
-      subtitle: Text(sub.join(' · '),
-          style: TextStyle(color: late ? c.error : null)),
-      trailing: Pill(deliverableStatusShort(d.status),
-          color: deliverableStatusColor(d.status, c)),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            repo.docCode(d),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: AkColors.of(context).accent,
+            ),
+          ),
+          Text(d.title),
+        ],
+      ),
+      subtitle: Text(
+        sub.join(' · '),
+        style: TextStyle(color: late ? c.error : null),
+      ),
+      trailing: Pill(
+        deliverableStatusShort(d.status),
+        color: deliverableStatusColor(d.status, c),
+      ),
       onTap: () => openDeliverableForm(context, deliverable: d),
     );
   }
@@ -121,16 +145,15 @@ class ProjectCard extends StatelessWidget {
     final client = repo.client(p.clientId)?.name;
     final stage = repo.stage(p.stageId)?.name;
     final stageIndex = repo.stages.indexWhere((s) => s.id == p.stageId);
-    final progress = repo.stages.isEmpty || stageIndex < 0
-        ? 0.0
-        : (stageIndex + 1) / repo.stages.length;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => ProjectDetailScreen(projectId: p.id))),
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProjectDetailScreen(projectId: p.id),
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -139,53 +162,67 @@ class ProjectCard extends StatelessWidget {
               Row(
                 children: [
                   if (p.code.isNotEmpty)
-                    Text('${p.code}  ',
-                        style: TextStyle(
-                            color: c.onSurfaceVariant,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      '${p.code}  ',
+                      style: TextStyle(
+                        color: c.onSurfaceVariant,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   const Spacer(),
-                  Pill(projectStatusLabel(p.status),
-                      color: projectStatusColor(p.status, c)),
+                  Pill(
+                    projectStatusLabel(p.status),
+                    color: projectStatusColor(p.status, c),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
-              Text(p.name,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                p.name,
+                style: Theme.of(context).textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 2),
               Text(
                 [
                   ?client,
+                  projectTypeLabel(p.type),
                   serviceLabel(p.service),
+                  if (p.areaSqm != null) fmtArea(p.areaSqm),
                   if (p.location.isNotEmpty) p.location,
                 ].join(' · '),
                 style: TextStyle(color: c.onSurfaceVariant),
               ),
               const SizedBox(height: 10),
-              LinearProgressIndicator(
-                value: progress,
-                borderRadius: BorderRadius.circular(4),
-                minHeight: 5,
-              ),
+              StageBar(stages: repo.stages, currentId: p.stageId),
               const SizedBox(height: 6),
-              Text(stage ?? 'No stage set',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(
+                stage == null
+                    ? 'No stage set'
+                    : 'Stage ${stageIndex + 1} of ${repo.stages.length} · $stage',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 2),
               Text.rich(
-                TextSpan(children: [
-                  TextSpan(text: '$open open'),
-                  if (late > 0)
-                    TextSpan(
+                TextSpan(
+                  children: [
+                    TextSpan(text: '$open open'),
+                    if (late > 0)
+                      TextSpan(
                         text: '  ·  $late late',
                         style: TextStyle(
-                            color: c.error, fontWeight: FontWeight.w600)),
-                  if (p.dueDate != null)
-                    TextSpan(text: '  ·  Deadline ${fmtDate(p.dueDate)}'),
-                ]),
+                          color: c.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (p.dueDate != null)
+                      TextSpan(text: '  ·  Deadline ${fmtDate(p.dueDate)}'),
+                  ],
+                ),
                 style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
               ),
             ],

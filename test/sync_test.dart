@@ -9,7 +9,8 @@ Future<String> addProject(Repository repo, String name) async {
   final t = repo.now();
   final id = repo.newId();
   await repo.saveProject(
-      Project(id: id, createdAt: t, updatedAt: t, name: name));
+    Project(id: id, createdAt: t, updatedAt: t, name: name),
+  );
   return id;
 }
 
@@ -65,23 +66,25 @@ void main() {
     expect(laptop.project(id)!.name, 'Laptop name');
   });
 
-  test('a newer local edit is not overwritten by an older cloud copy',
-      () async {
-    final id = await addProject(phone, 'A');
-    await phoneSync.syncNow();
-    await laptopSync.syncNow();
+  test(
+    'a newer local edit is not overwritten by an older cloud copy',
+    () async {
+      final id = await addProject(phone, 'A');
+      await phoneSync.syncNow();
+      await laptopSync.syncNow();
 
-    clock.advance(const Duration(minutes: 1));
-    await laptop.saveProject(laptop.project(id)!.copyWith(name: 'Old'));
-    await laptopSync.syncNow();
-    clock.advance(const Duration(minutes: 1));
-    await phone.saveProject(phone.project(id)!.copyWith(name: 'New'));
+      clock.advance(const Duration(minutes: 1));
+      await laptop.saveProject(laptop.project(id)!.copyWith(name: 'Old'));
+      await laptopSync.syncNow();
+      clock.advance(const Duration(minutes: 1));
+      await phone.saveProject(phone.project(id)!.copyWith(name: 'New'));
 
-    // Phone pulls before pushing: its own newer edit must survive.
-    phone.onLocalChange = null;
-    await phoneSync.syncNow();
-    expect(phone.project(id)!.name, 'New');
-  });
+      // Phone pulls before pushing: its own newer edit must survive.
+      phone.onLocalChange = null;
+      await phoneSync.syncNow();
+      expect(phone.project(id)!.name, 'New');
+    },
+  );
 
   test('deletes sync too', () async {
     final id = await addProject(phone, 'Temp');
@@ -98,16 +101,20 @@ void main() {
 
   test('an architect does not upload projects, only tasks', () async {
     final t = phone.now();
-    await phone.saveMember(Member(
-        id: 'arch', createdAt: t, updatedAt: t, name: 'A'));
+    await phone.saveMember(
+      Member(id: 'arch', createdAt: t, updatedAt: t, name: 'A'),
+    );
     await phone.setCurrentMember('arch');
     final pid = await addProject(phone, 'Not allowed');
-    await phone.saveTask(Task(
+    await phone.saveTask(
+      Task(
         id: phone.newId(),
         createdAt: t,
         updatedAt: t,
         projectId: pid,
-        title: 'Allowed'));
+        title: 'Allowed',
+      ),
+    );
     await phoneSync.syncNow();
     expect(phoneSync.state, SyncState.idle);
     expect(cloud.tables['projects'], isNull);
@@ -115,7 +122,12 @@ void main() {
   });
 
   test('booleans are converted for the cloud and back', () {
-    final out = SyncService.toRemote({'id': 'x', 'deleted': 1, 'abroad': 0, 'dirty': 1});
+    final out = SyncService.toRemote({
+      'id': 'x',
+      'deleted': 1,
+      'abroad': 0,
+      'dirty': 1,
+    });
     expect(out, {'id': 'x', 'deleted': true, 'abroad': false});
     final back = SyncService.fromRemote({
       'id': 'x',

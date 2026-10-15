@@ -27,13 +27,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   String _query = '';
 
   bool _matches(Project p) => switch (_filter) {
-        _ProjectFilter.current => p.status == ProjectStatus.active ||
-            p.status == ProjectStatus.onHold,
-        _ProjectFilter.leads => p.status == ProjectStatus.lead,
-        _ProjectFilter.finished => p.status == ProjectStatus.completed ||
-            p.status == ProjectStatus.cancelled,
-        _ProjectFilter.all => true,
-      };
+    _ProjectFilter.current =>
+      p.status == ProjectStatus.active || p.status == ProjectStatus.onHold,
+    _ProjectFilter.leads => p.status == ProjectStatus.lead,
+    _ProjectFilter.finished =>
+      p.status == ProjectStatus.completed ||
+          p.status == ProjectStatus.cancelled,
+    _ProjectFilter.all => true,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -41,12 +42,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final q = _query.toLowerCase();
     final list = repo.visibleProjects
         .where(_matches)
-        .where((p) =>
-            q.isEmpty ||
-            p.name.toLowerCase().contains(q) ||
-            p.code.toLowerCase().contains(q) ||
-            (repo.client(p.clientId)?.name.toLowerCase().contains(q) ??
-                false))
+        .where(
+          (p) =>
+              q.isEmpty ||
+              p.name.toLowerCase().contains(q) ||
+              p.code.toLowerCase().contains(q) ||
+              (repo.client(p.clientId)?.name.toLowerCase().contains(q) ??
+                  false),
+        )
         .toList();
     return Scaffold(
       floatingActionButton: repo.isOwner
@@ -65,8 +68,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: TextField(
                 decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search by name, code or client'),
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search by name, code or client',
+                ),
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
@@ -99,22 +103,25 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       title: 'No projects here',
                       message: repo.isOwner
                           ? 'Tap "Project" to add your first one.'
-                          : 'Projects you are added to appear here.')
-                  : LayoutBuilder(builder: (context, box) {
-                      final cols = box.maxWidth > 760 ? 2 : 1;
-                      final w = (box.maxWidth - 32 - 10 * (cols - 1)) / cols;
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
-                        child: Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            for (final p in list)
-                              SizedBox(width: w, child: ProjectCard(p)),
-                          ],
-                        ),
-                      );
-                    }),
+                          : 'Projects you are added to appear here.',
+                    )
+                  : LayoutBuilder(
+                      builder: (context, box) {
+                        final cols = box.maxWidth > 760 ? 2 : 1;
+                        final w = (box.maxWidth - 32 - 10 * (cols - 1)) / cols;
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 88),
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final p in list)
+                                SizedBox(width: w, child: ProjectCard(p)),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -143,16 +150,20 @@ class _TasksScreenState extends State<TasksScreen> {
     final now = repo.now();
     final hasMe = repo.currentMemberId != null;
     final filter = _filter ?? (hasMe ? _TaskFilter.mine : _TaskFilter.open);
-    final tasks = repo.visibleTasks
-        .where((t) => switch (filter) {
-              _TaskFilter.mine => t.assigneeId == repo.currentMemberId &&
-                  t.status != TaskStatus.done,
-              _TaskFilter.open => t.status != TaskStatus.done,
-              _TaskFilter.late => t.isOverdue(now),
-              _TaskFilter.done => t.status == TaskStatus.done,
-            })
-        .toList()
-      ..sort(compareTasks);
+    final tasks =
+        repo.visibleTasks
+            .where(
+              (t) => switch (filter) {
+                _TaskFilter.mine =>
+                  t.assigneeId == repo.currentMemberId &&
+                      t.status != TaskStatus.done,
+                _TaskFilter.open => t.status != TaskStatus.done,
+                _TaskFilter.late => t.isOverdue(now),
+                _TaskFilter.done => t.status == TaskStatus.done,
+              },
+            )
+            .toList()
+          ..sort(compareTasks);
     if (filter == _TaskFilter.done) {
       tasks.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     }
@@ -204,12 +215,17 @@ class _TasksScreenState extends State<TasksScreen> {
                       },
                       message: repo.visibleProjects.isEmpty
                           ? 'Create a project first, then add its tasks.'
-                          : null)
+                          : null,
+                    )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: 88),
                       itemCount: tasks.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) => TaskTile(tasks[i]),
+                      separatorBuilder: (_, _) => const SizedBox.shrink(),
+                      itemBuilder: (_, i) => GroupedRow(
+                        index: i,
+                        count: tasks.length,
+                        child: TaskTile(tasks[i]),
+                      ),
                     ),
             ),
           ],
@@ -235,14 +251,17 @@ class _DeliverablesScreenState extends State<DeliverablesScreen> {
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
     final all = repo.visibleDeliverables;
-    final list = all.where((d) => _status == null || d.status == _status).toList()
-      ..sort((a, b) {
-        final ad = a.dueDate, bd = b.dueDate;
-        if (ad == null && bd == null) return b.updatedAt.compareTo(a.updatedAt);
-        if (ad == null) return 1;
-        if (bd == null) return -1;
-        return ad.compareTo(bd);
-      });
+    final list =
+        all.where((d) => _status == null || d.status == _status).toList()
+          ..sort((a, b) {
+            final ad = a.dueDate, bd = b.dueDate;
+            if (ad == null && bd == null) {
+              return b.updatedAt.compareTo(a.updatedAt);
+            }
+            if (ad == null) return 1;
+            if (bd == null) return -1;
+            return ad.compareTo(bd);
+          });
     int count(DeliverableStatus s) => all.where((d) => d.status == s).length;
     return Scaffold(
       floatingActionButton: repo.visibleProjects.isEmpty
@@ -286,13 +305,17 @@ class _DeliverablesScreenState extends State<DeliverablesScreen> {
                   ? const EmptyState(
                       icon: Icons.description_outlined,
                       title: 'No deliverables here',
-                      message:
-                          'Track every drawing set and report you send a client.')
+                      message: 'Track every drawing set and report you send a client.',
+                    )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: 88),
                       itemCount: list.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) => DeliverableTile(list[i]),
+                      separatorBuilder: (_, _) => const SizedBox.shrink(),
+                      itemBuilder: (_, i) => GroupedRow(
+                        index: i,
+                        count: list.length,
+                        child: DeliverableTile(list[i]),
+                      ),
                     ),
             ),
           ],

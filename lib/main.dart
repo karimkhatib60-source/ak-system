@@ -23,8 +23,12 @@ Future<void> main() async {
 }
 
 class AkApp extends StatelessWidget {
-  const AkApp(
-      {super.key, required this.repo, required this.sync, required this.cloud});
+  const AkApp({
+    super.key,
+    required this.repo,
+    required this.sync,
+    required this.cloud,
+  });
 
   final Repository repo;
   final SyncService sync;

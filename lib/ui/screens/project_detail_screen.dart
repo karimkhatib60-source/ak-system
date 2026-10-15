@@ -24,7 +24,9 @@ class ProjectDetailScreen extends StatelessWidget {
       return Scaffold(
         appBar: AppBar(),
         body: const EmptyState(
-            icon: Icons.folder_off_outlined, title: 'Project not found'),
+          icon: Icons.folder_off_outlined,
+          title: 'Project not found',
+        ),
       );
     }
     return DefaultTabController(
@@ -42,8 +44,10 @@ class ProjectDetailScreen extends StatelessWidget {
               PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'delete' &&
-                      await confirmDelete(context,
-                          '${p.name} with its tasks and deliverables')) {
+                      await confirmDelete(
+                        context,
+                        '${p.name} with its tasks and deliverables',
+                      )) {
                     await repo.deleteProject(p);
                     if (context.mounted) Navigator.pop(context);
                   }
@@ -54,17 +58,21 @@ class ProjectDetailScreen extends StatelessWidget {
               ),
             ],
           ],
-          bottom: const TabBar(tabs: [
-            Tab(text: 'Overview'),
-            Tab(text: 'Tasks'),
-            Tab(text: 'Deliverables'),
-          ]),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Overview'),
+              Tab(text: 'Tasks'),
+              Tab(text: 'Deliverables'),
+            ],
+          ),
         ),
-        body: TabBarView(children: [
-          _Overview(p: p),
-          _Tasks(p: p),
-          _Deliverables(p: p),
-        ]),
+        body: TabBarView(
+          children: [
+            _Overview(p: p),
+            _Tasks(p: p),
+            _Deliverables(p: p),
+          ],
+        ),
       ),
     );
   }
@@ -86,18 +94,18 @@ class _Overview extends StatelessWidget {
     final currentIndex = repo.stages.indexWhere((s) => s.id == p.stageId);
 
     Widget fact(String label, String value) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                  width: 120,
-                  child: Text(label,
-                      style: TextStyle(color: c.onSurfaceVariant))),
-              Expanded(child: Text(value)),
-            ],
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: TextStyle(color: c.onSurfaceVariant)),
           ),
-        );
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
 
     return Readable(
       child: ListView(
@@ -109,26 +117,37 @@ class _Overview extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    if (p.code.isNotEmpty)
-                      Text('${p.code}  ',
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Pill(projectStatusLabel(p.status),
-                        color: projectStatusColor(p.status, c)),
-                  ]),
+                  Row(
+                    children: [
+                      if (p.code.isNotEmpty)
+                        Text(
+                          '${p.code}  ',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      Pill(
+                        projectStatusLabel(p.status),
+                        color: projectStatusColor(p.status, c),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
-                  fact('Service',
-                      '${serviceLabel(p.service)}${p.abroad ? ' (outside Lebanon)' : ''}'),
+                  fact(
+                    'Service',
+                    '${serviceLabel(p.service)}${p.abroad ? ' (outside Lebanon)' : ''}',
+                  ),
+                  fact('Type', projectTypeLabel(p.type)),
+                  if (p.areaSqm != null) fact('Area', fmtArea(p.areaSqm)),
                   if (p.location.isNotEmpty) fact('Location', p.location),
                   fact('Start', fmtDate(p.startDate)),
                   fact('Deadline', fmtDate(p.dueDate)),
                   if (p.teamIds.isNotEmpty)
                     fact(
-                        'Team',
-                        p.teamIds
-                            .map((id) => repo.member(id)?.name)
-                            .whereType<String>()
-                            .join(', ')),
+                      'Team',
+                      p.teamIds
+                          .map((id) => repo.member(id)?.name)
+                          .whereType<String>()
+                          .join(', '),
+                    ),
                   if (p.notes.isNotEmpty) fact('Notes', p.notes),
                 ],
               ),
@@ -142,29 +161,42 @@ class _Overview extends StatelessWidget {
                 title: Text(client.name),
                 subtitle: client.phone.isEmpty && client.email.isEmpty
                     ? null
-                    : Text([client.phone, client.email]
-                        .where((s) => s.isNotEmpty)
-                        .join(' · ')),
+                    : Text(
+                        [
+                          client.phone,
+                          client.email,
+                        ].where((s) => s.isNotEmpty).join(' · '),
+                      ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            ClientDetailScreen(clientId: client.id))),
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ClientDetailScreen(clientId: client.id),
+                  ),
+                ),
               ),
             ),
           ],
           const SizedBox(height: 12),
-          Row(children: [
-            _Stat('Open tasks',
-                '${tasks.where((t) => t.status != TaskStatus.done).length}'),
-            const SizedBox(width: 8),
-            _Stat('Late tasks', '${tasks.where((t) => t.isOverdue(now)).length}',
-                alert: tasks.any((t) => t.isOverdue(now))),
-            const SizedBox(width: 8),
-            _Stat('Approved',
-                '${dels.where((d) => d.status == DeliverableStatus.approved).length}/${dels.length}'),
-          ]),
+          Row(
+            children: [
+              _Stat(
+                'Open tasks',
+                '${tasks.where((t) => t.status != TaskStatus.done).length}',
+              ),
+              const SizedBox(width: 8),
+              _Stat(
+                'Late tasks',
+                '${tasks.where((t) => t.isOverdue(now)).length}',
+                alert: tasks.any((t) => t.isOverdue(now)),
+              ),
+              const SizedBox(width: 8),
+              _Stat(
+                'Approved',
+                '${dels.where((d) => d.status == DeliverableStatus.approved).length}/${dels.length}',
+              ),
+            ],
+          ),
           const SectionHeader('Stages'),
           Card(
             child: Column(
@@ -176,22 +208,26 @@ class _Overview extends StatelessWidget {
                       i < currentIndex
                           ? Icons.check_circle
                           : i == currentIndex
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
                       color: i <= currentIndex ? c.primary : c.outline,
                     ),
-                    title: Text(repo.stages[i].name,
-                        style: TextStyle(
-                            fontWeight:
-                                i == currentIndex ? FontWeight.w700 : null)),
+                    title: Text(
+                      repo.stages[i].name,
+                      style: TextStyle(
+                        fontWeight: i == currentIndex ? FontWeight.w700 : null,
+                      ),
+                    ),
                     trailing: i == currentIndex
                         ? const Text('Current')
                         : repo.isOwner
-                            ? TextButton(
-                                onPressed: () => repo.saveProject(
-                                    p.copyWith(stageId: repo.stages[i].id)),
-                                child: const Text('Set'))
-                            : null,
+                        ? TextButton(
+                            onPressed: () => repo.saveProject(
+                              p.copyWith(stageId: repo.stages[i].id),
+                            ),
+                            child: const Text('Set'),
+                          )
+                        : null,
                   ),
               ],
             ),
@@ -219,10 +255,13 @@ class _Stat extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(value,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: alert ? c.error : null)),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: alert ? c.error : null,
+                ),
+              ),
               Text(label, style: TextStyle(color: c.onSurfaceVariant)),
             ],
           ),
@@ -252,7 +291,8 @@ class _Tasks extends StatelessWidget {
           ? const EmptyState(
               icon: Icons.checklist,
               title: 'No tasks yet',
-              message: 'Add the work needed for the current stage.')
+              message: 'Add the work needed for the current stage.',
+            )
           : Readable(
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 88),
@@ -285,7 +325,8 @@ class _Deliverables extends StatelessWidget {
           ? const EmptyState(
               icon: Icons.description_outlined,
               title: 'No deliverables yet',
-              message: 'Drawings, reports and packages you send the client.')
+              message: 'Drawings, reports and packages you send the client.',
+            )
           : Readable(
               child: ListView(
                 padding: const EdgeInsets.only(bottom: 88),

@@ -28,12 +28,14 @@ class ClientForm extends StatefulWidget {
 class _ClientFormState extends State<ClientForm> {
   final _form = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.client?.name ?? '');
-  late final _company =
-      TextEditingController(text: widget.client?.company ?? '');
+  late final _company = TextEditingController(
+    text: widget.client?.company ?? '',
+  );
   late final _phone = TextEditingController(text: widget.client?.phone ?? '');
   late final _email = TextEditingController(text: widget.client?.email ?? '');
-  late final _country =
-      TextEditingController(text: widget.client?.country ?? 'Lebanon');
+  late final _country = TextEditingController(
+    text: widget.client?.country ?? 'Lebanon',
+  );
   late final _notes = TextEditingController(text: widget.client?.notes ?? '');
 
   @override
@@ -50,17 +52,19 @@ class _ClientFormState extends State<ClientForm> {
     final c = widget.client;
     final now = repo.now();
     final id = c?.id ?? repo.newId();
-    await repo.saveClient(Client(
-      id: id,
-      createdAt: c?.createdAt ?? now,
-      updatedAt: now,
-      name: _name.text.trim(),
-      company: _company.text.trim(),
-      phone: _phone.text.trim(),
-      email: _email.text.trim(),
-      country: _country.text.trim(),
-      notes: _notes.text.trim(),
-    ));
+    await repo.saveClient(
+      Client(
+        id: id,
+        createdAt: c?.createdAt ?? now,
+        updatedAt: now,
+        name: _name.text.trim(),
+        company: _company.text.trim(),
+        phone: _phone.text.trim(),
+        email: _email.text.trim(),
+        country: _country.text.trim(),
+        notes: _notes.text.trim(),
+      ),
+    );
     if (mounted) Navigator.pop(context, id);
   }
 
@@ -95,7 +99,8 @@ class _ClientFormState extends State<ClientForm> {
               TextFormField(
                 controller: _company,
                 decoration: const InputDecoration(
-                    labelText: 'Company (if any)'),
+                  labelText: 'Company (if any)',
+                ),
               ),
               gap,
               Row(
@@ -105,7 +110,8 @@ class _ClientFormState extends State<ClientForm> {
                       controller: _phone,
                       keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
-                          labelText: 'Phone / WhatsApp'),
+                        labelText: 'Phone / WhatsApp',
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),

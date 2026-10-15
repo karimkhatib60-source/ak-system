@@ -3,10 +3,15 @@ import 'package:provider/provider.dart';
 
 import '../../sync/sync_service.dart';
 import '../format.dart';
+import '../theme.dart';
 
 class EmptyState extends StatelessWidget {
-  const EmptyState(
-      {super.key, required this.icon, required this.title, this.message});
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.message,
+  });
 
   final IconData icon;
   final String title;
@@ -23,14 +28,18 @@ class EmptyState extends StatelessWidget {
           children: [
             Icon(icon, size: 48, color: c.outline),
             const SizedBox(height: 12),
-            Text(title,
-                style: Theme.of(context).textTheme.titleMedium,
-                textAlign: TextAlign.center),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             if (message != null) ...[
               const SizedBox(height: 6),
-              Text(message!,
-                  style: TextStyle(color: c.onSurfaceVariant),
-                  textAlign: TextAlign.center),
+              Text(
+                message!,
+                style: TextStyle(color: c.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
             ],
           ],
         ),
@@ -48,15 +57,16 @@ class Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+    ),
+  );
 }
 
 class SectionHeader extends StatelessWidget {
@@ -66,21 +76,28 @@ class SectionHeader extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 8, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700)),
+  Widget build(BuildContext context) {
+    final ak = AkColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 22, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.3,
+                color: ak.muted,
+              ),
             ),
-            ?trailing,
-          ],
-        ),
-      );
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
 }
 
 /// A form field that opens a date picker.
@@ -135,26 +152,27 @@ class SyncBadge extends StatelessWidget {
     final sync = context.watch<SyncService>();
     final (icon, tip) = switch (sync.state) {
       SyncState.localOnly => (
-          Icons.phone_android,
-          'Saved on this device. Set up cloud sync in Settings.'
-        ),
+        Icons.phone_android,
+        'Saved on this device. Set up cloud sync in Settings.',
+      ),
       SyncState.idle => (Icons.cloud_done_outlined, 'All changes synced'),
       SyncState.syncing => (Icons.cloud_sync_outlined, 'Syncing…'),
       SyncState.offline => (
-          Icons.cloud_off_outlined,
-          'Offline. Changes are saved and will sync when you reconnect.'
-        ),
+        Icons.cloud_off_outlined,
+        'Offline. Changes are saved and will sync when you reconnect.',
+      ),
       SyncState.error => (
-          Icons.error_outline,
-          'Sync problem: ${sync.lastError ?? 'unknown'}'
-        ),
+        Icons.error_outline,
+        'Sync problem: ${sync.lastError ?? 'unknown'}',
+      ),
     };
     return IconButton(
       tooltip: tip,
       icon: Icon(icon),
       onPressed: sync.remote == null
-          ? () => ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(tip)))
+          ? () =>
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(tip)))
           : sync.syncNow,
     );
   }
@@ -168,11 +186,13 @@ Future<bool> confirmDelete(BuildContext context, String what) async {
       content: const Text('This cannot be undone.'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete')),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Delete'),
+        ),
       ],
     ),
   );
@@ -188,10 +208,51 @@ class Readable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: child,
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: child,
+    ),
+  );
+}
+
+/// One row of a list drawn as a single white card: rounded at the first and
+/// last row, hairlines between.
+class GroupedRow extends StatelessWidget {
+  const GroupedRow({
+    super.key,
+    required this.index,
+    required this.count,
+    required this.child,
+  });
+
+  final int index;
+  final int count;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ak = AkColors.of(context);
+    const r = Radius.circular(14);
+    final first = index == 0, last = index == count - 1;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: ak.card,
+          borderRadius: BorderRadius.vertical(
+            top: first ? r : Radius.zero,
+            bottom: last ? r : Radius.zero,
+          ),
+          border: Border(
+            left: BorderSide(color: ak.line),
+            right: BorderSide(color: ak.line),
+            top: first ? BorderSide(color: ak.line) : BorderSide.none,
+            bottom: BorderSide(color: ak.line, width: last ? 1 : 0.6),
+          ),
         ),
-      );
+        child: Material(type: MaterialType.transparency, child: child),
+      ),
+    );
+  }
 }

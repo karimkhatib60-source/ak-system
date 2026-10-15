@@ -20,7 +20,9 @@ class SupabaseRemote implements RemoteStore {
 
   @override
   Future<List<Map<String, Object?>>> changedSince(
-      String table, String? since) async {
+    String table,
+    String? since,
+  ) async {
     final out = <Map<String, Object?>>[];
     var from = 0;
     while (true) {

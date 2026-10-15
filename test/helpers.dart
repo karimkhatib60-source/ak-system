@@ -5,7 +5,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 Future<LocalDb> memoryDb() async {
   sqfliteFfiInit();
-  return LocalDb.open(inMemoryDatabasePath, factory: databaseFactoryFfiNoIsolate);
+  return LocalDb.open(
+    inMemoryDatabasePath,
+    factory: databaseFactoryFfiNoIsolate,
+  );
 }
 
 /// A controllable clock for tests.
@@ -28,8 +31,11 @@ class FakeRemote implements RemoteStore {
   int _tick = 0;
   bool offline = false;
 
-  String _stamp() =>
-      DateTime.utc(2030, 1, 1).add(Duration(seconds: ++_tick)).toIso8601String();
+  String _stamp() => DateTime.utc(
+    2030,
+    1,
+    1,
+  ).add(Duration(seconds: ++_tick)).toIso8601String();
 
   @override
   Future<void> upsert(String table, List<Map<String, Object?>> rows) async {
@@ -42,16 +48,23 @@ class FakeRemote implements RemoteStore {
 
   @override
   Future<List<Map<String, Object?>>> changedSince(
-      String table, String? since) async {
+    String table,
+    String? since,
+  ) async {
     if (offline) throw const SocketExceptionLike();
-    final rows = (tables[table]?.values ?? const <Map<String, Object?>>[])
-        .where((r) =>
-            since == null ||
-            DateTime.parse(r['synced_at'] as String)
-                .isAfter(DateTime.parse(since)))
-        .toList()
-      ..sort((a, b) =>
-          (a['synced_at'] as String).compareTo(b['synced_at'] as String));
+    final rows =
+        (tables[table]?.values ?? const <Map<String, Object?>>[])
+            .where(
+              (r) =>
+                  since == null ||
+                  DateTime.parse(r['synced_at'] as String)
+                      .isAfter(DateTime.parse(since)),
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                (a['synced_at'] as String).compareTo(b['synced_at'] as String),
+          );
     return rows.map((r) => Map<String, Object?>.from(r)).toList();
   }
 }

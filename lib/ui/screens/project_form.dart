@@ -7,8 +7,11 @@ import '../format.dart';
 import '../widgets/common.dart';
 import 'client_form.dart';
 
-Future<void> openProjectForm(BuildContext context,
-    {Project? project, String? clientId}) {
+Future<void> openProjectForm(
+  BuildContext context, {
+  Project? project,
+  String? clientId,
+}) {
   return Navigator.push(
     context,
     MaterialPageRoute(
@@ -34,6 +37,8 @@ class _ProjectFormState extends State<ProjectForm> {
   late final TextEditingController _name;
   late final TextEditingController _location;
   late final TextEditingController _notes;
+  late final TextEditingController _area;
+  ProjectType _type = ProjectType.residential;
   String? _clientId;
   String? _stageId;
   ServiceType _service = ServiceType.design;
@@ -60,6 +65,13 @@ class _ProjectFormState extends State<ProjectForm> {
     _start = p?.startDate ?? (p == null ? repo.now() : null);
     _due = p?.dueDate;
     _team = {...?p?.teamIds};
+    _type = p?.type ?? ProjectType.residential;
+    final a = p?.areaSqm;
+    _area = TextEditingController(
+      text: a == null
+          ? ''
+          : (a == a.roundToDouble() ? a.toStringAsFixed(0) : '$a'),
+    );
   }
 
   @override
@@ -67,6 +79,7 @@ class _ProjectFormState extends State<ProjectForm> {
     _code.dispose();
     _name.dispose();
     _location.dispose();
+    _area.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -78,23 +91,27 @@ class _ProjectFormState extends State<ProjectForm> {
     final now = repo.now();
     // Outside Lebanon AK only does consultancy.
     final service = _abroad ? ServiceType.consultancy : _service;
-    await repo.saveProject(Project(
-      id: p?.id ?? repo.newId(),
-      createdAt: p?.createdAt ?? now,
-      updatedAt: now,
-      code: _code.text.trim(),
-      name: _name.text.trim(),
-      clientId: _clientId,
-      service: service,
-      location: _location.text.trim(),
-      abroad: _abroad,
-      stageId: _stageId,
-      status: _status,
-      startDate: _start,
-      dueDate: _due,
-      teamIds: _team.toList()..sort(),
-      notes: _notes.text.trim(),
-    ));
+    await repo.saveProject(
+      Project(
+        id: p?.id ?? repo.newId(),
+        createdAt: p?.createdAt ?? now,
+        updatedAt: now,
+        code: _code.text.trim(),
+        name: _name.text.trim(),
+        clientId: _clientId,
+        service: service,
+        location: _location.text.trim(),
+        abroad: _abroad,
+        stageId: _stageId,
+        status: _status,
+        startDate: _start,
+        dueDate: _due,
+        teamIds: _team.toList()..sort(),
+        type: _type,
+        areaSqm: double.tryParse(_area.text.replaceAll(',', '').trim()),
+        notes: _notes.text.trim(),
+      ),
+    );
     if (mounted) Navigator.pop(context);
   }
 
@@ -138,11 +155,11 @@ class _ProjectFormState extends State<ProjectForm> {
                     child: TextFormField(
                       controller: _name,
                       autofocus: widget.project == null,
-                      decoration:
-                          const InputDecoration(labelText: 'Project name'),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? 'Enter a name'
-                          : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Project name',
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Enter a name' : null,
                     ),
                   ),
                 ],
@@ -152,13 +169,16 @@ class _ProjectFormState extends State<ProjectForm> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      initialValue:
-                          repo.client(_clientId) == null ? null : _clientId,
+                      initialValue: repo.client(_clientId) == null
+                          ? null
+                          : _clientId,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Client'),
                       items: [
                         const DropdownMenuItem(
-                            value: null, child: Text('No client yet')),
+                          value: null,
+                          child: Text('No client yet'),
+                        ),
                         for (final c in repo.clients)
                           DropdownMenuItem(value: c.id, child: Text(c.name)),
                       ],
@@ -197,21 +217,66 @@ class _ProjectFormState extends State<ProjectForm> {
                 onSelectionChanged: (v) => setState(() => _service = v.first),
               ),
               gap,
-              TextFormField(
-                controller: _location,
-                decoration: const InputDecoration(
-                    labelText: 'Location', hintText: 'City, area or country'),
+              DropdownButtonFormField<ProjectType>(
+                initialValue: _type,
+                decoration: const InputDecoration(labelText: 'Project type'),
+                items: [
+                  for (final t in ProjectType.values)
+                    DropdownMenuItem(
+                      value: t,
+                      child: Text(projectTypeLabel(t)),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _type = v!),
+              ),
+              gap,
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextFormField(
+                      controller: _location,
+                      decoration: const InputDecoration(
+                        labelText: 'Location',
+                        hintText: 'City, area or country',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _area,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Area',
+                        suffixText: 'm²',
+                      ),
+                      validator: (v) =>
+                          v == null ||
+                              v.trim().isEmpty ||
+                              double.tryParse(v.replaceAll(',', '').trim()) !=
+                                  null
+                          ? null
+                          : 'Numbers only',
+                    ),
+                  ),
+                ],
               ),
               gap,
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      initialValue:
-                          repo.stage(_stageId) == null ? null : _stageId,
+                      initialValue: repo.stage(_stageId) == null
+                          ? null
+                          : _stageId,
                       isExpanded: true,
-                      decoration:
-                          const InputDecoration(labelText: 'Current stage'),
+                      decoration: const InputDecoration(
+                        labelText: 'Current stage',
+                      ),
                       items: [
                         for (final s in repo.stages)
                           DropdownMenuItem(value: s.id, child: Text(s.name)),
@@ -227,7 +292,9 @@ class _ProjectFormState extends State<ProjectForm> {
                       items: [
                         for (final s in ProjectStatus.values)
                           DropdownMenuItem(
-                              value: s, child: Text(projectStatusLabel(s))),
+                            value: s,
+                            child: Text(projectStatusLabel(s)),
+                          ),
                       ],
                       onChanged: (v) => setState(() => _status = v!),
                     ),
@@ -239,23 +306,27 @@ class _ProjectFormState extends State<ProjectForm> {
                 children: [
                   Expanded(
                     child: DateField(
-                        label: 'Start date',
-                        value: _start,
-                        onChanged: (d) => setState(() => _start = d)),
+                      label: 'Start date',
+                      value: _start,
+                      onChanged: (d) => setState(() => _start = d),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: DateField(
-                        label: 'Deadline',
-                        value: _due,
-                        onChanged: (d) => setState(() => _due = d)),
+                      label: 'Deadline',
+                      value: _due,
+                      onChanged: (d) => setState(() => _due = d),
+                    ),
                   ),
                 ],
               ),
               if (repo.members.isNotEmpty) ...[
                 gap,
-                Text('Team on this project',
-                    style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'Team on this project',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
@@ -265,7 +336,8 @@ class _ProjectFormState extends State<ProjectForm> {
                         label: Text(m.name),
                         selected: _team.contains(m.id),
                         onSelected: (v) => setState(
-                            () => v ? _team.add(m.id) : _team.remove(m.id)),
+                          () => v ? _team.add(m.id) : _team.remove(m.id),
+                        ),
                       ),
                   ],
                 ),

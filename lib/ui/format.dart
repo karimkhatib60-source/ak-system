@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../data/models.dart';
+import 'theme.dart';
 
 final _day = DateFormat('d MMM yyyy');
 final _dayShort = DateFormat('d MMM');
@@ -23,47 +24,47 @@ String fmtDue(DateTime? d, DateTime now) {
 }
 
 String serviceLabel(ServiceType s) => switch (s) {
-      ServiceType.design => 'Design',
-      ServiceType.consultancy => 'Consultancy',
-      ServiceType.contracting => 'Contracting',
-    };
+  ServiceType.design => 'Design',
+  ServiceType.consultancy => 'Consultancy',
+  ServiceType.contracting => 'Contracting',
+};
 
 String projectStatusLabel(ProjectStatus s) => switch (s) {
-      ProjectStatus.lead => 'Lead',
-      ProjectStatus.active => 'Active',
-      ProjectStatus.onHold => 'On hold',
-      ProjectStatus.completed => 'Completed',
-      ProjectStatus.cancelled => 'Cancelled',
-    };
+  ProjectStatus.lead => 'Lead',
+  ProjectStatus.active => 'Active',
+  ProjectStatus.onHold => 'On hold',
+  ProjectStatus.completed => 'Completed',
+  ProjectStatus.cancelled => 'Cancelled',
+};
 
 String taskStatusLabel(TaskStatus s) => switch (s) {
-      TaskStatus.todo => 'To do',
-      TaskStatus.inProgress => 'In progress',
-      TaskStatus.done => 'Done',
-    };
+  TaskStatus.todo => 'To do',
+  TaskStatus.inProgress => 'In progress',
+  TaskStatus.done => 'Done',
+};
 
 String priorityLabel(TaskPriority p) => switch (p) {
-      TaskPriority.low => 'Low',
-      TaskPriority.normal => 'Normal',
-      TaskPriority.high => 'High',
-    };
+  TaskPriority.low => 'Low',
+  TaskPriority.normal => 'Normal',
+  TaskPriority.high => 'High',
+};
 
 String deliverableStatusLabel(DeliverableStatus s) => switch (s) {
-      DeliverableStatus.draft => 'Draft',
-      DeliverableStatus.internalReview => 'Internal review',
-      DeliverableStatus.submitted => 'Submitted to client',
-      DeliverableStatus.approved => 'Approved',
-      DeliverableStatus.revise => 'Client asked for changes',
-    };
+  DeliverableStatus.draft => 'Draft',
+  DeliverableStatus.internalReview => 'Internal review',
+  DeliverableStatus.submitted => 'Submitted to client',
+  DeliverableStatus.approved => 'Approved',
+  DeliverableStatus.revise => 'Client asked for changes',
+};
 
 /// Short label for list badges where space is tight.
 String deliverableStatusShort(DeliverableStatus s) => switch (s) {
-      DeliverableStatus.draft => 'Draft',
-      DeliverableStatus.internalReview => 'In review',
-      DeliverableStatus.submitted => 'With client',
-      DeliverableStatus.approved => 'Approved',
-      DeliverableStatus.revise => 'Changes',
-    };
+  DeliverableStatus.draft => 'Draft',
+  DeliverableStatus.internalReview => 'In review',
+  DeliverableStatus.submitted => 'With client',
+  DeliverableStatus.approved => 'Approved',
+  DeliverableStatus.revise => 'Changes',
+};
 
 /// "Due tomorrow", "Due 25 Oct", or "2 days late".
 String dueLine(DateTime d, DateTime now) {
@@ -74,28 +75,84 @@ String dueLine(DateTime d, DateTime now) {
 }
 
 String roleLabel(MemberRole r) => switch (r) {
-      MemberRole.owner => 'Owner',
-      MemberRole.architect => 'Architect',
-    };
+  MemberRole.owner => 'Owner',
+  MemberRole.architect => 'Architect',
+};
 
 Color projectStatusColor(ProjectStatus s, ColorScheme c) => switch (s) {
-      ProjectStatus.lead => Colors.blueGrey,
-      ProjectStatus.active => c.primary,
-      ProjectStatus.onHold => Colors.orange.shade700,
-      ProjectStatus.completed => Colors.green.shade700,
-      ProjectStatus.cancelled => c.outline,
-    };
+  ProjectStatus.lead => AkPalette.info,
+  ProjectStatus.active => AkPalette.good,
+  ProjectStatus.onHold => AkPalette.warn,
+  ProjectStatus.completed => AkPalette.slate,
+  ProjectStatus.cancelled => c.outline,
+};
 
 Color deliverableStatusColor(DeliverableStatus s, ColorScheme c) => switch (s) {
-      DeliverableStatus.draft => c.outline,
-      DeliverableStatus.internalReview => Colors.blueGrey,
-      DeliverableStatus.submitted => c.primary,
-      DeliverableStatus.approved => Colors.green.shade700,
-      DeliverableStatus.revise => Colors.orange.shade800,
-    };
+  DeliverableStatus.draft => c.outline,
+  DeliverableStatus.internalReview => AkPalette.info,
+  DeliverableStatus.submitted => AkPalette.blueDeep,
+  DeliverableStatus.approved => AkPalette.good,
+  DeliverableStatus.revise => AkPalette.warn,
+};
 
 Color priorityColor(TaskPriority p, ColorScheme c) => switch (p) {
-      TaskPriority.low => c.outline,
-      TaskPriority.normal => c.onSurfaceVariant,
-      TaskPriority.high => c.error,
-    };
+  TaskPriority.low => c.outline,
+  TaskPriority.normal => c.onSurfaceVariant,
+  TaskPriority.high => c.error,
+};
+
+String projectTypeLabel(ProjectType t) => switch (t) {
+  ProjectType.residential => 'Residential',
+  ProjectType.commercial => 'Commercial / office',
+  ProjectType.hospitality => 'Hospitality',
+  ProjectType.interior => 'Interior fit-out',
+  ProjectType.mixedUse => 'Mixed-use',
+  ProjectType.industrial => 'Industrial',
+  ProjectType.landscape => 'Landscape',
+  ProjectType.other => 'Other',
+};
+
+String taskCategoryLabel(TaskCategory c) => switch (c) {
+  TaskCategory.design => 'Design',
+  TaskCategory.drawings => 'Drawings',
+  TaskCategory.siteVisit => 'Site visit',
+  TaskCategory.meeting => 'Meeting',
+  TaskCategory.coordination => 'Coordination',
+  TaskCategory.admin => 'Admin',
+};
+
+IconData taskCategoryIcon(TaskCategory c) => switch (c) {
+  TaskCategory.design => Icons.architecture,
+  TaskCategory.drawings => Icons.straighten,
+  TaskCategory.siteVisit => Icons.engineering_outlined,
+  TaskCategory.meeting => Icons.groups_outlined,
+  TaskCategory.coordination => Icons.hub_outlined,
+  TaskCategory.admin => Icons.inventory_2_outlined,
+};
+
+String disciplineLabel(Discipline d) => switch (d) {
+  Discipline.architecture => 'Architecture',
+  Discipline.interior => 'Interior design',
+  Discipline.structure => 'Structure',
+  Discipline.mep => 'MEP',
+  Discipline.landscape => 'Landscape',
+  Discipline.general => 'General',
+};
+
+String docTypeLabel(DocType t) => switch (t) {
+  DocType.drawing => 'Drawing',
+  DocType.report => 'Report',
+  DocType.presentation => 'Presentation',
+  DocType.model => '3D model / render',
+  DocType.boq => 'Bill of quantities',
+  DocType.specification => 'Specification',
+  DocType.letter => 'Letter / transmittal',
+};
+
+String fmtArea(double? a) {
+  if (a == null) return '—';
+  final s = a == a.roundToDouble()
+      ? a.toStringAsFixed(0)
+      : a.toStringAsFixed(1);
+  return '${NumberFormat.decimalPattern().format(double.parse(s))} m²';
+}

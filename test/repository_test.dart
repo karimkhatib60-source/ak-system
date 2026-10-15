@@ -25,12 +25,15 @@ void main() {
     final repo = await memoryRepo(clock);
     expect(repo.nextProjectCode(), 'AK-26-001');
     final t = repo.now();
-    await repo.saveProject(Project(
+    await repo.saveProject(
+      Project(
         id: repo.newId(),
         createdAt: t,
         updatedAt: t,
         code: 'AK-26-001',
-        name: 'Villa Byblos'));
+        name: 'Villa Byblos',
+      ),
+    );
     expect(repo.nextProjectCode(), 'AK-26-002');
   });
 
@@ -39,19 +42,25 @@ void main() {
     final t = repo.now();
     final p = Project(id: repo.newId(), createdAt: t, updatedAt: t, name: 'X');
     await repo.saveProject(p);
-    await repo.saveTask(Task(
+    await repo.saveTask(
+      Task(
         id: repo.newId(),
         createdAt: t,
         updatedAt: t,
         projectId: p.id,
         title: 'Facade study',
-        dueDate: DateTime(2026, 10, 10)));
-    await repo.saveDeliverable(Deliverable(
+        dueDate: DateTime(2026, 10, 10),
+      ),
+    );
+    await repo.saveDeliverable(
+      Deliverable(
         id: repo.newId(),
         createdAt: t,
         updatedAt: t,
         projectId: p.id,
-        title: 'Concept booklet'));
+        title: 'Concept booklet',
+      ),
+    );
     expect(repo.tasks.single.isOverdue(repo.now()), isTrue);
 
     await repo.toggleTaskDone(repo.tasks.single);
@@ -67,20 +76,25 @@ void main() {
     final repo = await memoryRepo(clock);
     final t = repo.now();
     final d = Deliverable(
-        id: repo.newId(),
-        createdAt: t,
-        updatedAt: t,
-        projectId: 'p',
-        title: 'Permit set');
+      id: repo.newId(),
+      createdAt: t,
+      updatedAt: t,
+      projectId: 'p',
+      title: 'Permit set',
+    );
     await repo.saveDeliverable(d);
     expect(repo.deliverables.single.revisionLabel, 'R00');
 
     await repo.setDeliverableStatus(
-        repo.deliverables.single, DeliverableStatus.submitted);
+      repo.deliverables.single,
+      DeliverableStatus.submitted,
+    );
     expect(repo.deliverables.single.submittedAt, isNotNull);
 
     await repo.setDeliverableStatus(
-        repo.deliverables.single, DeliverableStatus.revise);
+      repo.deliverables.single,
+      DeliverableStatus.revise,
+    );
     await repo.newRevision(repo.deliverables.single);
     final r1 = repo.deliverables.single;
     expect(r1.revisionLabel, 'R01');
@@ -91,14 +105,20 @@ void main() {
     final repo = await memoryRepo(clock);
     final t = repo.now();
     final arch = Member(
-        id: 'arch-1',
-        createdAt: t,
-        updatedAt: t,
-        name: 'Rami',
-        role: MemberRole.architect);
+      id: 'arch-1',
+      createdAt: t,
+      updatedAt: t,
+      name: 'Rami',
+      role: MemberRole.architect,
+    );
     await repo.saveMember(arch);
     final mine = Project(
-        id: 'p1', createdAt: t, updatedAt: t, name: 'Mine', teamIds: ['arch-1']);
+      id: 'p1',
+      createdAt: t,
+      updatedAt: t,
+      name: 'Mine',
+      teamIds: ['arch-1'],
+    );
     final other = Project(id: 'p2', createdAt: t, updatedAt: t, name: 'Other');
     await repo.saveProject(mine);
     await repo.saveProject(other);

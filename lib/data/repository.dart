@@ -10,7 +10,7 @@ const _uuid = Uuid();
 /// Every change is written to SQLite first, then the lists are reloaded.
 class Repository extends ChangeNotifier {
   Repository(this.local, {DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   final LocalDb local;
   final DateTime Function() _clock;
@@ -53,8 +53,9 @@ class Repository extends ChangeNotifier {
     projects = (await local.all('projects')).map(Project.fromMap).toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     tasks = (await local.all('tasks')).map(Task.fromMap).toList();
-    deliverables =
-        (await local.all('deliverables')).map(Deliverable.fromMap).toList();
+    deliverables = (await local.all('deliverables'))
+        .map(Deliverable.fromMap)
+        .toList();
     currentMemberId = await local.getSetting('current_member_id');
     companyName = await local.getSetting('company_name') ?? companyName;
     notifyListeners();
@@ -66,15 +67,18 @@ class Repository extends ChangeNotifier {
     final t = DateTime.utc(2026, 1, 1);
     for (var i = 0; i < defaultStages.length; i++) {
       await local.save(
-          'stages',
-          Stage(
-                  id: _uuid.v5(Namespace.url.value,
-                      'ak-system/stage/${defaultStages[i]}'),
-                  createdAt: t,
-                  updatedAt: t,
-                  name: defaultStages[i],
-                  position: i)
-              .toMap());
+        'stages',
+        Stage(
+          id: _uuid.v5(
+            Namespace.url.value,
+            'ak-system/stage/${defaultStages[i]}',
+          ),
+          createdAt: t,
+          updatedAt: t,
+          name: defaultStages[i],
+          position: i,
+        ).toMap(),
+      );
     }
   }
 
@@ -84,7 +88,8 @@ class Repository extends ChangeNotifier {
       ? projects
       : projects.where((p) => p.teamIds.contains(currentMemberId)).toList();
 
-  Set<String> get _visibleProjectIds => visibleProjects.map((p) => p.id).toSet();
+  Set<String> get _visibleProjectIds =>
+      visibleProjects.map((p) => p.id).toSet();
 
   List<Task> get visibleTasks {
     final ids = _visibleProjectIds;
@@ -124,12 +129,27 @@ class Repository extends ChangeNotifier {
     var max = 0;
     for (final p in projects) {
       if (p.code.startsWith(prefix)) {
-        max = [max, int.tryParse(p.code.substring(prefix.length)) ?? 0]
-            .reduce((a, b) => a > b ? a : b);
+        max = [
+          max,
+          int.tryParse(p.code.substring(prefix.length)) ?? 0,
+        ].reduce((a, b) => a > b ? a : b);
       }
     }
     return '$prefix${(max + 1).toString().padLeft(3, '0')}';
   }
+
+  /// Next free number for a document of this discipline and type.
+  int nextDocNumber(String projectId, Discipline d, DocType t) {
+    var max = 0;
+    for (final x in deliverables) {
+      if (x.projectId == projectId && x.discipline == d && x.docType == t) {
+        if (x.number > max) max = x.number;
+      }
+    }
+    return max + 1;
+  }
+
+  String docCode(Deliverable d) => d.docCode(project(d.projectId)?.code ?? '');
 
   // ---- Changes ------------------------------------------------------------
 
@@ -178,24 +198,28 @@ class Repository extends ChangeNotifier {
     await _write('projects', p.copyWith(deleted: true).toMap());
   }
 
-  Future<void> toggleTaskDone(Task t) => saveTask(t.copyWith(
-      status: t.status == TaskStatus.done ? TaskStatus.todo : TaskStatus.done));
+  Future<void> toggleTaskDone(Task t) => saveTask(
+    t.copyWith(
+      status: t.status == TaskStatus.done ? TaskStatus.todo : TaskStatus.done,
+    ),
+  );
 
   /// Moves a deliverable through its workflow, stamping the dates.
   Future<void> setDeliverableStatus(Deliverable d, DeliverableStatus s) {
     final t = now();
-    return saveDeliverable(d.copyWith(
-      status: s,
-      submittedAt: s == DeliverableStatus.submitted ? t : null,
-      approvedAt: s == DeliverableStatus.approved ? t : null,
-    ));
+    return saveDeliverable(
+      d.copyWith(
+        status: s,
+        submittedAt: s == DeliverableStatus.submitted ? t : null,
+        approvedAt: s == DeliverableStatus.approved ? t : null,
+      ),
+    );
   }
 
   /// Starts the next revision after the client asked for changes.
-  Future<void> newRevision(Deliverable d) => saveDeliverable(d.copyWith(
-        version: d.version + 1,
-        status: DeliverableStatus.draft,
-      ));
+  Future<void> newRevision(Deliverable d) => saveDeliverable(
+    d.copyWith(version: d.version + 1, status: DeliverableStatus.draft),
+  );
 
   Future<void> moveStage(Stage s, int delta) async {
     final list = [...stages];

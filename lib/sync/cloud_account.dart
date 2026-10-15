@@ -20,7 +20,8 @@ class CloudAccount extends ChangeNotifier {
   bool _initialized = false;
 
   bool get configured => url != null && anonKey != null;
-  User? get user => _initialized ? Supabase.instance.client.auth.currentUser : null;
+  User? get user =>
+      _initialized ? Supabase.instance.client.auth.currentUser : null;
   bool get signedIn => user != null;
 
   /// Restores the saved connection and session at app start.
@@ -53,8 +54,10 @@ class CloudAccount extends ChangeNotifier {
 
   Future<void> signIn(String email, String password) async {
     await _init();
-    await Supabase.instance.client.auth
-        .signInWithPassword(email: email.trim(), password: password);
+    await Supabase.instance.client.auth.signInWithPassword(
+      email: email.trim(),
+      password: password,
+    );
     await _afterSignIn();
   }
 
