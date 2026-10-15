@@ -28,9 +28,9 @@ class PlatformInstaller implements Installer {
     await file.writeAsBytes(bytes, flush: true);
     await Process.start(
       file.path,
-      // Silent: no questions. The installer waits for the app to close,
-      // replaces it and opens it again.
-      const ['/S'],
+      // Progress only, no questions. The installer waits for the app to
+      // close, replaces it and opens it again.
+      const ['/UPDATE'],
       mode: ProcessStartMode.detached,
     );
   }

@@ -47,7 +47,11 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           release=false
           if [ "$GITHUB_EVENT_NAME" != pull_request ] && [ "$GITHUB_REF" = refs/heads/main ]; then
-            if [ -z "$(git ls-remote --tags origin "refs/tags/v$v")" ]; then
+            if ! tag=$(git ls-remote --tags origin "refs/tags/v$v"); then
+              echo "::error::Could not ask GitHub whether v$v is released"
+              exit 1
+            fi
+            if [ -z "$tag" ]; then
               release=true
               if [ "$PRIVATE" = true ]; then
                 echo "::error::The Windows app downloads updates without a login, so this repository must be public."
@@ -137,15 +141,18 @@ jobs:
             Get-ChildItem "${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe" -ErrorAction SilentlyContinue |
               Select-Object -First 1 -ExpandProperty FullName
           }
+          # Not preinstalled on windows-latest, so it comes from Chocolatey,
+          # which is sometimes busy: try three times.
           $makensis = Find-Makensis
-          if (-not $makensis) {
+          for ($i = 1; -not $makensis -and $i -le 3; $i++) {
             choco install nsis --version=3.12.0 -y --no-progress
             $makensis = Find-Makensis
+            if (-not $makensis -and $i -lt 3) { Start-Sleep -Seconds 30 }
           }
           if (-not $makensis) { throw 'NSIS 3 is not available' }
           & $makensis -VERSION
           New-Item -ItemType Directory -Force dist | Out-Null
-          & $makensis -V2 -WX "-DAPP_VERSION=$version" windows\installer\ak_system.nsi
+          & $makensis -V2 -WX "-DAPP_VERSION=$version" "-DRELEASE_REPO=${{ github.repository }}" windows\installer\ak_system.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Move-Item dist\AK-System-Setup.exe AK-System-Setup.exe
       - uses: actions/upload-artifact@v4
@@ -186,11 +193,15 @@ jobs:
             out/AK-System-Setup.exe
             out/AK-System-android.apk
       - name: The Windows app can see the release
-        # Asked without a login, as the app asks.
+        # The app asks the same question without a login; the repository is
+        # public (checked above), so the answer is the same, and the login
+        # avoids GitHub's limit on questions without one.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           for try in 1 2 3; do
             sleep 15
-            if curl -fsS "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" |
+            if curl -fsS -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" |
               jq -e --arg t "$TAG" '.tag_name == $t and any(.assets[]; .name == "AK-System-Setup.exe")'; then
               exit 0
             fi
