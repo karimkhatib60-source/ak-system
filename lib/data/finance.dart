@@ -90,6 +90,117 @@ String _itemsStr(List<LineItem> items) =>
 double _num(Object? v, [double fallback = 0]) =>
     (v as num?)?.toDouble() ?? fallback;
 
+/// One instalment of a quotation's payment schedule, e.g. "Advance on
+/// signing, 30%". Stored with the quotation.
+class PaymentTerm {
+  const PaymentTerm({
+    this.label = '',
+    this.percent = 0,
+    this.amount = 0,
+    this.due = '',
+  });
+
+  final String label;
+
+  /// Share of the quotation total. When 0, [amount] is used instead.
+  final double percent;
+  final double amount;
+
+  /// When it falls due, in words: "On signing", "Before finishing works".
+  final String due;
+
+  double valueOf(double total) => percent != 0 ? total * percent / 100 : amount;
+
+  factory PaymentTerm.fromJson(Map<String, Object?> m) => PaymentTerm(
+    label: (m['l'] ?? '') as String,
+    percent: (m['p'] as num?)?.toDouble() ?? 0,
+    amount: (m['a'] as num?)?.toDouble() ?? 0,
+    due: (m['d'] ?? '') as String,
+  );
+
+  Map<String, Object?> toJson() => {
+    'l': label,
+    if (percent != 0) 'p': percent,
+    if (amount != 0) 'a': amount,
+    if (due.isNotEmpty) 'd': due,
+  };
+}
+
+/// Usual payment schedules per service, ready to adjust.
+const paymentTermPresets = <ServiceType, List<PaymentTerm>>{
+  ServiceType.design: [
+    PaymentTerm(
+      label: 'Advance payment',
+      percent: 30,
+      due: 'On signing the agreement',
+    ),
+    PaymentTerm(
+      label: 'Concept and schematic design',
+      percent: 30,
+      due: 'On approval of the concept design',
+    ),
+    PaymentTerm(
+      label: 'Design development and permit',
+      percent: 30,
+      due: 'On submission of the permit drawings',
+    ),
+    PaymentTerm(
+      label: 'Construction drawings',
+      percent: 10,
+      due: 'On delivery of the construction drawings',
+    ),
+  ],
+  ServiceType.consultancy: [
+    PaymentTerm(
+      label: 'Advance payment',
+      percent: 50,
+      due: 'On signing the agreement',
+    ),
+    PaymentTerm(
+      label: 'Final payment',
+      percent: 50,
+      due: 'On delivery of the final report',
+    ),
+  ],
+  ServiceType.contracting: [
+    PaymentTerm(
+      label: 'Advance payment',
+      percent: 30,
+      due: 'On signing the contract, before mobilization',
+    ),
+    PaymentTerm(
+      label: 'Progress payment 1',
+      percent: 30,
+      due: 'On completion of structure works',
+    ),
+    PaymentTerm(
+      label: 'Progress payment 2',
+      percent: 30,
+      due: 'On completion of MEP and finishing works',
+    ),
+    PaymentTerm(
+      label: 'Final payment (retention)',
+      percent: 10,
+      due: 'On handover, after snagging',
+    ),
+  ],
+};
+
+List<PaymentTerm> _terms(Object? v) {
+  if (v is! String || v.isEmpty) return const [];
+  try {
+    return [
+      for (final e in jsonDecode(v) as List)
+        PaymentTerm.fromJson(Map<String, Object?>.from(e as Map)),
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
+String _termsStr(List<PaymentTerm> t) =>
+    jsonEncode([for (final x in t) x.toJson()]);
+
 /// Totals shared by quotations and invoices.
 mixin PricedDocument {
   List<LineItem> get items;
@@ -142,6 +253,9 @@ class Quotation with PricedDocument implements Record {
   final String terms;
   final String notes;
 
+  /// The payment schedule agreed with the client.
+  final List<PaymentTerm> paymentTerms;
+
   const Quotation({
     required this.id,
     required this.createdAt,
@@ -161,6 +275,7 @@ class Quotation with PricedDocument implements Record {
     this.status = QuotationStatus.draft,
     this.terms = '',
     this.notes = '',
+    this.paymentTerms = const [],
   });
 
   factory Quotation.fromMap(Map<String, Object?> m) => Quotation(
@@ -186,11 +301,13 @@ class Quotation with PricedDocument implements Record {
     ),
     terms: (m['terms'] ?? '') as String,
     notes: (m['notes'] ?? '') as String,
+    paymentTerms: _terms(m['payment_terms']),
   );
 
   @override
   Map<String, Object?> toMap() => {
     ..._base(this),
+    'payment_terms': _termsStr(paymentTerms),
     'number': number,
     'title': title,
     'client_id': clientId,
@@ -214,6 +331,7 @@ class Quotation with PricedDocument implements Record {
     List<LineItem>? items,
     double? markupRate,
     bool? showMarkup,
+    List<PaymentTerm>? paymentTerms,
   }) => Quotation(
     id: id,
     createdAt: createdAt,
@@ -233,6 +351,7 @@ class Quotation with PricedDocument implements Record {
     status: status ?? this.status,
     terms: terms,
     notes: notes,
+    paymentTerms: paymentTerms ?? this.paymentTerms,
   );
 }
 
@@ -255,6 +374,9 @@ class Invoice with PricedDocument implements Record {
 
   /// The project phase (stage) this invoice bills for.
   final String? stageId;
+
+  /// The payment term of [quotationId] this invoice bills, if any.
+  final int? termIndex;
   final DateTime date;
   final DateTime? dueDate;
   @override
@@ -281,6 +403,7 @@ class Invoice with PricedDocument implements Record {
     this.projectId,
     this.quotationId,
     this.stageId,
+    this.termIndex,
     required this.date,
     this.dueDate,
     this.items = const [],
@@ -303,6 +426,7 @@ class Invoice with PricedDocument implements Record {
     projectId: m['project_id'] as String?,
     quotationId: m['quotation_id'] as String?,
     stageId: m['stage_id'] as String?,
+    termIndex: (m['term_index'] as num?)?.toInt(),
     date: _date(m['date']) ?? _date(m['created_at'])!,
     dueDate: _date(m['due_date']),
     items: _items(m['items']),
@@ -323,6 +447,7 @@ class Invoice with PricedDocument implements Record {
     'project_id': projectId,
     'quotation_id': quotationId,
     'stage_id': stageId,
+    'term_index': termIndex,
     'date': _dateStr(date),
     'due_date': _dateStr(dueDate),
     'items': _itemsStr(items),
@@ -351,6 +476,7 @@ class Invoice with PricedDocument implements Record {
     projectId: projectId,
     quotationId: quotationId,
     stageId: stageId ?? this.stageId,
+    termIndex: termIndex,
     date: date,
     dueDate: dueDate,
     items: items ?? this.items,
@@ -381,17 +507,36 @@ class Payment implements Record {
   /// Receipt number, e.g. RCT-26-001.
   final String number;
 
+  /// Who paid and for which project. Payments on an invoice take these from
+  /// the invoice; a payment on a term or on account carries its own.
+  final String? clientId;
+  final String? projectId;
+
+  /// Set when the money is paid against a quotation's payment term rather
+  /// than an invoice.
+  final String? quotationId;
+  final int? termIndex;
+  final String notes;
+
+  /// Paid against an invoice ([invoiceId] set).
+  bool get onInvoice => invoiceId.isNotEmpty;
+
   const Payment({
     required this.id,
     required this.createdAt,
     required this.updatedAt,
     this.deleted = false,
-    required this.invoiceId,
+    this.invoiceId = '',
     required this.date,
     required this.amount,
     this.method = PaymentMethod.bankTransfer,
     this.reference = '',
     this.number = '',
+    this.clientId,
+    this.projectId,
+    this.quotationId,
+    this.termIndex,
+    this.notes = '',
   });
 
   factory Payment.fromMap(Map<String, Object?> m) => Payment(
@@ -409,6 +554,11 @@ class Payment implements Record {
     ),
     reference: (m['reference'] ?? '') as String,
     number: (m['number'] ?? '') as String,
+    clientId: m['client_id'] as String?,
+    projectId: m['project_id'] as String?,
+    quotationId: m['quotation_id'] as String?,
+    termIndex: (m['term_index'] as num?)?.toInt(),
+    notes: (m['notes'] ?? '') as String,
   );
 
   @override
@@ -420,7 +570,37 @@ class Payment implements Record {
     'method': method.name,
     'reference': reference,
     'number': number,
+    'client_id': clientId,
+    'project_id': projectId,
+    'quotation_id': quotationId,
+    'term_index': termIndex,
+    'notes': notes,
   };
+
+  /// The same receipt, no longer on an invoice.
+  Payment detached({
+    String? clientId,
+    String? projectId,
+    String? quotationId,
+    int? termIndex,
+    String? notes,
+  }) => Payment(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    deleted: deleted,
+    invoiceId: '',
+    date: date,
+    amount: amount,
+    method: method,
+    reference: reference,
+    number: number,
+    clientId: clientId ?? this.clientId,
+    projectId: projectId ?? this.projectId,
+    quotationId: quotationId ?? this.quotationId,
+    termIndex: termIndex ?? this.termIndex,
+    notes: notes ?? this.notes,
+  );
 
   Payment copyWith({bool? deleted, String? number}) => Payment(
     id: id,
@@ -433,6 +613,11 @@ class Payment implements Record {
     method: method,
     reference: reference,
     number: number ?? this.number,
+    clientId: clientId,
+    projectId: projectId,
+    quotationId: quotationId,
+    termIndex: termIndex,
+    notes: notes,
   );
 }
 
@@ -509,6 +694,24 @@ class Expense implements Record {
   );
 }
 
+/// One payment term with what has been invoiced and received on it.
+class TermStatus {
+  const TermStatus({
+    required this.term,
+    required this.value,
+    required this.invoices,
+    required this.received,
+  });
+
+  final PaymentTerm term;
+  final double value;
+  final List<Invoice> invoices;
+  final double received;
+
+  double get remaining => value - received;
+  bool get settled => remaining <= 0.005;
+}
+
 /// Money position of one project, or of the whole company.
 class MoneySummary {
   const MoneySummary({
@@ -517,16 +720,26 @@ class MoneySummary {
     required this.received,
     required this.expenses,
     required this.overdue,
+    required this.outstanding,
+    this.advances = 0,
   });
 
   /// Total of accepted quotations: the agreed fee.
   final double quoted;
   final double invoiced;
+
+  /// Every receipt: on invoices, on payment terms and on account.
   final double received;
   final double expenses;
   final double overdue;
 
-  double get outstanding => invoiced - received;
+  /// Still to collect on issued invoices.
+  final double outstanding;
+
+  /// Received but not yet set against an invoice: advances on payment
+  /// terms and money on account.
+  final double advances;
+
   double get profit => received - expenses;
 }
 

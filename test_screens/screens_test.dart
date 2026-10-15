@@ -219,6 +219,7 @@ void main() {
         date: DateTime(2026, 9, 2),
         validUntil: DateTime(2026, 10, 2),
         status: QuotationStatus.accepted,
+        paymentTerms: paymentTermPresets[ServiceType.design]!,
         items: const [
           LineItem(description: 'Concept design', rate: 4000),
           LineItem(description: 'Permit drawings', rate: 6000),
@@ -243,6 +244,7 @@ void main() {
           clientId: 'c1',
           projectId: 'p1',
           quotationId: 'q1',
+          termIndex: 0,
           date: DateTime(2026, 9, 5),
           dueDate: DateTime(2026, 9, 19),
           status: InvoiceStatus.sent,
@@ -495,6 +497,33 @@ void main() {
           reference: 'CHQ 104455',
         ),
       );
+      // Money on a payment term before it is invoiced, and a deposit.
+      await r.savePayment(
+        Payment(
+          id: 'pay5',
+          createdAt: t,
+          updatedAt: t,
+          clientId: 'c1',
+          projectId: 'p1',
+          quotationId: 'q1',
+          termIndex: 1,
+          date: DateTime(2026, 10, 10),
+          amount: 3000,
+          reference: 'TRF 88120',
+        ),
+      );
+      await r.savePayment(
+        Payment(
+          id: 'pay6',
+          createdAt: t,
+          updatedAt: t,
+          clientId: 'c2',
+          projectId: 'p2',
+          date: DateTime(2026, 10, 12),
+          amount: 1500,
+          notes: 'Deposit before the second review round',
+        ),
+      );
       Future<void> exp(
         String id,
         String? p,
@@ -608,13 +637,115 @@ void main() {
           repo.payments.firstWhere((p) => p.id == 'pay2'),
         ),
       );
+      File('test_screens/out/sample_receipt_term.pdf').writeAsBytesSync(
+        await buildReceiptPdf(
+          repo,
+          repo.payments.firstWhere((p) => p.id == 'pay5'),
+        ),
+      );
+      File('test_screens/out/sample_receipt_on_account.pdf').writeAsBytesSync(
+        await buildReceiptPdf(
+          repo,
+          repo.payments.firstWhere((p) => p.id == 'pay6'),
+        ),
+      );
+      File(
+        'test_screens/out/sample_project_statement_design.pdf',
+      ).writeAsBytesSync(
+        await buildProjectStatementPdf(repo, buildProjectStatement(repo, 'p1')),
+      );
       File('test_screens/out/sample_project_statement.pdf').writeAsBytesSync(
         await buildProjectStatementPdf(repo, buildProjectStatement(repo, 'p3')),
+      );
+      File('test_screens/out/sample_statement_advance.pdf').writeAsBytesSync(
+        await buildStatementPdf(repo, buildStatement(repo, 'c1')),
       );
       File('test_screens/out/sample_statement.pdf').writeAsBytesSync(
         await buildStatementPdf(repo, buildStatement(repo, 'c3')),
       );
     });
+  });
+
+  testWidgets('phone receipts', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Receipts'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -330));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_receipts.png'),
+    );
+    await tester.tap(find.textContaining('Concept and schematic design'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_receipt_sheet.png'),
+    );
+  });
+
+  testWidgets('phone payment terms', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Quotes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Architectural design services, Villa Byblos'));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(
+      find.text('PAYMENT TERMS'),
+      find.byType(ListView).last,
+      const Offset(0, -300),
+    );
+    await tester.runAsync(
+      () => Scrollable.ensureVisible(
+        tester.element(find.text('PAYMENT TERMS')),
+        alignment: 0.02,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_payment_terms.png'),
+    );
+    await tester.tap(find.text('Receive').at(1));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_receipt_form.png'),
+    );
+  });
+
+  testWidgets('phone payment terms editor', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Quotes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fit-out works, apartment Achrafieh'));
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(
+      find.text('Standard'),
+      find.byType(ListView).last,
+      const Offset(0, -300),
+    );
+    await tester.tap(find.text('Standard'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Contracting:'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Scrollable.ensureVisible(
+        tester.element(find.text('PAYMENT TERMS')),
+        alignment: 0.02,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_terms_editor.png'),
+    );
   });
 
   testWidgets('phone BOQ quotation', (tester) async {

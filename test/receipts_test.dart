@@ -1,6 +1,7 @@
 import 'package:ak_system/data/models.dart';
 import 'package:ak_system/data/project_statement.dart';
 import 'package:ak_system/data/repository.dart';
+import 'package:ak_system/data/statement.dart';
 import 'package:ak_system/data/words.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -143,5 +144,167 @@ void main() {
     expect(phase.invoiced, closeTo(880, 1e-9));
     expect(phase.balance, closeTo(480, 1e-9));
     expect(ps.billedPercent, closeTo(40, 1e-9));
+  });
+
+  group('receipts on payment terms and on account', () {
+    const terms = [
+      PaymentTerm(label: 'Advance payment', percent: 30, due: 'On signing'),
+      PaymentTerm(label: 'Progress payment', percent: 60),
+      PaymentTerm(label: 'Final payment', percent: 10, due: 'On handover'),
+    ];
+
+    Future<Quotation> withTerms() async {
+      final (_, q) = await setup();
+      final withTerms = q.copyWith(paymentTerms: terms);
+      await repo.saveQuotation(withTerms);
+      return repo.quotation('q')!;
+    }
+
+    Future<Payment> receive(
+      String id,
+      double amount, {
+      String invoiceId = '',
+      String? quotationId,
+      int? termIndex,
+      String notes = '',
+      int day = 14,
+    }) async {
+      final t = repo.now();
+      await repo.savePayment(
+        Payment(
+          id: id,
+          createdAt: t,
+          updatedAt: t,
+          invoiceId: invoiceId,
+          date: DateTime(2026, 10, day),
+          amount: amount,
+          clientId: invoiceId.isEmpty ? 'c' : null,
+          projectId: invoiceId.isEmpty ? 'p' : null,
+          quotationId: quotationId,
+          termIndex: termIndex,
+          notes: notes,
+        ),
+      );
+      return repo.payments.firstWhere((p) => p.id == id);
+    }
+
+    test('standard schedules add up to 100%', () {
+      for (final preset in paymentTermPresets.values) {
+        expect(preset.fold(0.0, (s, t) => s + t.percent), 100);
+      }
+    });
+
+    test('payment terms are saved with the quotation', () async {
+      final q = await withTerms();
+      expect(q.paymentTerms.map((t) => t.label), [
+        'Advance payment',
+        'Progress payment',
+        'Final payment',
+      ]);
+      expect(q.paymentTerms.first.due, 'On signing');
+      expect(q.paymentTerms.map((t) => t.valueOf(q.total)), [
+        closeTo(660, 1e-9),
+        closeTo(1320, 1e-9),
+        closeTo(220, 1e-9),
+      ]);
+    });
+
+    test('an advance on a term is held until it is invoiced', () async {
+      final q = await withTerms();
+      final adv = await receive('a1', 660, quotationId: 'q', termIndex: 0);
+      expect(adv.number, 'RCT-26-001');
+      expect(repo.payerOf(adv), 'c');
+      expect(repo.projectOfPayment(adv), 'p');
+      expect(receiptPurpose(repo, adv), 'Advance payment of QT-26-001');
+      expect(repo.termStatus(q, 0).settled, isTrue);
+      expect(repo.unappliedOf(adv), 660);
+
+      final m = repo.money(projectId: 'p');
+      expect(m.received, 660);
+      expect(m.advances, 660);
+      expect(m.outstanding, 0);
+
+      final st = buildStatement(repo, 'c');
+      expect(st.received, 660);
+      expect(st.advances, 660);
+      expect(st.closing, -660);
+      expect(st.open, isEmpty);
+    });
+
+    test('invoicing the term sets the advance against it', () async {
+      final q = await withTerms();
+      final adv = await receive('a1', 660, quotationId: 'q', termIndex: 0);
+      final draft = repo.invoiceForTerm(q, 0);
+      expect(draft.termIndex, 0);
+      expect(draft.quotationId, 'q');
+      expect(draft.total, closeTo(660, 1e-9));
+      expect(draft.title, 'Advance payment (30%)');
+      final inv = draft.copyWith(status: InvoiceStatus.sent);
+      await repo.saveInvoice(inv);
+
+      expect(repo.paidOn(inv), closeTo(660, 1e-9));
+      expect(repo.paymentState(inv), PaymentState.paid);
+      expect(repo.advancesOn(inv).single.$1.id, adv.id);
+      expect(repo.unappliedOf(adv), 0);
+      final st = buildStatement(repo, 'c');
+      expect(st.closing, closeTo(0, 1e-9));
+      expect(st.advances, 0);
+      expect(st.open, isEmpty);
+      expect(repo.money(projectId: 'p').advances, 0);
+      // The term counts the receipt once, not twice.
+      expect(repo.termStatus(q, 0).received, closeTo(660, 1e-9));
+    });
+
+    test('a part advance leaves the rest due on the term invoice', () async {
+      final q = await withTerms();
+      await receive('a1', 500, quotationId: 'q', termIndex: 0, day: 10);
+      final inv = repo
+          .invoiceForTerm(q, 0)
+          .copyWith(status: InvoiceStatus.sent);
+      await repo.saveInvoice(inv);
+      expect(repo.balanceOf(inv), closeTo(160, 1e-9));
+      expect(repo.paymentState(inv), PaymentState.partlyPaid);
+      final rest = await receive('r2', 160, invoiceId: inv.id);
+      expect(repo.receivedBefore(rest), 0); // the advance was on the term
+      expect(repo.paymentState(inv), PaymentState.paid);
+      final status = repo.termStatus(q, 0);
+      expect(status.received, closeTo(660, 1e-9));
+      expect(status.settled, isTrue);
+      expect(status.invoices.single.id, inv.id);
+      expect(buildStatement(repo, 'c').closing, closeTo(0, 1e-9));
+    });
+
+    test('receipts on account show as a credit with their purpose', () async {
+      await setup();
+      final dep = await receive('d1', 1000, notes: 'Deposit');
+      expect(receiptPurpose(repo, dep), 'on account · Deposit');
+      expect(repo.unappliedOf(dep), 1000);
+      expect(repo.receipts(clientId: 'c').single.id, 'd1');
+      expect(repo.receipts(projectId: 'other'), isEmpty);
+      final st = buildStatement(repo, 'c', projectId: 'p');
+      expect(st.lines.single.credit, 1000);
+      expect(st.lines.single.description, contains('on account · Deposit'));
+      expect(st.closing, -1000);
+    });
+
+    test('earlier receipts on the same term come first', () async {
+      await withTerms();
+      final a = await receive('a1', 200, quotationId: 'q', termIndex: 1);
+      final b = await receive('b2', 300, quotationId: 'q', termIndex: 1);
+      await receive('c3', 50, quotationId: 'q', termIndex: 2);
+      expect(repo.receivedBefore(a), 0);
+      expect(repo.receivedBefore(b), 200);
+    });
+
+    test('project statement lists the payment schedule', () async {
+      await withTerms();
+      await receive('a1', 660, quotationId: 'q', termIndex: 0);
+      final ps = buildProjectStatement(repo, 'p');
+      expect(ps.schedule.length, 3);
+      expect(ps.schedule.first.label, 'Advance payment');
+      expect(ps.schedule.first.status.settled, isTrue);
+      expect(ps.schedule[1].status.remaining, closeTo(1320, 1e-9));
+      expect(ps.account.advances, 660);
+    });
   });
 }

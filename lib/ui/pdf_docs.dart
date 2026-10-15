@@ -196,6 +196,12 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
           ],
         ),
         pw.SizedBox(height: 22),
+        if (!isInvoice && (doc as Quotation).paymentTerms.isNotEmpty) ...[
+          label('Payment schedule'),
+          pw.SizedBox(height: 5),
+          _scheduleTable(doc),
+          pw.SizedBox(height: 16),
+        ],
         if (notes.isNotEmpty) ...[
           label('Notes'),
           pw.SizedBox(height: 3),
@@ -230,6 +236,38 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
     ),
   );
   return pdf.save();
+}
+
+/// A quotation's payment terms: instalment, when due, share and amount.
+pw.Widget _scheduleTable(Quotation q) {
+  final terms = q.paymentTerms;
+  final rows = [
+    for (final (k, t) in terms.indexed)
+      [
+        '${k + 1}',
+        t.label.isEmpty ? 'Payment ${k + 1}' : t.label,
+        t.due,
+        t.percent == 0 ? '' : '${_qty(t.percent)}%',
+        fmtMoney(t.valueOf(q.total)),
+      ],
+  ];
+  final pct = terms.fold(0.0, (s, t) => s + t.percent);
+  final sum = terms.fold(0.0, (s, t) => s + t.valueOf(q.total));
+  rows.add(['', 'Total', '', pct == 0 ? '' : '${_qty(pct)}%', fmtMoney(sum)]);
+  return _table(
+    ['#', 'Instalment', 'Due', 'Share', 'Amount'],
+    rows,
+    widths: {
+      0: const pw.FixedColumnWidth(22),
+      1: const pw.FlexColumnWidth(3),
+      2: const pw.FlexColumnWidth(3.4),
+      3: const pw.FixedColumnWidth(44),
+      4: const pw.FixedColumnWidth(72),
+    },
+    right: {3, 4},
+    boldRows: {rows.length - 1},
+    softRows: {rows.length - 1},
+  );
 }
 
 pw.Widget _kv(String k, String v) => pw.Padding(
@@ -636,7 +674,13 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
             if (st.from != null) tile('Opening balance', st.opening),
             tile('Invoiced', st.invoiced),
             tile('Received', st.received),
-            tile('Balance due', st.closing, strong: true),
+            if (st.advances > 0.005) ...[
+              tile('Advances held', st.advances),
+              tile('Due on invoices', st.dueOnInvoices, strong: true),
+            ] else if (st.closing < -0.005)
+              tile('Credit balance', -st.closing, strong: true)
+            else
+              tile('Balance due', st.closing, strong: true),
           ],
         ),
         pw.SizedBox(height: 16),
@@ -709,14 +753,30 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
           pw.Text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 12),
         ],
-        pw.Text(
-          st.closing > 0.005
-              ? 'Kindly settle the balance due of ${fmtMoney(st.closing)}. '
-                    'Please report any difference within 15 days of this '
-                    'statement; otherwise it is considered accepted.'
-              : 'Your account is fully settled. Thank you.',
-          style: const pw.TextStyle(fontSize: 8.5, color: _muted),
-        ),
+        if (st.advances > 0.005)
+          pw.Text(
+            'Advances held: ${fmtMoney(st.advances)} received on payment '
+            'terms or on account and not yet invoiced. They will be set '
+            'against the coming invoices. Due on issued invoices: '
+            '${fmtMoney(st.dueOnInvoices)}. Net account balance: '
+            '${st.closing < 0 ? 'credit ' : ''}${fmtMoney(st.closing.abs())}. '
+            'Please report any difference within 15 days of this '
+            'statement; otherwise it is considered accepted.',
+            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+          )
+        else
+          pw.Text(
+            st.closing > 0.005
+                ? 'Kindly settle the balance due of ${fmtMoney(st.closing)}. '
+                      'Please report any difference within 15 days of this '
+                      'statement; otherwise it is considered accepted.'
+                : st.closing < -0.005
+                ? 'Your account is in credit by ${fmtMoney(-st.closing)}. '
+                      'Please report any difference within 15 days of this '
+                      'statement; otherwise it is considered accepted.'
+                : 'Your account is fully settled. Thank you.',
+            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+          ),
         pw.SizedBox(height: 30),
         pw.Row(
           children: [
@@ -924,22 +984,151 @@ pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
 
 String _pct(double v) => '${v.toStringAsFixed(v >= 10 || v == 0 ? 0 : 1)}%';
 
-/// Builds the receipt for one payment received.
+/// Builds the receipt for one payment received: on an invoice, on a
+/// payment term of a quotation, or on account.
 Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final inv = repo.invoice(pay.invoiceId);
-  final client = repo.client(inv?.clientId);
-  final project = repo.project(inv?.projectId);
-  final paidToDate = inv == null
-      ? pay.amount
-      : repo
-            .paymentsFor(inv.id)
-            .where((p) => !p.date.isAfter(pay.date))
-            .fold(0.0, (s, p) => s + p.amount);
+  final q = inv == null ? repo.quotation(pay.quotationId) : null;
+  final termIndex = pay.termIndex;
+  final term =
+      q != null && termIndex != null && termIndex < q.paymentTerms.length
+      ? q.paymentTerms[termIndex]
+      : null;
+  final client = repo.client(repo.payerOf(pay));
+  final project = repo.project(repo.projectOfPayment(pay));
+  final before = repo.receivedBefore(pay);
   final pdf = pw.Document(
     theme: await _theme(),
     title: '${pay.number} Receipt',
     author: repo.companyName,
   );
+
+  // What the money was for, and where that stands after this receipt.
+  final String purpose;
+  final pw.Widget detail;
+  final String after;
+  if (inv != null) {
+    // Advances on the invoice's term count as received too.
+    final advance = repo.advanceOn(inv);
+    final prior = before + advance;
+    final left = inv.total - prior - pay.amount;
+    purpose = 'Invoice ${inv.number}';
+    detail = _table(
+      [
+        'Invoice',
+        'Subject',
+        'Invoice total',
+        'Received before',
+        'This receipt',
+        'Balance',
+      ],
+      [
+        [
+          inv.number,
+          inv.title.isNotEmpty ? inv.title : (project?.name ?? ''),
+          fmtMoney(inv.total),
+          fmtMoney(prior),
+          fmtMoney(pay.amount),
+          fmtMoney(left.abs() < .005 ? 0 : left),
+        ],
+      ],
+      widths: _receiptWidths,
+      right: {2, 3, 4, 5},
+    );
+    after = left <= 0.005
+        ? '${inv.number} is now fully paid. Thank you.'
+        : 'Remaining on ${inv.number}: ${fmtMoney(left)}.';
+  } else if (q != null && term != null) {
+    final value = term.valueOf(q.total);
+    // Receipts on invoices raised for this term count as received too.
+    final invoiced = repo.invoices.where(
+      (i) =>
+          i.quotationId == q.id &&
+          i.termIndex == termIndex &&
+          i.status != InvoiceStatus.cancelled,
+    );
+    final onInvoices = invoiced.fold(
+      0.0,
+      (s, i) =>
+          s +
+          repo
+              .paymentsFor(i.id)
+              .where((o) => !o.date.isAfter(pay.date))
+              .fold(0.0, (t, o) => t + o.amount),
+    );
+    final prior = before + onInvoices;
+    final left = value - prior - pay.amount;
+    final label = term.label.isEmpty ? 'Payment ${termIndex! + 1}' : term.label;
+    final share = term.percent == 0 ? '' : ' (${_qty(term.percent)}%)';
+    purpose = '$label$share, ${q.number}';
+    detail = _table(
+      [
+        'Instalment',
+        'Due',
+        'Instalment value',
+        'Received before',
+        'This receipt',
+        'Remaining',
+      ],
+      [
+        [
+          '${termIndex! + 1}. $label$share',
+          term.due,
+          fmtMoney(value),
+          fmtMoney(prior),
+          fmtMoney(pay.amount),
+          fmtMoney(left.abs() < .005 ? 0 : left),
+        ],
+      ],
+      widths: _receiptWidths,
+      right: {2, 3, 4, 5},
+    );
+    after =
+        'As per the payment schedule of ${q.number}'
+        '${q.title.isEmpty ? '' : ' (${q.title})'}, contract value '
+        '${fmtMoney(q.total)}. '
+        '${left <= 0.005 ? 'This instalment is now fully paid.' : 'Remaining on this instalment: ${fmtMoney(left)}.'}';
+  } else {
+    purpose = 'On account';
+    detail = _table(
+      ['Description', 'Amount'],
+      [
+        [
+          pay.notes.isNotEmpty ? pay.notes : 'Payment on account',
+          fmtMoney(pay.amount),
+        ],
+      ],
+      widths: {
+        0: const pw.FlexColumnWidth(5),
+        1: const pw.FixedColumnWidth(80),
+      },
+      right: {1},
+    );
+    after =
+        'Received on account. It will be set against the next invoices'
+        '${project == null ? '' : ' for ${project.code}'}.';
+  }
+
+  // Project account after this receipt.
+  final contract = project == null
+      ? 0.0
+      : repo
+            .quotationsFor(project.id)
+            .where((x) => x.status == QuotationStatus.accepted)
+            .fold(0.0, (s, x) => s + x.total);
+  final receivedToDate = project == null
+      ? 0.0
+      : repo
+            .receipts(projectId: project.id)
+            .where(
+              (o) =>
+                  o.id == pay.id ||
+                  o.date.isBefore(pay.date) ||
+                  (o.date.isAtSameMomentAs(pay.date) &&
+                      o.number.compareTo(pay.number) < 0),
+            )
+            .fold(0.0, (s, o) => s + o.amount);
+
   pdf.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
@@ -948,10 +1137,12 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         _partyBlock('Received from', client, [
+          _kv('Receipt no.', pay.number),
           _kv('Date', fmtDate(pay.date)),
           _kv('Method', paymentMethodLabel(pay.method)),
           if (pay.reference.isNotEmpty) _kv('Reference', pay.reference),
           if (project != null) _kv('Project', project.code),
+          _kv('Payment for', purpose),
         ]),
         pw.SizedBox(height: 22),
         pw.Container(
@@ -999,45 +1190,56 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
           ),
         ),
         pw.SizedBox(height: 22),
-        if (inv != null) ...[
-          _label('Payment for'),
+        _label('Payment for'),
+        pw.SizedBox(height: 5),
+        detail,
+        pw.SizedBox(height: 8),
+        pw.Text(after, style: const pw.TextStyle(fontSize: 9, color: _muted)),
+        if (project != null && contract > 0) ...[
+          pw.SizedBox(height: 18),
+          _label('Project account after this receipt · ${project.code}'),
           pw.SizedBox(height: 5),
-          _table(
-            ['Invoice', 'Subject', 'Invoice total', 'Paid to date', 'Balance'],
-            [
-              [
-                inv.number,
-                inv.title.isNotEmpty ? inv.title : (project?.name ?? ''),
-                fmtMoney(inv.total),
-                fmtMoney(paidToDate),
-                fmtMoney(inv.total - paidToDate),
-              ],
+          pw.Row(
+            children: [
+              _tile('Contract value', fmtMoney(contract)),
+              _tile('Received to date', fmtMoney(receivedToDate)),
+              _tile(
+                'Remaining on contract',
+                fmtMoney(contract - receivedToDate),
+                strong: true,
+              ),
             ],
-            widths: {
-              0: const pw.FixedColumnWidth(70),
-              1: const pw.FlexColumnWidth(3),
-              2: const pw.FixedColumnWidth(72),
-              3: const pw.FixedColumnWidth(72),
-              4: const pw.FixedColumnWidth(66),
-            },
-            right: {2, 3, 4},
           ),
-          pw.SizedBox(height: 10),
+        ],
+        if (pay.notes.isNotEmpty && (inv != null || term != null)) ...[
+          pw.SizedBox(height: 14),
+          _label('Notes'),
+          pw.SizedBox(height: 3),
+          pw.Text(pay.notes, style: const pw.TextStyle(fontSize: 9)),
+        ],
+        if (pay.method == PaymentMethod.cheque) ...[
+          pw.SizedBox(height: 12),
           pw.Text(
-            inv.total - paidToDate <= 0.005
-                ? '${inv.number} is now fully paid. Thank you.'
-                : 'Remaining on ${inv.number}: '
-                      '${fmtMoney(inv.total - paidToDate)}.',
-            style: const pw.TextStyle(fontSize: 9, color: _muted),
+            'Payment by cheque is valid subject to collection.',
+            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
           ),
         ],
         pw.SizedBox(height: 40),
-        _signatures(repo, 'Received by'),
+        _signatures(repo, 'Received by (name and signature)'),
       ],
     ),
   );
   return pdf.save();
 }
+
+const _receiptWidths = {
+  0: pw.FlexColumnWidth(2.2),
+  1: pw.FlexColumnWidth(2.4),
+  2: pw.FixedColumnWidth(66),
+  3: pw.FixedColumnWidth(66),
+  4: pw.FixedColumnWidth(62),
+  5: pw.FixedColumnWidth(60),
+};
 
 Future<void> shareReceiptPdf(Repository repo, Payment pay) async {
   final numbered = await repo.withReceiptNumber(pay);
@@ -1070,6 +1272,8 @@ Future<Uint8List> buildProjectStatementPdf(
         m(ph.received),
         m(ph.balance),
       ],
+    if (st.advances > 0.005)
+      ['Advances not yet invoiced', '', '—', m(st.advances), m(-st.advances)],
     [
       'Total',
       '${ps.phases.fold(0, (s, ph) => s + ph.tasksDone)} of '
@@ -1079,6 +1283,38 @@ Future<Uint8List> buildProjectStatementPdf(
       fmtMoney(st.closing),
     ],
   ];
+
+  final scheduleRows = <List<String>>[
+    for (final l in ps.schedule)
+      [
+        [
+          if (ps.schedule.any((x) => x.quotation.id != l.quotation.id))
+            l.quotation.number,
+          '${l.index + 1}. ${l.label}',
+        ].join(' · '),
+        l.status.term.due,
+        l.status.term.percent == 0 ? '' : '${_qty(l.status.term.percent)}%',
+        fmtMoney(l.status.value),
+        l.status.invoices.isEmpty
+            ? '—'
+            : l.status.invoices.map((i) => i.number).join(', '),
+        m(l.status.received),
+        l.status.settled ? 'Paid' : fmtMoney(l.status.remaining),
+      ],
+  ];
+  if (scheduleRows.isNotEmpty) {
+    final value = ps.schedule.fold(0.0, (s, l) => s + l.status.value);
+    final got = ps.schedule.fold(0.0, (s, l) => s + l.status.received);
+    scheduleRows.add([
+      'Total',
+      '',
+      '',
+      fmtMoney(value),
+      '',
+      fmtMoney(got),
+      fmtMoney(value - got),
+    ]);
+  }
 
   final layerRows = <List<String>>[];
   final layerHeads = <int>{};
@@ -1162,8 +1398,19 @@ Future<Uint8List> buildProjectStatementPdf(
             _tile('Contract value', fmtMoney(ps.contractValue)),
             _tile('Invoiced', fmtMoney(st.invoiced)),
             _tile('Received', fmtMoney(st.received)),
-            _tile('Billed', _pct(ps.billedPercent)),
-            _tile('Balance due', fmtMoney(st.closing), strong: true),
+            if (st.advances > 0.005) ...[
+              _tile('Advances held', fmtMoney(st.advances)),
+              _tile(
+                'Due on invoices',
+                fmtMoney(st.dueOnInvoices),
+                strong: true,
+              ),
+            ] else ...[
+              _tile('Billed', _pct(ps.billedPercent)),
+              st.closing < -0.005
+                  ? _tile('Credit balance', fmtMoney(-st.closing), strong: true)
+                  : _tile('Balance due', fmtMoney(st.closing), strong: true),
+            ],
           ],
         ),
         pw.SizedBox(height: 18),
@@ -1259,9 +1506,41 @@ Future<Uint8List> buildProjectStatementPdf(
                 ],
               ),
             ),
+        if (scheduleRows.isNotEmpty) ...[
+          pw.SizedBox(height: 18),
+          _label('2 · Payment schedule'),
+          pw.SizedBox(height: 5),
+          _table(
+            [
+              'Instalment',
+              'Due',
+              'Share',
+              'Value',
+              'Invoice',
+              'Received',
+              'Remaining',
+            ],
+            scheduleRows,
+            widths: {
+              0: const pw.FlexColumnWidth(2.6),
+              1: const pw.FlexColumnWidth(2.4),
+              2: const pw.FixedColumnWidth(36),
+              3: const pw.FixedColumnWidth(62),
+              4: const pw.FixedColumnWidth(56),
+              5: const pw.FixedColumnWidth(62),
+              6: const pw.FixedColumnWidth(62),
+            },
+            right: {2, 3, 5, 6},
+            boldRows: {scheduleRows.length - 1},
+            softRows: {scheduleRows.length - 1},
+          ),
+        ],
         if (ps.layers.isNotEmpty) ...[
           pw.SizedBox(height: 18),
-          _label('2 · By trade and item (before VAT, fee included)'),
+          _label(
+            '${scheduleRows.isEmpty ? 2 : 3} · By trade and item '
+            '(before VAT, fee included)',
+          ),
           pw.SizedBox(height: 5),
           _table(
             ['#', 'Item', 'Unit', 'Contract', 'Invoiced', 'Billed'],
@@ -1280,7 +1559,10 @@ Future<Uint8List> buildProjectStatementPdf(
           ),
         ],
         pw.SizedBox(height: 18),
-        _label('3 · Account movements'),
+        _label(
+          '${2 + (scheduleRows.isEmpty ? 0 : 1) + (ps.layers.isEmpty ? 0 : 1)}'
+          ' · Account movements',
+        ),
         pw.SizedBox(height: 5),
         _table(
           ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Balance'],
@@ -1305,9 +1587,20 @@ Future<Uint8List> buildProjectStatementPdf(
           pw.SizedBox(height: 12),
         ],
         pw.Text(
-          st.closing > 0.005
+          st.advances > 0.005
+              ? 'Due on issued invoices: ${fmtMoney(st.dueOnInvoices)}. '
+                    'Advances of ${fmtMoney(st.advances)} are held on this '
+                    'project and will be set against the coming invoices. '
+                    'Net account balance: '
+                    '${st.closing < 0 ? 'credit ' : ''}'
+                    '${fmtMoney(st.closing.abs())}. Please report any '
+                    'difference within 15 days of this statement.'
+              : st.closing > 0.005
               ? 'Balance due: ${fmtMoney(st.closing)}. Please report any '
                     'difference within 15 days of this statement.'
+              : st.closing < -0.005
+              ? 'The project account is in credit by '
+                    '${fmtMoney(-st.closing)}.'
               : 'The project account is fully settled. Thank you.',
           style: const pw.TextStyle(fontSize: 8.5, color: _muted),
         ),

@@ -290,3 +290,12 @@ alter table public.invoices add column if not exists show_markup boolean;
 -- v5: invoice phase and receipt numbers. Safe to re-run.
 alter table public.invoices add column if not exists stage_id text;
 alter table public.payments add column if not exists number text;
+
+-- v6: payment terms and receipts on terms or on account. Safe to re-run.
+alter table public.quotations add column if not exists payment_terms text;
+alter table public.invoices add column if not exists term_index integer;
+alter table public.payments add column if not exists client_id text;
+alter table public.payments add column if not exists project_id text;
+alter table public.payments add column if not exists quotation_id text;
+alter table public.payments add column if not exists term_index integer;
+alter table public.payments add column if not exists notes text;

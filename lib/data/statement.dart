@@ -44,6 +44,7 @@ class Statement {
     required this.lines,
     required this.open,
     required this.contractValue,
+    this.advances = 0,
   });
 
   final Client client;
@@ -57,9 +58,16 @@ class Statement {
   /// Accepted quotations for the same client (or project).
   final double contractValue;
 
+  /// Money received on payment terms or on account and not yet set
+  /// against an invoice, as of [to].
+  final double advances;
+
   double get invoiced => lines.fold(0, (s, l) => s + l.debit);
   double get received => lines.fold(0, (s, l) => s + l.credit);
   double get closing => opening + invoiced - received;
+
+  /// Still to collect on issued invoices, before setting off advances.
+  double get dueOnInvoices => open.fold(0, (s, o) => s + o.balance);
   double get overdue =>
       open.where((o) => o.daysOverdue > 0).fold(0, (s, o) => s + o.balance);
 
@@ -135,17 +143,23 @@ Statement buildStatement(
       debit: i.total,
       credit: 0,
     ));
-    for (final p in repo.paymentsFor(i.id)) {
-      if (after(p.date)) continue;
-      moves.add((
-        date: p.date,
-        order: 1,
-        ref: p.reference.isNotEmpty ? p.reference : i.number,
-        text: 'Payment received · ${_method(p.method)} · on ${i.number}',
-        debit: 0,
-        credit: p.amount,
-      ));
+  }
+  // Every receipt from this client: on an invoice, on a payment term of a
+  // quotation, or on account.
+  var advances = 0.0;
+  for (final p in repo.payments) {
+    if (!mine(repo.payerOf(p), repo.projectOfPayment(p)) || after(p.date)) {
+      continue;
     }
+    advances += repo.unappliedOf(p, until: endDay);
+    moves.add((
+      date: p.date,
+      order: 1,
+      ref: p.number.isNotEmpty ? p.number : p.reference,
+      text: 'Receipt · ${_method(p.method)} · ${receiptPurpose(repo, p)}',
+      debit: 0,
+      credit: p.amount,
+    ));
   }
   moves.sort((a, b) {
     final c = a.date.compareTo(b.date);
@@ -177,10 +191,7 @@ Statement buildStatement(
 
   final open = <OpenInvoice>[];
   for (final i in invoices) {
-    final paid = repo
-        .paymentsFor(i.id)
-        .where((p) => !after(p.date))
-        .fold(0.0, (s, p) => s + p.amount);
+    final paid = repo.paidOn(i, until: endDay);
     if (i.total - paid > 0.005) {
       final due = i.dueDate ?? i.date;
       final days = endDay
@@ -208,6 +219,7 @@ Statement buildStatement(
     lines: lines,
     open: open,
     contractValue: contract,
+    advances: advances,
   );
 }
 
@@ -218,3 +230,20 @@ String _method(PaymentMethod m) => switch (m) {
   PaymentMethod.card => 'card',
   PaymentMethod.other => 'other',
 };
+
+/// What a receipt pays for, in words: "on INV-26-003", "Advance 30% of
+/// QT-26-002" or "on account".
+String receiptPurpose(Repository repo, Payment p) {
+  if (p.onInvoice) {
+    return 'on ${repo.invoice(p.invoiceId)?.number ?? 'invoice'}';
+  }
+  final q = repo.quotation(p.quotationId);
+  if (q != null &&
+      p.termIndex != null &&
+      p.termIndex! < q.paymentTerms.length) {
+    final t = q.paymentTerms[p.termIndex!];
+    final label = t.label.isEmpty ? 'Payment ${p.termIndex! + 1}' : t.label;
+    return '$label of ${q.number}';
+  }
+  return p.notes.isNotEmpty ? 'on account · ${p.notes}' : 'on account';
+}

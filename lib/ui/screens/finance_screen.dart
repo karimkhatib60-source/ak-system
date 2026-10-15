@@ -9,8 +9,9 @@ import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'money_doc_form.dart';
+import 'receipts.dart';
 
-enum _Tab { quotations, invoices, expenses }
+enum _Tab { quotations, invoices, receipts, expenses }
 
 enum _Period { month, year, all }
 
@@ -48,6 +49,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
         for (final i in repo.invoices)
           if (inRange(i.date)) InvoiceTile(i, showProject: true),
       ],
+      _Tab.receipts => [
+        for (final p in repo.receipts())
+          if (inRange(p.date)) ReceiptTile(p, showProject: true),
+      ],
       _Tab.expenses => [
         for (final e in repo.expenses)
           if (inRange(e.date)) ExpenseTile(e, showProject: true),
@@ -60,12 +65,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
         onPressed: () => switch (_tab) {
           _Tab.quotations => openQuotationForm(context),
           _Tab.invoices => openInvoiceForm(context),
+          _Tab.receipts => openReceiptForm(context),
           _Tab.expenses => openExpenseForm(context),
         },
         icon: const Icon(Icons.add),
         label: Text(switch (_tab) {
           _Tab.quotations => 'Quotation',
           _Tab.invoices => 'Invoice',
+          _Tab.receipts => 'Receipt',
           _Tab.expenses => 'Expense',
         }),
       ),
@@ -91,7 +98,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
               ),
             ),
             MoneyPanel(m),
-            Padding(
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
               child: SegmentedButton<_Tab>(
                 showSelectedIcon: false,
@@ -103,6 +111,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ButtonSegment(
                     value: _Tab.invoices,
                     label: Text('Invoices ${repo.invoices.length}'),
+                  ),
+                  ButtonSegment(
+                    value: _Tab.receipts,
+                    label: Text('Receipts ${repo.payments.length}'),
                   ),
                   ButtonSegment(
                     value: _Tab.expenses,
@@ -120,11 +132,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   icon: switch (_tab) {
                     _Tab.quotations => Icons.request_quote_outlined,
                     _Tab.invoices => Icons.receipt_long_outlined,
+                    _Tab.receipts => Icons.payments_outlined,
                     _Tab.expenses => Icons.receipt_outlined,
                   },
                   title: switch (_tab) {
                     _Tab.quotations => 'No quotations in this period',
                     _Tab.invoices => 'No invoices in this period',
+                    _Tab.receipts => 'No receipts in this period',
                     _Tab.expenses => 'No expenses in this period',
                   },
                 ),
@@ -150,21 +164,26 @@ class MoneyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final ak = AkColors.of(context);
     final tiles = [
-      if (showQuoted) ('Agreed fees', m.quoted, Icons.handshake_outlined, null),
-      ('Invoiced', m.invoiced, Icons.receipt_long_outlined, null),
-      ('Received', m.received, Icons.savings_outlined, ak.good),
+      if (showQuoted)
+        ('Agreed fees', m.quoted, Icons.handshake_outlined, null, null),
+      ('Invoiced', m.invoiced, Icons.receipt_long_outlined, null, null),
+      ('Received', m.received, Icons.savings_outlined, ak.good, null),
       (
         'Outstanding',
         m.outstanding,
         Icons.hourglass_bottom,
         m.overdue > 0 ? ak.bad : null,
+        m.advances > 0.005
+            ? 'Advances held ${fmtMoneyShort(m.advances)}'
+            : null,
       ),
-      ('Expenses', m.expenses, Icons.shopping_bag_outlined, null),
+      ('Expenses', m.expenses, Icons.shopping_bag_outlined, null, null),
       (
         'Profit (received − expenses)',
         m.profit,
         Icons.trending_up,
         m.profit < 0 ? ak.bad : ak.good,
+        null,
       ),
     ];
     return Padding(
@@ -220,6 +239,13 @@ class MoneyPanel extends StatelessWidget {
                               ),
                             ),
                           ),
+                          if (t.$5 != null)
+                            Text(
+                              t.$5!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 11.5, color: ak.muted),
+                            ),
                         ],
                       ),
                     ),
@@ -375,6 +401,13 @@ class ProjectMoneyTab extends StatelessWidget {
     final quotes = repo.quotationsFor(p.id);
     final invoices = repo.invoicesFor(p.id);
     final expenses = repo.expensesFor(p.id);
+    final receipts = repo.receipts(projectId: p.id);
+    final accepted = quotes
+        .where(
+          (q) =>
+              q.status == QuotationStatus.accepted && q.paymentTerms.isNotEmpty,
+        )
+        .toList();
     final m = repo.money(projectId: p.id);
 
     Widget header(String title, VoidCallback onAdd, String addLabel) =>
@@ -443,6 +476,18 @@ class ProjectMoneyTab extends StatelessWidget {
           ...rows([
             for (final q in quotes) QuotationTile(q),
           ], 'No quotation yet.'),
+          if (accepted.isNotEmpty) ...[
+            const SectionHeader('Payment schedule'),
+            ...rows([
+              for (final q in accepted)
+                for (var k = 0; k < q.paymentTerms.length; k++)
+                  TermStatusTile(
+                    quotation: q,
+                    index: k,
+                    showQuotation: accepted.length > 1,
+                  ),
+            ], ''),
+          ],
           header(
             'Invoices',
             () => openInvoiceForm(context, projectId: p.id),
@@ -451,6 +496,15 @@ class ProjectMoneyTab extends StatelessWidget {
           ...rows([
             for (final i in invoices) InvoiceTile(i),
           ], 'No invoice yet.'),
+          header(
+            'Receipts',
+            () =>
+                openReceiptForm(context, projectId: p.id, clientId: p.clientId),
+            'Receipt',
+          ),
+          ...rows([
+            for (final r in receipts) ReceiptTile(r),
+          ], 'No money received yet.'),
           header(
             'Expenses',
             () => openExpenseForm(context, projectId: p.id),

@@ -47,6 +47,18 @@ class PhaseProgress {
   double get balance => ((invoiced - received) * 100).round() / 100;
 }
 
+/// One instalment of an accepted quotation's payment schedule.
+class ScheduleLine {
+  const ScheduleLine(this.quotation, this.index, this.status);
+
+  final Quotation quotation;
+  final int index;
+  final TermStatus status;
+
+  String get label =>
+      status.term.label.isEmpty ? 'Payment ${index + 1}' : status.term.label;
+}
+
 /// Detailed statement for one project: by phase, by trade and item, and
 /// the account movements.
 class ProjectStatement {
@@ -57,6 +69,7 @@ class ProjectStatement {
     required this.layers,
     required this.contractValue,
     required this.currentStageId,
+    this.schedule = const [],
   });
 
   final Project project;
@@ -67,6 +80,9 @@ class ProjectStatement {
   /// Accepted quotations, VAT included.
   final double contractValue;
   final String? currentStageId;
+
+  /// Payment schedules of the accepted quotations, term by term.
+  final List<ScheduleLine> schedule;
 
   double get billedPercent =>
       contractValue == 0 ? 0 : account.invoiced / contractValue * 100;
@@ -151,6 +167,11 @@ ProjectStatement buildProjectStatement(Repository repo, String projectId) {
       ..sort((a, b) => _rank(a.name).compareTo(_rank(b.name))),
     contractValue: accepted.fold(0.0, (s, q) => s + q.total),
     currentStageId: project.stageId,
+    schedule: [
+      for (final q in accepted)
+        for (var k = 0; k < q.paymentTerms.length; k++)
+          ScheduleLine(q, k, repo.termStatus(q, k)),
+    ],
   );
 }
 

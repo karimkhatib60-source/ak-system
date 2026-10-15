@@ -9,6 +9,7 @@ import '../format.dart';
 import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'receipts.dart';
 
 /// Opens a quotation for editing, or a new one when [quotation] is null.
 Future<void> openQuotationForm(
@@ -89,6 +90,41 @@ class _Line {
 
 double? _parse(String s) => double.tryParse(s.replaceAll(',', '').trim());
 
+/// One editable row of a quotation's payment schedule.
+class _TermRow {
+  _TermRow(PaymentTerm t)
+    : label = TextEditingController(text: t.label),
+      percent = TextEditingController(
+        text: t.percent == 0 ? '' : _Line._plain(t.percent),
+      ),
+      amount = TextEditingController(
+        text: t.amount == 0 || t.percent != 0 ? '' : _Line._plain(t.amount),
+      ),
+      due = TextEditingController(text: t.due);
+
+  final TextEditingController label;
+  final TextEditingController percent;
+  final TextEditingController amount;
+  final TextEditingController due;
+
+  PaymentTerm get term => PaymentTerm(
+    label: label.text.trim(),
+    percent: _parse(percent.text.replaceAll('%', '')) ?? 0,
+    amount: _parse(amount.text) ?? 0,
+    due: due.text.trim(),
+  );
+
+  bool get isBlank =>
+      term.label.isEmpty && term.percent == 0 && term.amount == 0;
+
+  void dispose() {
+    label.dispose();
+    percent.dispose();
+    amount.dispose();
+    due.dispose();
+  }
+}
+
 /// One form for both quotations and invoices: the same priced lines,
 /// discount and VAT, with the actions that fit each.
 class MoneyDocForm extends StatefulWidget {
@@ -126,10 +162,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   late final TextEditingController _terms;
   late final TextEditingController _notes;
   final _lines = <_Line>[];
+  final _termRows = <_TermRow>[];
   String? _clientId;
   String? _projectId;
   String? _quotationId;
   String? _stageId;
+  int? _termIndex;
   DateTime _date = DateTime.now();
   DateTime? _until;
   QuotationStatus _qStatus = QuotationStatus.draft;
@@ -190,7 +228,15 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     _qStatus = q?.status ?? QuotationStatus.draft;
     _iStatus = i?.status ?? InvoiceStatus.draft;
     _quotationId = i?.quotationId;
+    _termIndex = i?.termIndex;
     _stageId = i?.stageId ?? (i == null ? project?.stageId : null);
+    if (!widget.isInvoice) {
+      // A new quotation starts with the usual schedule for its service.
+      final terms =
+          q?.paymentTerms ??
+          paymentTermPresets[project?.service ?? ServiceType.design]!;
+      _termRows.addAll(terms.map(_TermRow.new));
+    }
   }
 
   @override
@@ -208,6 +254,9 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     }
     for (final l in _lines) {
       l.dispose();
+    }
+    for (final t in _termRows) {
+      t.dispose();
     }
     super.dispose();
   }
@@ -235,6 +284,10 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     status: _qStatus,
     terms: _terms.text.trim(),
     notes: _notes.text.trim(),
+    paymentTerms: [
+      for (final t in _termRows)
+        if (!t.isBlank) t.term,
+    ],
   );
 
   Invoice _invoice(DateTime now) => Invoice(
@@ -247,6 +300,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     projectId: _projectId,
     quotationId: _quotationId,
     stageId: _stageId,
+    termIndex: _termIndex,
     date: _date,
     dueDate: _until,
     items: _items,
@@ -375,8 +429,26 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       await repo.saveInvoice(inv.copyWith(status: InvoiceStatus.sent));
     }
     if (!mounted) return;
-    await showPaymentDialog(context, inv, repo.balanceOf(inv));
+    await openReceiptForm(context, invoice: repo.invoice(inv.id) ?? inv);
   }
+
+  /// Saves the quotation as accepted before invoicing or receiving on one
+  /// of its payment terms.
+  Future<bool> _acceptForTerms() async {
+    if (_qStatus != QuotationStatus.accepted) {
+      setState(() => _qStatus = QuotationStatus.accepted);
+    }
+    return _store(close: false);
+  }
+
+  void _usePreset(ServiceType service) => setState(() {
+    for (final t in _termRows) {
+      t.dispose();
+    }
+    _termRows
+      ..clear()
+      ..addAll(paymentTermPresets[service]!.map(_TermRow.new));
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -611,6 +683,22 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   onChanged: (v) => setState(() => _stageId = v),
                 ),
               ],
+              if (widget.isInvoice &&
+                  _termIndex != null &&
+                  repo.quotation(_quotationId) != null &&
+                  _termIndex! <
+                      repo.quotation(_quotationId)!.paymentTerms.length) ...[
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    'Bills payment term ${_termIndex! + 1} of '
+                    '${repo.quotation(_quotationId)!.number}: '
+                    '${termLabel(repo.quotation(_quotationId)!, _termIndex!)}',
+                    style: TextStyle(color: ak.muted, fontSize: 13),
+                  ),
+                ),
+              ],
               const SectionHeader('Items'),
               for (var i = 0; i < _lines.length; i++)
                 _LineEditor(
@@ -714,7 +802,30 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
               _Totals(doc: doc),
               if (inv != null) ...[
                 const SectionHeader('Payments received'),
-                if (payments.isEmpty)
+                for (final (k, (a, applied)) in repo.advancesOn(inv).indexed)
+                  GroupedRow(
+                    index: k,
+                    count: repo.advancesOn(inv).length,
+                    child: ListTile(
+                      leading: Icon(Icons.savings_outlined, color: ak.good),
+                      title: Text(fmtMoney(applied)),
+                      subtitle: Text(
+                        [
+                          if (a.number.isNotEmpty) a.number,
+                          'advance on this payment term',
+                          fmtDate(a.date),
+                        ].join(' · '),
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Send receipt',
+                        icon: const Icon(Icons.receipt_outlined, size: 20),
+                        onPressed: () => shareReceiptPdf(repo, a),
+                      ),
+                    ),
+                  ),
+                if (repo.advancesOn(inv).isNotEmpty && payments.isNotEmpty)
+                  const SizedBox(height: 8),
+                if (payments.isEmpty && repo.advancesOn(inv).isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Text(
@@ -771,6 +882,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   ),
                 ),
               ],
+              if (!widget.isInvoice) ..._termsSection(repo, doc),
               if (!widget.isInvoice) ...[
                 gap,
                 TextFormField(
@@ -796,6 +908,233 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
         ),
       ),
     );
+  }
+
+  /// The payment schedule: where each instalment stands once the
+  /// quotation is accepted, and the editor for the instalments.
+  List<Widget> _termsSection(Repository repo, PricedDocument doc) {
+    final ak = AkColors.of(context);
+    final saved = repo.quotation(_id);
+    final accepted =
+        saved != null &&
+        saved.status == QuotationStatus.accepted &&
+        saved.paymentTerms.isNotEmpty;
+    bool used(int k) =>
+        saved != null &&
+        k < saved.paymentTerms.length &&
+        (repo.termStatus(saved, k).received > 0 ||
+            repo.termStatus(saved, k).invoices.isNotEmpty);
+    // Removing a row shifts the ones after it, so a row is locked when it
+    // or any later row already has money or an invoice on it.
+    bool locked(int k) {
+      for (var j = k; j < _termRows.length; j++) {
+        if (used(j)) return true;
+      }
+      return false;
+    }
+
+    final anyLocked = _termRows.isNotEmpty && locked(0);
+    final terms = [for (final t in _termRows) t.term];
+    final pct = terms.fold(0.0, (s, t) => s + t.percent);
+    final sum = terms.fold(0.0, (s, t) => s + t.valueOf(doc.total));
+    final off = terms.isNotEmpty && (sum - doc.total).abs() > 0.5;
+    const num = TextInputType.numberWithOptions(decimal: true);
+
+    final editor = <Widget>[
+      for (var k = 0; k < _termRows.length; k++)
+        Card(
+          key: ObjectKey(_termRows[k]),
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _termRows[k].label,
+                        decoration: InputDecoration(
+                          labelText: 'Instalment ${k + 1}',
+                          hintText: 'e.g. Advance payment',
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: locked(k)
+                          ? 'Has receipts or invoices'
+                          : 'Remove instalment',
+                      icon: Icon(
+                        locked(k) ? Icons.lock_outline : Icons.close,
+                        size: 18,
+                      ),
+                      onPressed: locked(k)
+                          ? null
+                          : () =>
+                                setState(() => _termRows.removeAt(k).dispose()),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _termRows[k].percent,
+                          keyboardType: num,
+                          decoration: const InputDecoration(
+                            labelText: 'Share',
+                            suffixText: '%',
+                          ),
+                          onChanged: (v) => setState(() {
+                            if (v.trim().isNotEmpty) {
+                              _termRows[k].amount.clear();
+                            }
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: TextFormField(
+                          controller: _termRows[k].amount,
+                          keyboardType: num,
+                          decoration: const InputDecoration(
+                            labelText: 'or fixed amount',
+                            prefixText: '\$',
+                          ),
+                          onChanged: (v) => setState(() {
+                            if (v.trim().isNotEmpty) {
+                              _termRows[k].percent.clear();
+                            }
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: TextFormField(
+                    controller: _termRows[k].due,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'When due',
+                      hintText: 'e.g. On signing the agreement',
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 8),
+                    child: Text(
+                      fmtMoney(_termRows[k].term.valueOf(doc.total)),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      Row(
+        children: [
+          TextButton.icon(
+            onPressed: () =>
+                setState(() => _termRows.add(_TermRow(const PaymentTerm()))),
+            icon: const Icon(Icons.add),
+            label: const Text('Add instalment'),
+          ),
+          PopupMenuButton<ServiceType>(
+            enabled: !anyLocked,
+            tooltip: 'Standard payment terms',
+            onSelected: _usePreset,
+            itemBuilder: (_) => [
+              for (final sv in ServiceType.values)
+                PopupMenuItem(
+                  value: sv,
+                  child: Text(
+                    '${serviceLabel(sv)}: '
+                    '${paymentTermPresets[sv]!.map((t) => _Line._plain(t.percent)).join(' / ')}',
+                  ),
+                ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 18,
+                    color: anyLocked ? ak.muted : null,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Standard',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: anyLocked
+                          ? ak.muted
+                          : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      if (terms.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            off
+                ? 'The instalments add up to ${fmtMoney(sum)}'
+                      '${pct == 0 ? '' : ' (${_Line._plain(pct)}%)'}, not the '
+                      'quotation total of ${fmtMoney(doc.total)}.'
+                : 'Instalments add up to the quotation total'
+                      '${pct == 0 ? '' : ' (${_Line._plain(pct)}%)'}.',
+            style: TextStyle(
+              fontSize: 13,
+              color: off ? ak.bad : ak.muted,
+              fontWeight: off ? FontWeight.w600 : null,
+            ),
+          ),
+        ),
+    ];
+
+    return [
+      const SectionHeader('Payment terms'),
+      if (accepted) ...[
+        for (var k = 0; k < saved.paymentTerms.length; k++)
+          GroupedRow(
+            index: k,
+            count: saved.paymentTerms.length,
+            child: TermStatusTile(
+              quotation: saved,
+              index: k,
+              beforeAction: _acceptForTerms,
+            ),
+          ),
+        const SizedBox(height: 8),
+        ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+          childrenPadding: EdgeInsets.zero,
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          title: const Text('Edit the instalments'),
+          children: editor,
+        ),
+      ] else
+        ...editor,
+    ];
   }
 }
 
@@ -965,113 +1304,6 @@ class _Totals extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// Records money received against an invoice.
-Future<void> showPaymentDialog(
-  BuildContext context,
-  Invoice invoice,
-  double balance,
-) async {
-  final repo = context.read<Repository>();
-  final amount = TextEditingController(
-    text: balance > 0 ? balance.toStringAsFixed(2) : '',
-  );
-  final ref = TextEditingController();
-  var method = PaymentMethod.bankTransfer;
-  var date = repo.now();
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, set) => AlertDialog(
-        title: Text('Payment on ${invoice.number}'),
-        content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amount,
-                autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: 'Amount received',
-                  prefixText: '\$ ',
-                ),
-              ),
-              const SizedBox(height: 12),
-              DateField(
-                label: 'Date received',
-                value: date,
-                onChanged: (d) => set(() => date = d ?? date),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<PaymentMethod>(
-                initialValue: method,
-                decoration: const InputDecoration(labelText: 'Method'),
-                items: [
-                  for (final m in PaymentMethod.values)
-                    DropdownMenuItem(
-                      value: m,
-                      child: Text(paymentMethodLabel(m)),
-                    ),
-                ],
-                onChanged: (v) => set(() => method = v!),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ref,
-                decoration: const InputDecoration(
-                  labelText: 'Reference (optional)',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save payment'),
-          ),
-        ],
-      ),
-    ),
-  );
-  final v = _parse(amount.text);
-  if (ok == true && v != null && v > 0) {
-    final now = repo.now();
-    final id = repo.newId();
-    await repo.savePayment(
-      Payment(
-        id: id,
-        createdAt: now,
-        updatedAt: now,
-        invoiceId: invoice.id,
-        date: date,
-        amount: v,
-        method: method,
-        reference: ref.text.trim(),
-      ),
-    );
-    final saved = repo.payments.where((p) => p.id == id).firstOrNull;
-    if (saved != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment saved as receipt ${saved.number}'),
-          action: SnackBarAction(
-            label: 'Send receipt',
-            onPressed: () => shareReceiptPdf(repo, saved),
-          ),
-        ),
-      );
-    }
   }
 }
 

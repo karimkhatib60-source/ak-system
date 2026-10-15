@@ -215,7 +215,7 @@ void main() {
     expect(m.outstanding, closeTo(0, 1e-9));
   });
 
-  test('deleting an invoice removes its payments', () async {
+  test('deleting an invoice keeps its receipts on account', () async {
     final pr = await project();
     final inv = repo
         .invoiceFromQuotation(quote(pr))
@@ -234,7 +234,12 @@ void main() {
     );
     await repo.deleteInvoice(inv);
     expect(repo.invoices, isEmpty);
-    expect(repo.payments, isEmpty);
+    final kept = repo.payments.single;
+    expect(kept.onInvoice, isFalse);
+    expect(kept.clientId, inv.clientId);
+    expect(kept.projectId, inv.projectId);
+    expect(kept.notes, 'Was on ${inv.number}');
+    expect(repo.unappliedOf(kept), 10);
   });
 
   test('the advisor flags a project with no deadline or quotation', () async {

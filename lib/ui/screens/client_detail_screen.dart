@@ -12,6 +12,7 @@ import '../widgets/common.dart';
 import '../widgets/tiles.dart';
 import 'client_form.dart';
 import 'project_form.dart';
+import 'receipts.dart';
 
 class ClientsScreen extends StatefulWidget {
   const ClientsScreen({super.key});
@@ -265,18 +266,47 @@ class _AccountCard extends StatelessWidget {
                 children: [
                   figure('Invoiced', st.invoiced),
                   figure('Received', st.received, color: ak.good),
-                  figure(
-                    'Balance due',
-                    st.closing,
-                    color: st.overdue > 0 ? ak.bad : null,
-                  ),
+                  if (st.advances > 0.005)
+                    figure(
+                      'Due on invoices',
+                      st.dueOnInvoices,
+                      color: st.overdue > 0 ? ak.bad : null,
+                    )
+                  else if (st.closing < -0.005)
+                    figure('Credit', -st.closing, color: ak.good)
+                  else
+                    figure(
+                      'Balance due',
+                      st.closing,
+                      color: st.overdue > 0 ? ak.bad : null,
+                    ),
                 ],
               ),
+              if (st.advances > 0.005) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Advances held: ${fmtMoney(st.advances)} received but '
+                  'not invoiced yet.',
+                  style: TextStyle(color: ak.muted, fontSize: 12.5),
+                ),
+              ],
               const SizedBox(height: 12),
-              FilledButton.tonalIcon(
-                onPressed: () => showStatementSheet(context, clientId),
-                icon: const Icon(Icons.request_quote_outlined),
-                label: const Text('Statement of account'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => showStatementSheet(context, clientId),
+                    icon: const Icon(Icons.request_quote_outlined),
+                    label: const Text('Statement of account'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        openReceiptForm(context, clientId: clientId),
+                    icon: const Icon(Icons.payments_outlined),
+                    label: const Text('Receipt'),
+                  ),
+                ],
               ),
             ],
           ),
