@@ -244,8 +244,8 @@ void main() {
     expect(u.dismissed, isTrue);
   });
 
-  test('this build is version 10, released from the AK repository', () {
-    expect(appVersion, 10);
+  test('this build is version 11, released from the AK repository', () {
+    expect(appVersion, 11);
     expect(releaseRepo, 'karimkhatib60-source/ak-system');
   });
 }

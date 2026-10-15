@@ -130,19 +130,22 @@ jobs:
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath AK-System-windows.zip
       - name: Build the installer
         shell: pwsh
+        # NSIS is free for any use, commercial included.
         run: |
           $version = (Select-String -Path lib/app_version.dart -Pattern '^const appVersion = (\d+);').Matches[0].Groups[1].Value
-          function Find-Iscc {
-            Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe" -ErrorAction SilentlyContinue |
+          function Find-Makensis {
+            Get-ChildItem "${env:ProgramFiles(x86)}\NSIS\makensis.exe", "$env:ProgramFiles\NSIS\makensis.exe" -ErrorAction SilentlyContinue |
               Select-Object -First 1 -ExpandProperty FullName
           }
-          $iscc = Find-Iscc
-          if (-not $iscc) {
-            choco install innosetup --version=6.7.1 -y --no-progress
-            $iscc = Find-Iscc
+          $makensis = Find-Makensis
+          if (-not $makensis) {
+            choco install nsis --version=3.12.0 -y --no-progress
+            $makensis = Find-Makensis
           }
-          if (-not $iscc) { throw 'Inno Setup 6 is not available' }
-          & $iscc "/DAppVersion=$version" windows\installer\ak_system.iss
+          if (-not $makensis) { throw 'NSIS 3 is not available' }
+          & $makensis -VERSION
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & $makensis -V2 -WX "-DAPP_VERSION=$version" windows\installer\ak_system.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Move-Item dist\AK-System-Setup.exe AK-System-Setup.exe
       - uses: actions/upload-artifact@v4

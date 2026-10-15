@@ -28,15 +28,9 @@ class PlatformInstaller implements Installer {
     await file.writeAsBytes(bytes, flush: true);
     await Process.start(
       file.path,
-      // No questions and no message boxes; a small progress window; close
-      // the app if it is still open; never restart Windows.
-      const [
-        '/SILENT',
-        '/SP-',
-        '/SUPPRESSMSGBOXES',
-        '/CLOSEAPPLICATIONS',
-        '/NORESTART',
-      ],
+      // Silent: no questions. The installer waits for the app to close,
+      // replaces it and opens it again.
+      const ['/S'],
       mode: ProcessStartMode.detached,
     );
   }
