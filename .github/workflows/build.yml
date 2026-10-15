@@ -1,16 +1,21 @@
 # Builds the Android app and the Windows app on every push.
 # A release: raise appVersion in lib/app_version.dart (and version: in
-# pubspec.yaml), write release-notes.md, then push a tag v<appVersion>.
-# Once both apps are built, one Release is published with the APK and the
-# Windows installer; the installed Windows app finds it and offers it.
+# pubspec.yaml), write release-notes.md, and push to main. When main has a
+# version that has no release yet, both apps are built and one Release
+# v<appVersion> is published with the Windows installer (and the APK once
+# it is signed); the installed Windows app finds it and offers it.
 name: Build
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
+
+# Runs on the same branch wait for each other, so a version is released once.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 
 # Only the release job may write to the repository.
 permissions:
@@ -22,23 +27,36 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
     steps:
       - uses: actions/checkout@v4
-      - name: Releases must be public
-        if: startsWith(github.ref, 'refs/tags/v') && github.event.repository.private
-        run: |
-          echo "::error::The Windows app downloads updates without a login, so this repository must be public."
-          exit 1
-      - name: The tag matches the app version
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: The app version, and whether it is new
+        id: version
+        env:
+          PRIVATE: ${{ github.event.repository.private }}
         run: |
           v=$(sed -n 's/^const appVersion = \([0-9]*\);/\1/p' lib/app_version.dart)
           p=$(sed -n 's/^version: \([0-9]*\)\..*/\1/p' pubspec.yaml)
           n=$(head -n 1 release-notes.md | tr -d '\r')
-          if [ "v$v" != "$GITHUB_REF_NAME" ] || [ "$p" != "$v" ] || [ "$n" != "Version $v" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME, appVersion $v, pubspec version $p and release notes ('$n') must agree"
+          if [ -z "$v" ] || [ "$p" != "$v" ] || [ "$n" != "Version $v" ]; then
+            echo "::error::appVersion ($v), the pubspec version ($p) and the first line of release-notes.md ('$n') must agree"
             exit 1
           fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          release=false
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            if [ -z "$(git ls-remote --tags origin "refs/tags/v$v")" ]; then
+              release=true
+              if [ "$PRIVATE" = true ]; then
+                echo "::error::The Windows app downloads updates without a login, so this repository must be public."
+                exit 1
+              fi
+            fi
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "Version $v, release: $release"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -137,11 +155,13 @@ jobs:
   # One Release, published only when both apps are built, so the Windows
   # app never sees a release without its installer.
   release:
-    needs: [android, windows]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, android, windows]
+    if: needs.test.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: v${{ needs.test.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -152,6 +172,9 @@ jobs:
         run: test -f out/AK-System-Setup.exe
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Version ${{ needs.test.outputs.version }}
           body_path: release-notes.md
           make_latest: true
           # The APK is there only when it was signed with the AK key.
@@ -165,9 +188,9 @@ jobs:
           for try in 1 2 3; do
             sleep 15
             if curl -fsS "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" |
-              jq -e --arg t "$GITHUB_REF_NAME" '.tag_name == $t and any(.assets[]; .name == "AK-System-Setup.exe")'; then
+              jq -e --arg t "$TAG" '.tag_name == $t and any(.assets[]; .name == "AK-System-Setup.exe")'; then
               exit 0
             fi
           done
-          echo "::error::The latest release is not $GITHUB_REF_NAME with AK-System-Setup.exe, as seen without a login"
+          echo "::error::The latest release is not $TAG with AK-System-Setup.exe, as seen without a login"
           exit 1

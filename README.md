@@ -62,7 +62,8 @@ there without a login.
    `version:` in `pubspec.yaml` (for example 11 and `11.0.0+11`).
 2. Rewrite `release-notes.md`; its first line must be `Version 11`. The app
    shows these notes under "What's new".
-3. Commit, then push the tag `v11`. The build checks that the three agree.
+3. Commit and push to `main`. The build checks that the three agree and,
+   because version 11 has no release yet, publishes the release `v11`.
 
 ### Android signing key
 
