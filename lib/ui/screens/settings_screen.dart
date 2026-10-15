@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../app_version.dart';
 import '../../data/company_links.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
@@ -12,6 +13,8 @@ import '../maps.dart';
 import '../theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/common.dart';
+import '../widgets/update_banner.dart';
+import '../../update/update_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -75,11 +78,12 @@ class SettingsScreen extends StatelessWidget {
             const SectionHeader('About'),
             const ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('AK System · version 10'),
+              title: Text('AK System · version $appVersion'),
               subtitle: Text(
                 'Projects, tasks, deliverables and finance. Works offline; syncs when online.',
               ),
             ),
+            const _UpdatesTile(),
           ],
         ),
       ),
@@ -719,6 +723,72 @@ class _CompanyCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Updates of the Windows app: the state of the last check, and the button
+/// to look again or install.
+class _UpdatesTile extends StatelessWidget {
+  const _UpdatesTile();
+
+  @override
+  Widget build(BuildContext context) {
+    final u = context.watch<UpdateService?>();
+    if (u == null || !u.supported) return const SizedBox();
+    final r = u.available;
+    final (title, subtitle) = switch (u.state) {
+      UpdateState.checking => ('Checking for updates…', null),
+      UpdateState.downloading => (
+        'Downloading version ${r?.version}…',
+        '${(u.progress * 100).round()}%',
+      ),
+      UpdateState.installing => (
+        'Installing version ${r?.version}…',
+        'AK System will open again in a moment.',
+      ),
+      UpdateState.ready => (
+        'Version ${r?.version} is ready to install',
+        u.problem ?? 'Your data stays as it is.',
+      ),
+      UpdateState.upToDate => ('You have the latest version', null),
+      UpdateState.failed => ('Updates', u.problem),
+      UpdateState.idle => (
+        'Updates',
+        'When a new version is ready you will see it here and at the top '
+            'of the app.',
+      ),
+    };
+    return ListTile(
+      leading: const Icon(Icons.system_update_alt),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      trailing: switch (u.state) {
+        UpdateState.ready => Wrap(
+          spacing: 4,
+          children: [
+            if (r != null)
+              TextButton(
+                onPressed: () => showWhatsNew(context, r),
+                child: const Text('What\'s new'),
+              ),
+            if (u.blocked)
+              TextButton(
+                onPressed: () => openDownloadPage(u),
+                child: const Text('Download page'),
+              ),
+            FilledButton(onPressed: u.install, child: const Text('Update now')),
+          ],
+        ),
+        UpdateState.checking ||
+        UpdateState.downloading ||
+        UpdateState.installing => const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        _ => TextButton(onPressed: u.check, child: const Text('Check now')),
+      },
     );
   }
 }

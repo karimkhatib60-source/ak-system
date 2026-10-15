@@ -1,5 +1,8 @@
 # Builds the Android app and the Windows app on every push.
-# Tag a commit "v1.0.0" (or any v*) to publish both as a GitHub Release.
+# A release: raise appVersion in lib/app_version.dart (and version: in
+# pubspec.yaml), write release-notes.md, then push a tag v<appVersion>.
+# Once both apps are built, one Release is published with the APK and the
+# Windows installer; the installed Windows app finds it and offers it.
 name: Build
 
 on:
@@ -9,8 +12,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Only the release job may write to the repository.
 permissions:
-  contents: write
+  contents: read
 
 env:
   FLUTTER_VERSION: '3.47.7'
@@ -20,6 +24,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Releases must be public
+        if: startsWith(github.ref, 'refs/tags/v') && github.event.repository.private
+        run: |
+          echo "::error::The Windows app downloads updates without a login, so this repository must be public."
+          exit 1
+      - name: The tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(sed -n 's/^const appVersion = \([0-9]*\);/\1/p' lib/app_version.dart)
+          p=$(sed -n 's/^version: \([0-9]*\)\..*/\1/p' pubspec.yaml)
+          n=$(head -n 1 release-notes.md | tr -d '\r')
+          if [ "v$v" != "$GITHUB_REF_NAME" ] || [ "$p" != "$v" ] || [ "$n" != "Version $v" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, appVersion $v, pubspec version $p and release notes ('$n') must agree"
+            exit 1
+          fi
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -62,10 +81,6 @@ jobs:
         with:
           name: AK-System-android
           path: AK-System-android.apk
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: AK-System-android.apk
 
   windows:
     needs: test
@@ -77,15 +92,74 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - run: flutter build windows --release
+      # The app looks for updates in the repository that built it.
+      - run: flutter build windows --release --dart-define=AK_RELEASE_REPO=${{ github.repository }}
+      - name: Add the Visual C++ runtime
+        shell: pwsh
+        # Shipped next to the exe so the app starts on a laptop without the
+        # Visual C++ redistributable (installing that would need admin).
+        run: |
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:WINDIR\System32\$dll" build\windows\x64\runner\Release\ -ErrorAction Stop
+          }
       - name: Package
         shell: pwsh
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath AK-System-windows.zip
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path lib/app_version.dart -Pattern '^const appVersion = (\d+);').Matches[0].Groups[1].Value
+          function Find-Iscc {
+            Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          $iscc = Find-Iscc
+          if (-not $iscc) {
+            choco install innosetup --version=6.7.1 -y --no-progress
+            $iscc = Find-Iscc
+          }
+          if (-not $iscc) { throw 'Inno Setup 6 is not available' }
+          & $iscc "/DAppVersion=$version" windows\installer\ak_system.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item dist\AK-System-Setup.exe AK-System-Setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: AK-System-windows
-          path: AK-System-windows.zip
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+          path: |
+            AK-System-Setup.exe
+            AK-System-windows.zip
+
+  # One Release, published only when both apps are built, so the Windows
+  # app never sees a release without its installer.
+  release:
+    needs: [android, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          files: AK-System-windows.zip
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            out/AK-System-Setup.exe
+            out/AK-System-android.apk
+      - name: The Windows app can see the release
+        # Asked without a login, as the app asks.
+        run: |
+          for try in 1 2 3; do
+            sleep 15
+            if curl -fsS "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" |
+              jq -e --arg t "$GITHUB_REF_NAME" '.tag_name == $t and any(.assets[]; .name == "AK-System-Setup.exe")'; then
+              exit 0
+            fi
+          done
+          echo "::error::The latest release is not $GITHUB_REF_NAME with AK-System-Setup.exe, as seen without a login"
+          exit 1

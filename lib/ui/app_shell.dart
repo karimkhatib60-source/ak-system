@@ -11,6 +11,7 @@ import 'screens/settings_screen.dart';
 import 'theme.dart';
 import 'widgets/brand.dart';
 import 'widgets/common.dart';
+import 'widgets/update_banner.dart';
 
 /// Main navigation: a side rail on a laptop, a bottom bar on a phone.
 class AppShell extends StatefulWidget {
@@ -46,6 +47,15 @@ class _AppShellState extends State<AppShell> {
     3 => const ClientsScreen(),
     _ => const FinanceScreen(),
   };
+
+  /// The update banner, when a new version of the Windows app is ready,
+  /// above the page.
+  Widget _withUpdates(Widget page) => Column(
+    children: [
+      const UpdateBanner(),
+      Expanded(child: page),
+    ],
+  );
 
   void _openAssistant() => Navigator.push(
     context,
@@ -120,7 +130,7 @@ class _AppShellState extends State<AppShell> {
                   ),
                   actions: actions,
                 ),
-                body: _body(),
+                body: _withUpdates(_body()),
               ),
             ),
           ],
@@ -142,7 +152,7 @@ class _AppShellState extends State<AppShell> {
         ),
         actions: actions,
       ),
-      body: _body(),
+      body: _withUpdates(_body()),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

@@ -40,12 +40,28 @@ the data uploads automatically once you connect.
 ## Installing
 
 Every push to `main` builds both apps (GitHub > Actions > latest run >
-Artifacts). Tagging a commit `v1.0.0` publishes them under Releases.
+Artifacts). A tag `v<appVersion>` publishes them under Releases; the
+repository must be public, because the Windows app looks for updates
+there without a login.
 
-- **Windows:** download `AK-System-windows.zip`, unzip it to a folder such as
-  `C:\AK System`, and run `ak_system.exe`.
+- **Windows:** from the latest Release, download `AK-System-Setup.exe` and
+  open it. Windows may say "Windows protected your PC" because the installer
+  is not code-signed: click **More info**, then **Run anyway**. It installs
+  for the current user (no admin rights) and opens the app. From then on the
+  app shows "Version N is ready" at the top when a new release is out;
+  **Update now** downloads it, checks it, and reinstalls; the data in
+  `%APPDATA%\com.akdac\AK System` is kept. If an older copy was unzipped by
+  hand (for example to `C:\AK System`), delete that folder and its shortcut.
 - **Android:** download `AK-System-android.apk` on the phone and open it. Allow
   "install unknown apps" for your browser or file manager when asked.
+
+### Releasing a new version
+
+1. Raise `appVersion` in `lib/app_version.dart` and the major number of
+   `version:` in `pubspec.yaml` (for example 11 and `11.0.0+11`).
+2. Rewrite `release-notes.md`; its first line must be `Version 11`. The app
+   shows these notes under "What's new".
+3. Commit, then push the tag `v11`. The build checks that the three agree.
 
 ### Android signing key
 
