@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/statement.dart';
+import '../format.dart';
+import '../pdf_docs.dart';
+import '../theme.dart';
+
 import '../../data/repository.dart';
 import '../widgets/common.dart';
 import '../widgets/tiles.dart';
@@ -200,6 +205,7 @@ class ClientDetailScreen extends StatelessWidget {
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ),
+            if (repo.isOwner) _AccountCard(clientId: c.id),
             SectionHeader('Projects (${projects.length})'),
             if (projects.isEmpty)
               const Padding(
@@ -216,4 +222,176 @@ class ClientDetailScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The client's balance, with the statement of account to send.
+class _AccountCard extends StatelessWidget {
+  const _AccountCard({required this.clientId});
+
+  final String clientId;
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.watch<Repository>();
+    final ak = AkColors.of(context);
+    final st = buildStatement(repo, clientId);
+    if (st.lines.isEmpty && st.contractValue == 0) return const SizedBox();
+    Widget figure(String l, double v, {Color? color}) => Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l, style: TextStyle(color: ak.muted, fontSize: 12)),
+          const SizedBox(height: 2),
+          Text(
+            fmtMoneyShort(v),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  figure('Invoiced', st.invoiced),
+                  figure('Received', st.received, color: ak.good),
+                  figure(
+                    'Balance due',
+                    st.closing,
+                    color: st.overdue > 0 ? ak.bad : null,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: () => showStatementSheet(context, clientId),
+                icon: const Icon(Icons.request_quote_outlined),
+                label: const Text('Statement of account'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Choose the period and project, then send the statement as a PDF.
+Future<void> showStatementSheet(BuildContext context, String clientId) {
+  final repo = context.read<Repository>();
+  final now = repo.now();
+  var period = 'all';
+  DateTime? from;
+  String? projectId;
+  final projects = repo.projectsFor(clientId);
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) {
+        final start = switch (period) {
+          'year' => DateTime(now.year),
+          'custom' => from,
+          _ => null,
+        };
+        final st = buildStatement(
+          repo,
+          clientId,
+          from: start,
+          projectId: projectId,
+        );
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Statement of account',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 14),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'all', label: Text('All time')),
+                    ButtonSegment(value: 'year', label: Text('This year')),
+                    ButtonSegment(value: 'custom', label: Text('From date')),
+                  ],
+                  selected: {period},
+                  onSelectionChanged: (v) => set(() {
+                    period = v.first;
+                    if (period == 'custom') {
+                      from ??= DateTime(now.year, now.month);
+                    }
+                  }),
+                ),
+                if (period == 'custom') ...[
+                  const SizedBox(height: 12),
+                  DateField(
+                    label: 'From',
+                    value: from,
+                    onChanged: (d) => set(() => from = d),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  initialValue: projectId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Project'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('All projects'),
+                    ),
+                    for (final p in projects)
+                      DropdownMenuItem(
+                        value: p.id,
+                        child: Text('${p.code} · ${p.name}'),
+                      ),
+                  ],
+                  onChanged: (v) => set(() => projectId = v),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  '${st.lines.length} movements · invoiced '
+                  '${fmtMoney(st.invoiced)} · received '
+                  '${fmtMoney(st.received)}',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Balance due ${fmtMoney(st.closing)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () async {
+                    await shareStatementPdf(repo, st);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  icon: const Icon(Icons.ios_share),
+                  label: const Text('Send PDF'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }

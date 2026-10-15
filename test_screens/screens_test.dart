@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:ak_system/data/models.dart';
 import 'package:ak_system/data/repository.dart';
+import 'package:ak_system/data/statement.dart';
 import 'package:ak_system/main.dart';
 import 'package:ak_system/ui/app_shell.dart';
 import 'package:ak_system/ui/pdf_docs.dart';
@@ -411,6 +412,67 @@ void main() {
           ],
         ),
       );
+      for (final (id, n, d, pct) in [
+        ('i3', 'INV-26-003', DateTime(2026, 8, 20), .4),
+        ('i4', 'INV-26-004', DateTime(2026, 9, 25), .3),
+      ]) {
+        final q2 = r.quotation('q2')!;
+        await r.saveInvoice(
+          Invoice(
+            id: id,
+            createdAt: t,
+            updatedAt: t,
+            number: n,
+            title: 'Progress payment ${(pct * 100).round()}%',
+            clientId: 'c3',
+            projectId: 'p3',
+            quotationId: 'q2',
+            date: d,
+            dueDate: d.add(const Duration(days: 14)),
+            status: InvoiceStatus.sent,
+            items: [
+              LineItem(
+                description: '${(pct * 100).round()}% of ${q2.number}',
+                rate: q2.net * pct,
+              ),
+            ],
+          ),
+        );
+      }
+      await r.savePayment(
+        Payment(
+          id: 'pay2',
+          createdAt: t,
+          updatedAt: t,
+          invoiceId: 'i3',
+          date: DateTime(2026, 8, 28),
+          amount: 8000,
+          reference: 'TRF 2291',
+        ),
+      );
+      await r.savePayment(
+        Payment(
+          id: 'pay3',
+          createdAt: t,
+          updatedAt: t,
+          invoiceId: 'i3',
+          date: DateTime(2026, 9, 15),
+          amount: 3181.12,
+          method: PaymentMethod.cash,
+        ),
+      );
+      await r.savePayment(
+        Payment(
+          id: 'pay4',
+          createdAt: t,
+          updatedAt: t,
+          invoiceId: 'i4',
+          date: DateTime(2026, 10, 8),
+          amount: 5000,
+          method: PaymentMethod.cheque,
+          reference: 'CHQ 104455',
+        ),
+      );
       Future<void> exp(
         String id,
         String? p,
@@ -520,6 +582,9 @@ void main() {
       File(
         'test_screens/out/sample_boq_fee_in_rates.pdf',
       ).writeAsBytesSync(await buildPdf(repo, boq.copyWith(showMarkup: false)));
+      File('test_screens/out/sample_statement.pdf').writeAsBytesSync(
+        await buildStatementPdf(repo, buildStatement(repo, 'c3')),
+      );
     });
   });
 
@@ -549,6 +614,24 @@ void main() {
     await expectLater(
       find.byType(AkApp),
       matchesGoldenFile('out/phone_boq_library.png'),
+    );
+  });
+
+  testWidgets('phone client account', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(3));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Maya Khoury'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_client_account.png'),
+    );
+    await tester.tap(find.text('Statement of account'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_statement_sheet.png'),
     );
   });
 

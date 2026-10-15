@@ -2,6 +2,7 @@ import 'package:ak_system/data/advisor.dart';
 import 'package:ak_system/data/db.dart';
 import 'package:ak_system/data/models.dart';
 import 'package:ak_system/data/repository.dart';
+import 'package:ak_system/data/statement.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -103,6 +104,67 @@ void main() {
     expect(inv.markupRate, 20);
     expect(inv.showMarkup, isFalse);
     expect(inv.total, closeTo(back.total, 1e-9));
+  });
+
+  test('statement of account: running balance, opening and aging', () async {
+    final pr = await project();
+    final t = repo.now();
+    Invoice inv(String n, DateTime d, double amount, {bool draft = false}) =>
+        Invoice(
+          id: repo.newId(),
+          createdAt: t,
+          updatedAt: t,
+          number: n,
+          clientId: pr.clientId,
+          projectId: pr.id,
+          date: d,
+          dueDate: d.add(const Duration(days: 14)),
+          vatRate: 0,
+          status: draft ? InvoiceStatus.draft : InvoiceStatus.sent,
+          items: [LineItem(description: 'Fee', rate: amount)],
+        );
+    final a = inv('INV-1', DateTime(2026, 6, 1), 1000);
+    final b = inv('INV-2', DateTime(2026, 9, 1), 2000);
+    final c = inv('INV-3', DateTime(2026, 10, 1), 500, draft: true);
+    for (final i in [a, b, c]) {
+      await repo.saveInvoice(i);
+    }
+    Future<void> pay(Invoice i, DateTime d, double v) => repo.savePayment(
+      Payment(
+        id: repo.newId(),
+        createdAt: t,
+        updatedAt: t,
+        invoiceId: i.id,
+        date: d,
+        amount: v,
+      ),
+    );
+    await pay(a, DateTime(2026, 6, 20), 1000);
+    await pay(b, DateTime(2026, 9, 10), 500);
+
+    final all = buildStatement(repo, pr.clientId!);
+    expect(all.lines.map((l) => l.balance), [1000, 0, 2000, 1500]);
+    expect(all.invoiced, 3000); // the draft is left out
+    expect(all.closing, 1500);
+    expect(all.open.single.invoice.number, 'INV-2');
+    // Due 15 Sep, statement on 14 Oct: 29 days late.
+    expect(all.open.single.daysOverdue, 29);
+    expect(all.aging, [0, 1500, 0, 0, 0]);
+
+    final fromJuly = buildStatement(
+      repo,
+      pr.clientId!,
+      from: DateTime(2026, 7, 1),
+    );
+    expect(fromJuly.opening, 0);
+    expect(fromJuly.lines, hasLength(2));
+    final fromSept5 = buildStatement(
+      repo,
+      pr.clientId!,
+      from: DateTime(2026, 9, 5),
+    );
+    expect(fromSept5.opening, 2000);
+    expect(fromSept5.closing, 1500);
   });
 
   test('numbers count up per year: QT-26-001, INV-26-001', () async {

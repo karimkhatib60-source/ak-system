@@ -3,8 +3,10 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../data/boq_library.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/statement.dart';
 import 'format.dart';
 
 const _graphite = PdfColor.fromInt(0xFF14171C);
@@ -83,93 +85,12 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      header: (ctx) => pw.Column(
-        children: [
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              pw.Container(
-                width: 34,
-                height: 34,
-                alignment: pw.Alignment.center,
-                decoration: pw.BoxDecoration(
-                  color: _blue,
-                  borderRadius: pw.BorderRadius.circular(7),
-                ),
-                child: pw.Text(
-                  'AK',
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              pw.SizedBox(width: 10),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      repo.companyName,
-                      style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold,
-                        fontSize: 12,
-                        color: _graphite,
-                      ),
-                    ),
-                    pw.Text(
-                      'Design · Consultancy · Contracting',
-                      style: const pw.TextStyle(fontSize: 8, color: _muted),
-                    ),
-                  ],
-                ),
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    isInvoice ? 'INVOICE' : 'QUOTATION',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _graphite,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  pw.Text(
-                    number,
-                    style: const pw.TextStyle(fontSize: 10, color: _blue),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 10),
-          pw.Container(height: 2, color: _graphite),
-          pw.SizedBox(height: 16),
-        ],
+      header: (ctx) => _header(
+        repo.companyName,
+        isInvoice ? 'INVOICE' : 'QUOTATION',
+        number,
       ),
-      footer: (ctx) => pw.Column(
-        children: [
-          pw.Container(height: 0.6, color: _line),
-          pw.SizedBox(height: 6),
-          pw.Row(
-            children: [
-              pw.Expanded(
-                child: pw.Text(
-                  contact,
-                  style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-                ),
-              ),
-              pw.Text(
-                'Page ${ctx.pageNumber} of ${ctx.pagesCount}',
-                style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-              ),
-            ],
-          ),
-        ],
-      ),
+      footer: (ctx) => _footer(ctx, contact),
       build: (ctx) => [
         // Parties and dates.
         pw.Row(
@@ -421,9 +342,21 @@ pw.Widget _itemsTable(PricedDocument doc) {
   for (final i in doc.items) {
     (groups[i.section] ??= []).add(i);
   }
+  // Library trades print in BOQ order; other sections follow as entered.
+  int rank(String name) {
+    final i = boqSections.indexOf(name);
+    return i < 0 ? 1000 : i;
+  }
+
+  final keys = groups.keys.toList();
+  final ordered = groups.entries.toList()
+    ..sort((a, b) {
+      final r = rank(a.key).compareTo(rank(b.key));
+      return r != 0 ? r : keys.indexOf(a.key).compareTo(keys.indexOf(b.key));
+    });
   var g = 0;
   var n = 0;
-  for (final MapEntry(key: name, value: items) in groups.entries) {
+  for (final MapEntry(key: name, value: items) in ordered) {
     g++;
     final showHead = sectioned;
     if (showHead) {
@@ -476,5 +409,426 @@ pw.Widget _itemsTable(PricedDocument doc) {
       5: const pw.FixedColumnWidth(76),
     },
     children: rows,
+  );
+}
+
+pw.Widget _header(String company, String title, String number) => pw.Column(
+  children: [
+    pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      children: [
+        pw.Container(
+          width: 34,
+          height: 34,
+          alignment: pw.Alignment.center,
+          decoration: pw.BoxDecoration(
+            color: _blue,
+            borderRadius: pw.BorderRadius.circular(7),
+          ),
+          child: pw.Text(
+            'AK',
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        pw.SizedBox(width: 10),
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                company,
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 12,
+                  color: _graphite,
+                ),
+              ),
+              pw.Text(
+                'Design · Consultancy · Contracting',
+                style: const pw.TextStyle(fontSize: 8, color: _muted),
+              ),
+            ],
+          ),
+        ),
+        pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.Text(
+              title,
+              style: pw.TextStyle(
+                fontSize: 18,
+                fontWeight: pw.FontWeight.bold,
+                color: _graphite,
+                letterSpacing: 2,
+              ),
+            ),
+            pw.Text(
+              number,
+              style: const pw.TextStyle(fontSize: 10, color: _blue),
+            ),
+          ],
+        ),
+      ],
+    ),
+    pw.SizedBox(height: 10),
+    pw.Container(height: 2, color: _graphite),
+    pw.SizedBox(height: 16),
+  ],
+);
+
+pw.Widget _footer(pw.Context ctx, String contact) => pw.Column(
+  children: [
+    pw.Container(height: 0.6, color: _line),
+    pw.SizedBox(height: 6),
+    pw.Row(
+      children: [
+        pw.Expanded(
+          child: pw.Text(
+            contact,
+            style: const pw.TextStyle(fontSize: 7.5, color: _muted),
+          ),
+        ),
+        pw.Text(
+          'Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+          style: const pw.TextStyle(fontSize: 7.5, color: _muted),
+        ),
+      ],
+    ),
+  ],
+);
+
+String _contact(Map<String, String> info) => [
+  info['address'],
+  info['phone'],
+  info['email'],
+  info['website'],
+].whereType<String>().where((s) => s.isNotEmpty).join('  ·  ');
+
+/// Builds the branded statement of account for a client.
+Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
+  final info = repo.companyInfo;
+  final client = st.client;
+  final pdf = pw.Document(
+    theme: await _theme(),
+    title: 'Statement of account ${client.name}',
+    author: repo.companyName,
+  );
+  pw.Widget label(String s) => pw.Text(
+    s.toUpperCase(),
+    style: const pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
+  );
+  const cell = pw.TextStyle(fontSize: 8.5);
+  final bold = pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold);
+  final head = pw.TextStyle(
+    color: PdfColors.white,
+    fontWeight: pw.FontWeight.bold,
+    fontSize: 8,
+  );
+  const pad = pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5);
+  String m(double v) => v == 0 ? '' : fmtMoney(v);
+
+  pw.Widget table(
+    List<String> headers,
+    List<List<String>> rows, {
+    required Map<int, pw.TableColumnWidth> widths,
+    required Set<int> right,
+    Set<int> boldRows = const {},
+    Set<int> softRows = const {},
+  }) {
+    pw.Widget c(String t, int k, pw.TextStyle style) => pw.Padding(
+      padding: pad,
+      child: pw.Text(
+        t,
+        style: style,
+        textAlign: right.contains(k) ? pw.TextAlign.right : null,
+      ),
+    );
+    return pw.Table(
+      columnWidths: widths,
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: _graphite),
+          children: [for (final (k, h) in headers.indexed) c(h, k, head)],
+        ),
+        for (final (r, row) in rows.indexed)
+          pw.TableRow(
+            decoration: pw.BoxDecoration(
+              color: softRows.contains(r) ? _soft : null,
+              border: const pw.Border(
+                bottom: pw.BorderSide(color: _line, width: .6),
+              ),
+            ),
+            children: [
+              for (final (k, t) in row.indexed)
+                c(t, k, boldRows.contains(r) ? bold : cell),
+            ],
+          ),
+      ],
+    );
+  }
+
+  pw.Widget tile(String l, double v, {bool strong = false}) => pw.Expanded(
+    child: pw.Container(
+      margin: const pw.EdgeInsets.only(right: 6),
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        color: strong ? _graphite : _soft,
+        borderRadius: pw.BorderRadius.circular(5),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            l.toUpperCase(),
+            style: pw.TextStyle(
+              fontSize: 6.5,
+              letterSpacing: .8,
+              color: strong ? PdfColors.white : _muted,
+            ),
+          ),
+          pw.SizedBox(height: 3),
+          pw.Text(
+            fmtMoney(v),
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: strong ? PdfColors.white : _graphite,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  final moves = <List<String>>[
+    if (st.from != null)
+      [fmtDate(st.from), '', 'Opening balance', '', '', fmtMoney(st.opening)],
+    for (final l in st.lines)
+      [
+        fmtDate(l.date),
+        l.reference,
+        l.description,
+        m(l.debit),
+        m(l.credit),
+        fmtMoney(l.balance),
+      ],
+    [
+      fmtDate(st.to),
+      '',
+      'Closing balance',
+      fmtMoney(st.invoiced),
+      fmtMoney(st.received),
+      fmtMoney(st.closing),
+    ],
+  ];
+  final aging = st.aging;
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
+      header: (ctx) =>
+          _header(repo.companyName, 'STATEMENT', 'As of ${fmtDate(st.to)}'),
+      footer: (ctx) => _footer(ctx, _contact(info)),
+      build: (ctx) => [
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  label('Statement of account for'),
+                  pw.SizedBox(height: 3),
+                  pw.Text(
+                    client.name,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                  ),
+                  if (client.company.isNotEmpty)
+                    pw.Text(
+                      client.company,
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
+                  pw.Text(
+                    [
+                      client.phone,
+                      client.email,
+                      client.country,
+                    ].where((s) => s.isNotEmpty).join(' · '),
+                    style: const pw.TextStyle(fontSize: 9, color: _muted),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 20),
+            pw.Container(
+              width: 200,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: _soft,
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _kv(
+                    'Period',
+                    st.from == null
+                        ? 'All to ${fmtDate(st.to)}'
+                        : '${fmtDate(st.from)} – ${fmtDate(st.to)}',
+                  ),
+                  _kv(
+                    'Project',
+                    st.project == null
+                        ? 'All projects'
+                        : '${st.project!.code} ${st.project!.name}',
+                  ),
+                  _kv('Currency', 'USD'),
+                  if (info['tax_number']?.isNotEmpty ?? false)
+                    _kv('VAT no.', info['tax_number']!),
+                ],
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+        pw.Row(
+          children: [
+            if (st.contractValue > 0) tile('Agreed contract', st.contractValue),
+            if (st.from != null) tile('Opening balance', st.opening),
+            tile('Invoiced', st.invoiced),
+            tile('Received', st.received),
+            tile('Balance due', st.closing, strong: true),
+          ],
+        ),
+        pw.SizedBox(height: 16),
+        label('Account movements'),
+        pw.SizedBox(height: 5),
+        table(
+          ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Balance'],
+          moves,
+          widths: {
+            0: const pw.FixedColumnWidth(66),
+            1: const pw.FixedColumnWidth(64),
+            2: const pw.FlexColumnWidth(4),
+            3: const pw.FixedColumnWidth(62),
+            4: const pw.FixedColumnWidth(62),
+            5: const pw.FixedColumnWidth(66),
+          },
+          right: {3, 4, 5},
+          boldRows: {if (st.from != null) 0, moves.length - 1},
+          softRows: {moves.length - 1},
+        ),
+        if (st.open.isNotEmpty) ...[
+          pw.SizedBox(height: 18),
+          label('Open invoices'),
+          pw.SizedBox(height: 5),
+          table(
+            ['Invoice', 'Date', 'Due', 'Amount', 'Paid', 'Balance', 'Late'],
+            [
+              for (final o in st.open)
+                [
+                  o.invoice.number,
+                  fmtDate(o.invoice.date),
+                  fmtDate(o.invoice.dueDate),
+                  fmtMoney(o.invoice.total),
+                  fmtMoney(o.paid),
+                  fmtMoney(o.balance),
+                  o.daysOverdue > 0 ? '${o.daysOverdue} days' : 'Not due',
+                ],
+            ],
+            widths: {
+              0: const pw.FlexColumnWidth(2),
+              1: const pw.FixedColumnWidth(66),
+              2: const pw.FixedColumnWidth(66),
+              3: const pw.FixedColumnWidth(62),
+              4: const pw.FixedColumnWidth(62),
+              5: const pw.FixedColumnWidth(62),
+              6: const pw.FixedColumnWidth(52),
+            },
+            right: {3, 4, 5, 6},
+          ),
+          pw.SizedBox(height: 10),
+          table(
+            [
+              'Not yet due',
+              '1–30 days',
+              '31–60 days',
+              '61–90 days',
+              '90+ days',
+            ],
+            [
+              [for (final v in aging) fmtMoney(v)],
+            ],
+            widths: {for (var k = 0; k < 5; k++) k: const pw.FlexColumnWidth()},
+            right: {0, 1, 2, 3, 4},
+          ),
+        ],
+        pw.SizedBox(height: 18),
+        if (info['bank']?.isNotEmpty ?? false) ...[
+          label('Bank details'),
+          pw.SizedBox(height: 3),
+          pw.Text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
+          pw.SizedBox(height: 12),
+        ],
+        pw.Text(
+          st.closing > 0.005
+              ? 'Kindly settle the balance due of ${fmtMoney(st.closing)}. '
+                    'Please report any difference within 15 days of this '
+                    'statement; otherwise it is considered accepted.'
+              : 'Your account is fully settled. Thank you.',
+          style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+        ),
+        pw.SizedBox(height: 30),
+        pw.Row(
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(height: .6, color: _graphite),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'For ${repo.companyName}',
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 60),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(height: .6, color: _graphite),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Client confirmation',
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+  return pdf.save();
+}
+
+Future<void> shareStatementPdf(Repository repo, Statement st) async {
+  final bytes = await buildStatementPdf(repo, st);
+  final name = st.client.name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-');
+  await Printing.sharePdf(
+    bytes: bytes,
+    filename: 'Statement-$name-${st.to.toIso8601String().substring(0, 10)}.pdf',
   );
 }

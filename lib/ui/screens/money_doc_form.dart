@@ -760,13 +760,26 @@ class _LineEditor extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(right: 8, bottom: 10),
-              child: TextFormField(
-                controller: line.section,
+              child: DropdownButtonFormField<String>(
+                initialValue: line.section.text,
+                isExpanded: true,
+                isDense: true,
                 decoration: const InputDecoration(
                   labelText: 'Section',
-                  hintText: 'e.g. Masonry (optional)',
                   isDense: true,
                 ),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('No section')),
+                  for (final name in {
+                    ...boqSections,
+                    if (line.section.text.isNotEmpty) line.section.text,
+                  })
+                    DropdownMenuItem(value: name, child: Text(name)),
+                ],
+                onChanged: (v) {
+                  line.section.text = v ?? '';
+                  onChanged();
+                },
               ),
             ),
             Row(
@@ -985,86 +998,157 @@ Future<void> showPaymentDialog(
   }
 }
 
-/// Lets the user tick standard BOQ items by trade. Returns the chosen items
-/// with quantity 1 and no rate, each under its trade as the section.
+/// The AK master library: search or browse by trade, tick items, and they
+/// come back under their trade as the section. Items priced before keep
+/// their last rate.
 Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
+  final repo = context.read<Repository>();
+  final lastRate = <String, double>{};
+  final docs = <PricedDocument>[...repo.quotations, ...repo.invoices]
+    ..sort((a, b) => _docDate(a).compareTo(_docDate(b)));
+  for (final d in docs) {
+    for (final i in d.items) {
+      if (i.rate != 0) lastRate[i.description] = i.rate;
+    }
+  }
   final picked = <BoqItem, String>{};
+  var query = '';
   return showModalBottomSheet<List<LineItem>>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, set) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * .85,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'BOQ library',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: picked.isEmpty
-                        ? null
-                        : () => Navigator.pop(ctx, [
-                            for (final e in picked.entries)
-                              LineItem(
-                                description: e.key.description,
-                                unit: e.key.unit,
-                                section: e.value,
-                              ),
-                          ]),
-                    child: Text(
-                      picked.isEmpty ? 'Add' : 'Add ${picked.length}',
-                    ),
-                  ),
-                ],
-              ),
+      builder: (ctx, set) {
+        final ak = AkColors.of(ctx);
+        final q = query.trim().toLowerCase();
+        bool match(BoqTrade t, BoqItem i) =>
+            q.isEmpty ||
+            i.description.toLowerCase().contains(q) ||
+            t.name.toLowerCase().contains(q);
+        Widget tile(BoqTrade t, BoqItem item) {
+          final rate = lastRate[item.description];
+          return CheckboxListTile(
+            dense: true,
+            value: picked.containsKey(item),
+            onChanged: (v) => set(() {
+              if (v == true) {
+                picked[item] = t.name;
+              } else {
+                picked.remove(item);
+              }
+            }),
+            title: Text(item.description),
+            subtitle: Text(
+              rate == null
+                  ? item.unit
+                  : '${item.unit} · last rate ${fmtMoney(rate)}',
             ),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (final t in boqLibrary)
-                    ExpansionTile(
-                      title: Text(t.name),
-                      subtitle: Text(
-                        '${t.items.where(picked.containsKey).length} of '
-                        '${t.items.length} chosen',
+          );
+        }
+
+        Widget groupHead(String name) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+          child: Text(
+            name.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w800,
+              color: ak.muted,
+            ),
+          ),
+        );
+
+        return SizedBox(
+          height: MediaQuery.of(ctx).size.height * .88,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'AK BOQ library',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                      children: [
-                        for (final item in t.items)
-                          CheckboxListTile(
-                            dense: true,
-                            value: picked.containsKey(item),
-                            onChanged: (v) => set(() {
-                              if (v == true) {
-                                picked[item] = t.name;
-                              } else {
-                                picked.remove(item);
-                              }
-                            }),
-                            title: Text(item.description),
-                            subtitle: Text(item.unit),
+                    ),
+                    FilledButton(
+                      onPressed: picked.isEmpty
+                          ? null
+                          : () => Navigator.pop(ctx, [
+                              for (final e in picked.entries)
+                                LineItem(
+                                  description: e.key.description,
+                                  unit: e.key.unit,
+                                  section: e.value,
+                                  rate: lastRate[e.key.description] ?? 0,
+                                ),
+                            ]),
+                      child: Text(
+                        picked.isEmpty ? 'Add' : 'Add ${picked.length}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search, e.g. porcelain, block, AC',
+                    isDense: true,
+                  ),
+                  onChanged: (v) => set(() => query = v),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    if (q.isNotEmpty)
+                      for (final t in boqLibrary)
+                        for (final i in t.items.where((i) => match(t, i)))
+                          tile(t, i)
+                    else
+                      for (final t in boqLibrary)
+                        ExpansionTile(
+                          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                          leading: Text(
+                            t.code,
+                            style: TextStyle(
+                              color: ak.accent,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                      ],
-                    ),
-                ],
+                          title: Text(t.name),
+                          subtitle: Text(
+                            '${t.items.where(picked.containsKey).length} of '
+                            '${t.items.length} chosen',
+                          ),
+                          children: [
+                            for (final g in t.groups) ...[
+                              if (t.groups.length > 1) groupHead(g.name),
+                              for (final i in g.items) tile(t, i),
+                            ],
+                          ],
+                        ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     ),
   );
 }
+
+DateTime _docDate(PricedDocument d) =>
+    d is Invoice ? d.date : (d as Quotation).date;
 
 /// Takes BOQ lines pasted from Excel or a message and turns them into items.
 Future<List<LineItem>?> showPasteItems(BuildContext context) async {

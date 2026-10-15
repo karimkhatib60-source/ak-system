@@ -41,7 +41,8 @@ void main() {
   });
 
   test('the library has units for every item', () {
-    expect(boqLibrary.length, greaterThan(15));
+    expect(boqLibrary.length, greaterThan(25));
+    expect(boqLibrary.expand((t) => t.items).length, greaterThan(300));
     for (final t in boqLibrary) {
       for (final i in t.items) {
         expect(i.unit, isNotEmpty, reason: i.description);
