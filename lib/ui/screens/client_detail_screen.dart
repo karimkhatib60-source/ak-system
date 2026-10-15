@@ -285,8 +285,8 @@ class _AccountCard extends StatelessWidget {
               if (st.advances > 0.005) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Advances held: ${fmtMoney(st.advances)} received but '
-                  'not invoiced yet.',
+                  'Credit held: ${fmtMoney(st.advances)} received in '
+                  'advance and not yet set against an invoice.',
                   style: TextStyle(color: ak.muted, fontSize: 12.5),
                 ),
               ],

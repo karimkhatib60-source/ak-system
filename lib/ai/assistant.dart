@@ -531,10 +531,24 @@ class Assistant extends ChangeNotifier {
         _ownerOnly();
         final inv = repo.invoice(s('invoice_id'));
         if (inv == null) return 'Error: no invoice with that id';
+        if (inv.status == InvoiceStatus.cancelled) {
+          return 'Error: ${inv.number} is cancelled';
+        }
         if (inv.status == InvoiceStatus.draft) {
           await repo.saveInvoice(inv.copyWith(status: InvoiceStatus.sent));
         }
-        final amount = n('amount') ?? repo.balanceOf(inv);
+        final due = repo.balanceOf(repo.invoice(inv.id) ?? inv);
+        final amount = n('amount') ?? due;
+        if (due <= 0.005) {
+          final setOff = repo.advanceOn(repo.invoice(inv.id) ?? inv);
+          return 'Nothing to record: ${inv.number} is already paid'
+              '${setOff > 0.005 ? ', including ${setOff.toStringAsFixed(2)} set off from money on account' : ''}';
+        }
+        if (amount <= 0 || amount > due + 0.005) {
+          return 'Error: the amount must be more than 0 and at most '
+              '${due.toStringAsFixed(2)}, the balance due. Record any extra on '
+              'account.';
+        }
         await repo.savePayment(
           Payment(
             id: repo.newId(),

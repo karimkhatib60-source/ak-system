@@ -41,6 +41,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
   final project = repo.project(projectId);
   final info = repo.companyInfo;
   final paid = isInvoice ? repo.paidOn(doc) : 0.0;
+  final setOff = isInvoice ? repo.advanceOn(doc) : 0.0;
 
   final pdf = pw.Document(
     theme: await _theme(),
@@ -187,8 +188,11 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
                   ),
                   moneyRow('Total (USD)', doc.total, bold: true),
                   if (isInvoice && paid > 0) ...[
-                    moneyRow('Paid', -paid),
-                    moneyRow('Balance due', doc.total - paid, bold: true),
+                    if (paid - setOff > 0.005)
+                      moneyRow('Received', -(paid - setOff)),
+                    if (setOff > 0.005)
+                      moneyRow('Set off from advance payments', -setOff),
+                    moneyRow('Balance due', repo.balanceOf(doc), bold: true),
                   ],
                 ],
               ),
@@ -756,8 +760,10 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
         if (st.advances > 0.005)
           pw.Text(
             'Advances held: ${fmtMoney(st.advances)} received on payment '
-            'terms or on account and not yet invoiced. They will be set '
-            'against the coming invoices. Due on issued invoices: '
+            'terms or on account and not yet set against an invoice. An '
+            'advance on a payment term is set against that term\'s invoice; '
+            'money on account against the next invoices. Due on issued '
+            'invoices: '
             '${fmtMoney(st.dueOnInvoices)}. Net account balance: '
             '${st.closing < 0 ? 'credit ' : ''}${fmtMoney(st.closing.abs())}. '
             'Please report any difference within 15 days of this '
@@ -1007,11 +1013,16 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final String purpose;
   final pw.Widget detail;
   final String after;
+  var extra = 0.0; // paid above the invoice or instalment
   if (inv != null) {
-    // Advances on the invoice's term count as received too.
-    final advance = repo.advanceOn(inv);
+    // Advances and money on account set against the invoice by the
+    // receipt's date count as received too.
+    final advance = repo.advanceOn(inv, until: pay.date);
     final prior = before + advance;
-    final left = inv.total - prior - pay.amount;
+    final total = (inv.total * 100).round() / 100;
+    final rest = total - prior - pay.amount;
+    final left = rest > 0 ? rest : 0.0;
+    extra = rest < -0.005 ? -rest : 0;
     purpose = 'Invoice ${inv.number}';
     detail = _table(
       [
@@ -1037,28 +1048,37 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
     );
     after = left <= 0.005
         ? '${inv.number} is now fully paid. Thank you.'
+              '${extra > 0 ? ' The extra ${fmtMoney(extra)} is held as credit '
+                        'on the account.' : ''}'
         : 'Remaining on ${inv.number}: ${fmtMoney(left)}.';
   } else if (q != null && term != null) {
-    final value = term.valueOf(q.total);
-    // Receipts on invoices raised for this term count as received too.
-    final invoiced = repo.invoices.where(
-      (i) =>
-          i.quotationId == q.id &&
-          i.termIndex == termIndex &&
-          i.status != InvoiceStatus.cancelled,
-    );
-    final onInvoices = invoiced.fold(
-      0.0,
-      (s, i) =>
-          s +
-          repo
-              .paymentsFor(i.id)
-              .where((o) => !o.date.isAfter(pay.date))
-              .fold(0.0, (t, o) => t + o.amount),
-    );
-    final prior = before + onInvoices;
-    final left = value - prior - pay.amount;
-    final label = term.label.isEmpty ? 'Payment ${termIndex! + 1}' : term.label;
+    final value = (term.valueOf(q.total) * 100).round() / 100;
+    // Everything received on this term up to the day before, plus earlier
+    // receipts on the term the same day.
+    final day = DateTime(pay.date.year, pay.date.month, pay.date.day);
+    final sameDayBefore = repo.payments
+        .where(
+          (o) =>
+              !o.onInvoice &&
+              o.quotationId == q.id &&
+              o.termIndex == termIndex &&
+              DateTime(o.date.year, o.date.month, o.date.day) == day &&
+              Repository.receiptOrder(o, pay) < 0,
+        )
+        .fold(0.0, (s, o) => s + o.amount);
+    final prior =
+        repo
+            .termStatus(
+              q,
+              termIndex!,
+              until: day.subtract(const Duration(days: 1)),
+            )
+            .received +
+        sameDayBefore;
+    final rest = value - prior - pay.amount;
+    final left = rest > 0 ? rest : 0.0;
+    extra = rest < -0.005 ? (-rest < pay.amount ? -rest : pay.amount) : 0;
+    final label = term.label.isEmpty ? 'Payment ${termIndex + 1}' : term.label;
     final share = term.percent == 0 ? '' : ' (${_qty(term.percent)}%)';
     purpose = '$label$share, ${q.number}';
     detail = _table(
@@ -1072,7 +1092,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       ],
       [
         [
-          '${termIndex! + 1}. $label$share',
+          '${termIndex + 1}. $label$share',
           term.due,
           fmtMoney(value),
           fmtMoney(prior),
@@ -1087,7 +1107,8 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         'As per the payment schedule of ${q.number}'
         '${q.title.isEmpty ? '' : ' (${q.title})'}, contract value '
         '${fmtMoney(q.total)}. '
-        '${left <= 0.005 ? 'This instalment is now fully paid.' : 'Remaining on this instalment: ${fmtMoney(left)}.'}';
+        '${left <= 0.005 ? 'This instalment is now fully paid.' : 'Remaining on this instalment: ${fmtMoney(left)}.'}'
+        '${extra > 0 ? ' The extra ${fmtMoney(extra)} is held as credit on the account.' : ''}';
   } else {
     purpose = 'On account';
     detail = _table(
@@ -1105,9 +1126,14 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       right: {1},
     );
     after =
-        'Received on account. It will be set against the next invoices'
-        '${project == null ? '' : ' for ${project.code}'}.';
+        'Received on account. It is set against the open invoices'
+        '${project == null ? '' : ' of ${project.code}'}, oldest first; '
+        'any balance stays as credit on the account.';
   }
+
+  // How a receipt not taken on an invoice has been used so far.
+  final applied = repo.appliedTo(pay);
+  final credit = repo.unappliedOf(pay);
 
   // Project account after this receipt.
   final contract = project == null
@@ -1118,16 +1144,9 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
             .fold(0.0, (s, x) => s + x.total);
   final receivedToDate = project == null
       ? 0.0
-      : repo
-            .receipts(projectId: project.id)
-            .where(
-              (o) =>
-                  o.id == pay.id ||
-                  o.date.isBefore(pay.date) ||
-                  (o.date.isAtSameMomentAs(pay.date) &&
-                      o.number.compareTo(pay.number) < 0),
-            )
-            .fold(0.0, (s, o) => s + o.amount);
+      : repo.payments
+            .where((o) => o.id == pay.id || Repository.receiptOrder(o, pay) < 0)
+            .fold(0.0, (s, o) => s + repo.receivedFor(o, project.id));
 
   pdf.addPage(
     pw.MultiPage(
@@ -1195,6 +1214,47 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         detail,
         pw.SizedBox(height: 8),
         pw.Text(after, style: const pw.TextStyle(fontSize: 9, color: _muted)),
+        if (applied.isNotEmpty || credit > 0.005) ...[
+          pw.SizedBox(height: 18),
+          _label(
+            '${inv == null ? 'Set against invoices' : 'Paid above ${inv.number}'}'
+            ' · as of ${fmtDate(repo.now())}',
+          ),
+          pw.SizedBox(height: 5),
+          _table(
+            ['Invoice', 'Date', 'Subject', 'Amount set off'],
+            [
+              for (final (i, a) in applied)
+                [
+                  i.number,
+                  fmtDate(i.date),
+                  i.title.isNotEmpty
+                      ? i.title
+                      : (repo.project(i.projectId)?.name ?? ''),
+                  fmtMoney(a),
+                ],
+              [
+                '',
+                '',
+                term == null
+                    ? 'Credit remaining on account'
+                    : extra > 0
+                    ? 'Credit held: for this instalment, the rest on account'
+                    : 'Held for the invoice of this instalment',
+                fmtMoney(credit),
+              ],
+            ],
+            widths: {
+              0: const pw.FixedColumnWidth(70),
+              1: const pw.FixedColumnWidth(66),
+              2: const pw.FlexColumnWidth(3),
+              3: const pw.FixedColumnWidth(80),
+            },
+            right: {3},
+            boldRows: {applied.length},
+            softRows: {applied.length},
+          ),
+        ],
         if (project != null && contract > 0) ...[
           pw.SizedBox(height: 18),
           _label('Project account after this receipt · ${project.code}'),
@@ -1273,7 +1333,7 @@ Future<Uint8List> buildProjectStatementPdf(
         m(ph.balance),
       ],
     if (st.advances > 0.005)
-      ['Advances not yet invoiced', '', '—', m(st.advances), m(-st.advances)],
+      ['Advances not yet set off', '', '—', m(st.advances), m(-st.advances)],
     [
       'Total',
       '${ps.phases.fold(0, (s, ph) => s + ph.tasksDone)} of '
@@ -1590,7 +1650,9 @@ Future<Uint8List> buildProjectStatementPdf(
           st.advances > 0.005
               ? 'Due on issued invoices: ${fmtMoney(st.dueOnInvoices)}. '
                     'Advances of ${fmtMoney(st.advances)} are held on this '
-                    'project and will be set against the coming invoices. '
+                    'project: an advance on a payment term is set against '
+                    'that term\'s invoice, money on account against the '
+                    'next invoices. '
                     'Net account balance: '
                     '${st.closing < 0 ? 'credit ' : ''}'
                     '${fmtMoney(st.closing.abs())}. Please report any '

@@ -161,10 +161,10 @@ final _money = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 final _moneyRound = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
 
 /// "$12,500.00"
-String fmtMoney(double v) => _money.format(v);
+String fmtMoney(double v) => _money.format(v.abs() < .005 ? 0 : v);
 
 /// "$12,500", for summaries.
-String fmtMoneyShort(double v) => _moneyRound.format(v);
+String fmtMoneyShort(double v) => _moneyRound.format(v.abs() < .5 ? 0 : v);
 
 String quotationStatusLabel(QuotationStatus s) => switch (s) {
   QuotationStatus.draft => 'Draft',

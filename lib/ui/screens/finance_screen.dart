@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
+import '../../data/profit.dart';
 import '../../data/project_statement.dart';
 import '../../data/repository.dart';
 import '../format.dart';
@@ -9,9 +10,10 @@ import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'money_doc_form.dart';
+import 'profit_view.dart';
 import 'receipts.dart';
 
-enum _Tab { quotations, invoices, receipts, expenses }
+enum _Tab { quotations, invoices, receipts, expenses, profit }
 
 enum _Period { month, year, all }
 
@@ -57,6 +59,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
         for (final e in repo.expenses)
           if (inRange(e.date)) ExpenseTile(e, showProject: true),
       ],
+      _Tab.profit => profitTiles(context, since: since),
     };
 
     return Scaffold(
@@ -66,14 +69,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
           _Tab.quotations => openQuotationForm(context),
           _Tab.invoices => openInvoiceForm(context),
           _Tab.receipts => openReceiptForm(context),
-          _Tab.expenses => openExpenseForm(context),
+          _Tab.expenses || _Tab.profit => openExpenseForm(context),
         },
         icon: const Icon(Icons.add),
         label: Text(switch (_tab) {
           _Tab.quotations => 'Quotation',
           _Tab.invoices => 'Invoice',
           _Tab.receipts => 'Receipt',
-          _Tab.expenses => 'Expense',
+          _Tab.expenses || _Tab.profit => 'Expense',
         }),
       ),
       body: Readable(
@@ -120,6 +123,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
                     value: _Tab.expenses,
                     label: Text('Expenses ${repo.expenses.length}'),
                   ),
+                  const ButtonSegment(
+                    value: _Tab.profit,
+                    icon: Icon(Icons.lock_outline, size: 16),
+                    label: Text('Profit'),
+                  ),
                 ],
                 selected: {_tab},
                 onSelectionChanged: (v) => setState(() => _tab = v.first),
@@ -134,12 +142,14 @@ class _FinanceScreenState extends State<FinanceScreen> {
                     _Tab.invoices => Icons.receipt_long_outlined,
                     _Tab.receipts => Icons.payments_outlined,
                     _Tab.expenses => Icons.receipt_outlined,
+                    _Tab.profit => Icons.trending_up,
                   },
                   title: switch (_tab) {
                     _Tab.quotations => 'No quotations in this period',
                     _Tab.invoices => 'No invoices in this period',
                     _Tab.receipts => 'No receipts in this period',
                     _Tab.expenses => 'No expenses in this period',
+                    _Tab.profit => 'No income or expenses in this period',
                   },
                 ),
               )
@@ -155,10 +165,18 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
 /// Six key figures in a grid.
 class MoneyPanel extends StatelessWidget {
-  const MoneyPanel(this.m, {super.key, this.showQuoted = true});
+  const MoneyPanel(
+    this.m, {
+    super.key,
+    this.showQuoted = true,
+    this.showProfit = true,
+  });
 
   final MoneySummary m;
   final bool showQuoted;
+
+  /// Expenses and profit; a project shows them in its own profit card.
+  final bool showProfit;
 
   @override
   Widget build(BuildContext context) {
@@ -177,14 +195,18 @@ class MoneyPanel extends StatelessWidget {
             ? 'Advances held ${fmtMoneyShort(m.advances)}'
             : null,
       ),
-      ('Expenses', m.expenses, Icons.shopping_bag_outlined, null, null),
-      (
-        'Profit (received − expenses)',
-        m.profit,
-        Icons.trending_up,
-        m.profit < 0 ? ak.bad : ak.good,
-        null,
-      ),
+      if (showProfit) ...[
+        ('Expenses', m.expenses, Icons.shopping_bag_outlined, null, null),
+        (
+          'Profit',
+          m.profit,
+          Icons.trending_up,
+          m.profit < 0 ? ak.bad : ak.good,
+          m.margin == null
+              ? 'Invoiced without VAT, less expenses'
+              : '${m.margin!.round()}% margin · without VAT',
+        ),
+      ],
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -439,7 +461,11 @@ class ProjectMoneyTab extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 40),
         children: [
-          MoneyPanel(m),
+          MoneyPanel(m, showProfit: false),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: ProfitCard(profitOf(repo, projectId: p.id)),
+          ),
           if (p.clientId != null && repo.client(p.clientId) != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -503,7 +529,7 @@ class ProjectMoneyTab extends StatelessWidget {
             'Receipt',
           ),
           ...rows([
-            for (final r in receipts) ReceiptTile(r),
+            for (final r in receipts) ReceiptTile(r, projectId: p.id),
           ], 'No money received yet.'),
           header(
             'Expenses',
@@ -700,7 +726,14 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     ? null
                     : _projectId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'For'),
+                decoration: InputDecoration(
+                  labelText: 'For',
+                  helperText: _projectId == null
+                      ? 'Company running cost, not on a project'
+                      : "Internal cost: it lowers this project's profit and "
+                            'never appears on client documents',
+                  helperMaxLines: 2,
+                ),
                 items: [
                   const DropdownMenuItem(
                     value: null,

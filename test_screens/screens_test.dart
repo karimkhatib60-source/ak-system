@@ -519,9 +519,9 @@ void main() {
           updatedAt: t,
           clientId: 'c2',
           projectId: 'p2',
-          date: DateTime(2026, 10, 12),
-          amount: 1500,
-          notes: 'Deposit before the second review round',
+          date: DateTime(2026, 9, 20),
+          amount: 7000,
+          notes: 'Advance on account for the review',
         ),
       );
       Future<void> exp(
@@ -545,6 +545,8 @@ void main() {
       await exp('e1', 'p1', ExpenseCategory.printing, 120, 'Print House Jbeil');
       await exp('e2', null, ExpenseCategory.software, 290, 'AutoCAD licence');
       await exp('e3', 'p3', ExpenseCategory.subcontractor, 2400, 'Tiling team');
+      await exp('e4', 'p3', ExpenseCategory.materials, 9800, 'Porcelain tiles');
+      await exp('e5', 'p3', ExpenseCategory.subcontractor, 3100, 'Electrician');
       return r;
     }))!;
     final sync = SyncService(repo.local, repo);
@@ -683,6 +685,42 @@ void main() {
     await expectLater(
       find.byType(AkApp),
       matchesGoldenFile('out/phone_receipt_sheet.png'),
+    );
+  });
+
+  testWidgets('phone project profit', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Profit').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profit').last);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -330));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_profit_by_project.png'),
+    );
+    await tester.tap(find.textContaining('AK-26-003 · Apartment'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Finance').last);
+    await tester.pumpAndSettle();
+    await tester.dragUntilVisible(
+      find.text('PROFIT · INTERNAL'),
+      find.byType(ListView).last,
+      const Offset(0, -200),
+    );
+    await tester.runAsync(
+      () => Scrollable.ensureVisible(
+        tester.element(find.text('PROFIT · INTERNAL')),
+        alignment: 0.02,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_project_profit.png'),
     );
   });
 

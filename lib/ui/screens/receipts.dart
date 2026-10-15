@@ -419,9 +419,10 @@ class _ReceiptFormState extends State<ReceiptForm> {
                       ),
               if (_kind == ReceiptAgainst.account)
                 muted(
-                  'Money received before any invoice or payment term, for '
-                  'example a deposit. It shows as an advance on the '
-                  "client's account until it is invoiced.",
+                  'Money received without a specific invoice, for example a '
+                  'deposit. It is set against this client\'s open invoices '
+                  'automatically, oldest first, and the rest stays as '
+                  'credit on the account.',
                 ),
               _Position(
                 kind: _kind,
@@ -541,7 +542,9 @@ class _Position extends StatelessWidget {
         ('Balance due', repo.balanceOf(i)),
       ];
       if (repo.advanceOn(i) > 0) {
-        note = 'Includes ${fmtMoney(repo.advanceOn(i))} advance on its term.';
+        note =
+            'Includes ${fmtMoney(repo.advanceOn(i))} set off from money '
+            'received in advance.';
       }
     } else if (term != null) {
       final (q, _, st) = term!;
@@ -604,10 +607,19 @@ class _Position extends StatelessWidget {
 // ------------------------------------------------------------- Lists --
 
 class ReceiptTile extends StatelessWidget {
-  const ReceiptTile(this.p, {super.key, this.showProject = false});
+  const ReceiptTile(
+    this.p, {
+    super.key,
+    this.showProject = false,
+    this.projectId,
+  });
 
   final Payment p;
   final bool showProject;
+
+  /// On a project's page: shows only the part of the receipt that went to
+  /// that project when the rest is kept elsewhere.
+  final String? projectId;
 
   @override
   Widget build(BuildContext context) {
@@ -615,7 +627,11 @@ class ReceiptTile extends StatelessWidget {
     final client = repo.client(repo.payerOf(p))?.name;
     final project = repo.project(repo.projectOfPayment(p));
     final kind = receiptKind(p);
-    final advance = repo.unappliedOf(p) > 0.005;
+    final credit = repo.unappliedOf(p);
+    final advance = credit > 0.005;
+    final used = repo.appliedTo(p);
+    final share = projectId == null ? p.amount : repo.receivedFor(p, projectId);
+    final part = (share - p.amount).abs() > 0.005;
     return ListTile(
       leading: const Icon(Icons.payments_outlined),
       title: Text(
@@ -627,7 +643,12 @@ class ReceiptTile extends StatelessWidget {
         [
           if (p.number.isNotEmpty) p.number,
           if (showProject && project != null) project.code,
+          if (part) '${fmtMoneyShort(share)} of ${fmtMoneyShort(p.amount)}',
           receiptPurpose(repo, p),
+          if (used.isNotEmpty)
+            'set against ${used.map((e) => e.$1.number).join(', ')}',
+          if (advance && used.isNotEmpty)
+            '${fmtMoneyShort(credit)} credit left',
           paymentMethodLabel(p.method),
           fmtDate(p.date),
         ].join(' · '),
@@ -637,7 +658,7 @@ class ReceiptTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            fmtMoneyShort(p.amount),
+            fmtMoneyShort(share),
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
@@ -672,15 +693,7 @@ Future<void> showReceiptSheet(
     final client = repo.client(repo.payerOf(p));
     final project = repo.project(repo.projectOfPayment(p));
     final advance = repo.unappliedOf(p);
-    final setAgainst = p.onInvoice || p.quotationId == null
-        ? <Invoice>[]
-        : [
-            for (final i in repo.invoices)
-              if (i.quotationId == p.quotationId &&
-                  i.termIndex == p.termIndex &&
-                  repo.advancesOn(i).any((a) => a.$1.id == p.id))
-                i,
-          ];
+    final setAgainst = repo.appliedTo(p);
     Widget row(String k, String v) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -727,10 +740,19 @@ Future<void> showReceiptSheet(
             if (p.reference.isNotEmpty) row('Reference', p.reference),
             if (p.notes.isNotEmpty && receiptKind(p) != ReceiptAgainst.account)
               row('Notes', p.notes),
-            if (setAgainst.isNotEmpty)
-              row('Set against', setAgainst.map((i) => i.number).join(', ')),
-            if (advance > 0.005)
-              row('Held as advance', '${fmtMoney(advance)} not invoiced yet'),
+            for (final (i, a) in setAgainst)
+              row(
+                'Set against',
+                '${i.number} · ${fmtMoney(a)}'
+                    '${i.title.isEmpty ? '' : ' · ${i.title}'}',
+              ),
+            if (!p.onInvoice || advance > 0.005 || setAgainst.isNotEmpty)
+              row(
+                'Credit left',
+                advance > 0.005
+                    ? '${fmtMoney(advance)} on the account'
+                    : 'None, fully set against invoices',
+              ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,

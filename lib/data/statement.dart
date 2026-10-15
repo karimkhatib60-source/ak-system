@@ -29,7 +29,7 @@ class OpenInvoice {
   final double paid;
   final int daysOverdue;
 
-  double get balance => invoice.total - paid;
+  double get balance => ((invoice.total - paid) * 100).round() / 100;
 }
 
 /// Statement of account for one client over a period, optionally for one
@@ -140,26 +140,51 @@ Statement buildStatement(
         if (i.title.isNotEmpty) i.title,
         if (projectId == null && code.isNotEmpty) code,
       ].join(' · '),
-      debit: i.total,
+      debit: (i.total * 100).round() / 100,
       credit: 0,
     ));
   }
   // Every receipt from this client: on an invoice, on a payment term of a
-  // quotation, or on account.
+  // quotation, or on account. For one project, receipts kept for another
+  // project (or for the whole account) appear only for the part set
+  // against this project's invoices, and the part of this project's
+  // receipts set against other invoices leaves it.
   var advances = 0.0;
   for (final p in repo.payments) {
-    if (!mine(repo.payerOf(p), repo.projectOfPayment(p)) || after(p.date)) {
-      continue;
+    if (repo.payerOf(p) != clientId || after(p.date)) continue;
+    final ref = p.number.isNotEmpty ? p.number : p.reference;
+    final home = projectId == null || repo.homeProject(p) == projectId;
+    if (home) {
+      advances += repo.unappliedOf(p, until: endDay);
+      moves.add((
+        date: p.date,
+        order: 1,
+        ref: ref,
+        text: 'Receipt · ${_method(p.method)} · ${receiptPurpose(repo, p)}',
+        debit: 0,
+        credit: p.amount,
+      ));
     }
-    advances += repo.unappliedOf(p, until: endDay);
-    moves.add((
-      date: p.date,
-      order: 1,
-      ref: p.number.isNotEmpty ? p.number : p.reference,
-      text: 'Receipt · ${_method(p.method)} · ${receiptPurpose(repo, p)}',
-      debit: 0,
-      credit: p.amount,
-    ));
+    if (projectId == null) continue;
+    for (final (i, used) in repo.appliedTo(p, until: endDay)) {
+      final inside = i.projectId == projectId;
+      if (inside == home) continue;
+      final date = i.date.isAfter(p.date) ? i.date : p.date;
+      final where = repo.project(i.projectId)?.code;
+      moves.add((
+        date: date,
+        order: 2,
+        ref: inside ? ref : i.number,
+        text: inside
+            ? 'Set off from $ref · ${receiptPurpose(repo, p)}'
+            : 'Credit set against ${i.number} · '
+                  '${where == null ? 'not on a project' : 'project $where'}',
+        // Credit leaving the project is shown as a negative receipt, so
+        // the invoiced total stays the project's own invoices.
+        debit: 0,
+        credit: inside ? used : -used,
+      ));
+    }
   }
   moves.sort((a, b) {
     final c = a.date.compareTo(b.date);
@@ -235,7 +260,11 @@ String _method(PaymentMethod m) => switch (m) {
 /// QT-26-002" or "on account".
 String receiptPurpose(Repository repo, Payment p) {
   if (p.onInvoice) {
-    return 'on ${repo.invoice(p.invoiceId)?.number ?? 'invoice'}';
+    final i = repo.invoice(p.invoiceId);
+    if (i == null) return 'on account';
+    if (i.status == InvoiceStatus.sent) return 'on ${i.number}';
+    final why = i.status == InvoiceStatus.cancelled ? 'cancelled' : 'draft';
+    return 'on ${i.number} ($why), held as credit';
   }
   final q = repo.quotation(p.quotationId);
   if (q != null &&

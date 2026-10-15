@@ -343,6 +343,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   }
 
   Future<void> _pdf() async {
+    // Sending an invoice issues it, so money held on account is set off
+    // and the client sees the balance actually due.
+    if (widget.isInvoice && _iStatus == InvoiceStatus.draft) {
+      setState(() => _iStatus = InvoiceStatus.sent);
+    }
     if (!await _store(close: false)) return;
     if (!mounted) return;
     final repo = context.read<Repository>();
@@ -812,7 +817,9 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       subtitle: Text(
                         [
                           if (a.number.isNotEmpty) a.number,
-                          'advance on this payment term',
+                          a.quotationId != null && a.termIndex != null
+                              ? 'set off from advance on payment term'
+                              : 'set off from money on account',
                           fmtDate(a.date),
                         ].join(' · '),
                       ),

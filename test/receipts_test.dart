@@ -1,4 +1,5 @@
 import 'package:ak_system/data/models.dart';
+import 'package:ak_system/data/profit.dart';
 import 'package:ak_system/data/project_statement.dart';
 import 'package:ak_system/data/repository.dart';
 import 'package:ak_system/data/statement.dart';
@@ -168,6 +169,7 @@ void main() {
       int? termIndex,
       String notes = '',
       int day = 14,
+      String? projectId = 'p',
     }) async {
       final t = repo.now();
       await repo.savePayment(
@@ -179,7 +181,7 @@ void main() {
           date: DateTime(2026, 10, day),
           amount: amount,
           clientId: invoiceId.isEmpty ? 'c' : null,
-          projectId: invoiceId.isEmpty ? 'p' : null,
+          projectId: invoiceId.isEmpty ? projectId : null,
           quotationId: quotationId,
           termIndex: termIndex,
           notes: notes,
@@ -305,6 +307,244 @@ void main() {
       expect(ps.schedule.first.status.settled, isTrue);
       expect(ps.schedule[1].status.remaining, closeTo(1320, 1e-9));
       expect(ps.account.advances, 660);
+    });
+
+    Future<Invoice> issue(
+      String id,
+      double amount, {
+      String? projectId = 'p',
+      String? quotationId,
+      int? termIndex,
+      int day = 14,
+      DateTime? at,
+    }) async {
+      final t = repo.now();
+      final inv = Invoice(
+        id: id,
+        createdAt: t,
+        updatedAt: t,
+        number: repo.nextInvoiceNumber(),
+        clientId: 'c',
+        projectId: projectId,
+        quotationId: quotationId,
+        termIndex: termIndex,
+        date: at ?? DateTime(2026, 10, day),
+        status: InvoiceStatus.sent,
+        vatRate: 0,
+        items: [LineItem(description: 'Fees', rate: amount)],
+      );
+      await repo.saveInvoice(inv);
+      return repo.invoice(id)!;
+    }
+
+    test(
+      'money on account settles a later invoice and keeps the rest',
+      () async {
+        await setup();
+        final dep = await receive('d1', 2000, notes: 'Advance', day: 1);
+        final inv = await issue('i1', 754, day: 10);
+        expect(repo.paidOn(inv), closeTo(754, 1e-9));
+        expect(repo.paymentState(inv), PaymentState.paid);
+        expect(repo.unappliedOf(dep), closeTo(1246, 1e-9));
+        expect(repo.appliedTo(dep).single.$1.id, 'i1');
+        expect(repo.advancesOn(inv).single.$2, closeTo(754, 1e-9));
+        final st = buildStatement(repo, 'c');
+        expect(st.closing, closeTo(-1246, 1e-9));
+        expect(st.advances, closeTo(1246, 1e-9));
+        expect(st.dueOnInvoices, 0);
+        expect(st.open, isEmpty);
+        final m = repo.money(projectId: 'p');
+        expect(m.outstanding, 0);
+        expect(m.advances, closeTo(1246, 1e-9));
+      },
+    );
+
+    test('older invoices are settled first and never reopen', () async {
+      await setup();
+      final dep = await receive('d1', 2000, day: 1);
+      final a = await issue('a', 754, day: 5);
+      final b = await issue('b', 1500, day: 9);
+      expect(repo.paymentState(a), PaymentState.paid);
+      expect(repo.balanceOf(b), closeTo(254, 1e-9));
+      expect(repo.unappliedOf(dep), 0);
+      // A newer invoice takes nothing from the older ones.
+      final c = await issue('c', 300, day: 12);
+      expect(repo.paymentState(a), PaymentState.paid);
+      expect(repo.balanceOf(b), closeTo(254, 1e-9));
+      expect(repo.balanceOf(c), closeTo(300, 1e-9));
+      expect(buildStatement(repo, 'c').dueOnInvoices, closeTo(554, 1e-9));
+    });
+
+    test('a statement as of a past date only sets off what existed', () async {
+      await setup();
+      await issue('a', 754, day: 5);
+      await receive('d1', 2000, day: 10);
+      final before = buildStatement(repo, 'c', to: DateTime(2026, 10, 8));
+      expect(before.open.single.balance, closeTo(754, 1e-9));
+      expect(before.advances, 0);
+      final after = buildStatement(repo, 'c');
+      expect(after.open, isEmpty);
+      expect(after.advances, closeTo(1246, 1e-9));
+    });
+
+    test('money on account for one project does not pay another', () async {
+      await setup();
+      final t = repo.now();
+      await repo.saveProject(
+        Project(
+          id: 'p2',
+          createdAt: t,
+          updatedAt: t,
+          code: 'AK-26-004',
+          name: 'Second',
+          clientId: 'c',
+        ),
+      );
+      await receive('d1', 1000, day: 1); // project p
+      final other = await issue('x', 400, projectId: 'p2', day: 5);
+      final general = await issue('y', 100, projectId: null, day: 6);
+      expect(repo.balanceOf(other), closeTo(400, 1e-9));
+      expect(repo.balanceOf(general), 0);
+    });
+
+    test('an advance on a term is recovered from progress invoices', () async {
+      final q = await withTerms();
+      await receive('a1', 660, quotationId: 'q', termIndex: 0, day: 1);
+      final prog = await issue('pr', 880, quotationId: 'q', day: 10);
+      expect(repo.paidOn(prog), closeTo(660, 1e-9));
+      expect(repo.balanceOf(prog), closeTo(220, 1e-9));
+      // The term itself still counts as received.
+      expect(repo.termStatus(q, 0).settled, isTrue);
+    });
+
+    test('money on account paying a term invoice counts on the term', () async {
+      final q = await withTerms();
+      await receive('d1', 500, day: 1);
+      final inv = await issue('t', 220, quotationId: 'q', termIndex: 2, day: 9);
+      expect(repo.paymentState(inv), PaymentState.paid);
+      expect(repo.termStatus(q, 2).received, closeTo(220, 1e-9));
+      expect(repo.termStatus(q, 2).settled, isTrue);
+    });
+
+    test('a deposit with no project pays a project invoice, and the project '
+        'shows it', () async {
+      await setup();
+      final dep = await receive('d1', 2000, day: 1, projectId: null);
+      final inv = await issue('i1', 754, day: 10);
+      expect(repo.paymentState(inv), PaymentState.paid);
+      // The project: invoiced 754, received 754 (set off), nothing due.
+      final st = buildStatement(repo, 'c', projectId: 'p');
+      expect(st.invoiced, closeTo(754, 1e-9));
+      expect(st.received, closeTo(754, 1e-9));
+      expect(st.closing, closeTo(0, 1e-9));
+      expect(st.advances, 0);
+      expect(st.open, isEmpty);
+      expect(st.lines.last.description, startsWith('Set off from'));
+      final m = repo.money(projectId: 'p');
+      expect(m.received, closeTo(754, 1e-9));
+      expect(m.outstanding, 0);
+      expect(m.advances, 0);
+      expect(profitOf(repo, projectId: 'p').received, closeTo(754, 1e-9));
+      expect(repo.receivedFor(dep, 'p'), closeTo(754, 1e-9));
+      expect(repo.receipts(projectId: 'p').single.id, 'd1');
+      final ps = buildProjectStatement(repo, 'p');
+      expect(
+        ps.phases.fold(0.0, (s, ph) => s + ph.received),
+        closeTo(ps.account.received, 1e-9),
+      );
+      // The rest stays on the client's account.
+      final all = buildStatement(repo, 'c');
+      expect(all.closing, closeTo(-1246, 1e-9));
+      expect(all.advances, closeTo(1246, 1e-9));
+      expect(repo.money().received, 2000);
+    });
+
+    test('credit of a project used outside it leaves its statement', () async {
+      await setup();
+      await receive('d1', 1000, day: 1); // project p
+      await issue('y', 100, projectId: null, day: 6);
+      final st = buildStatement(repo, 'c', projectId: 'p');
+      expect(st.invoiced, 0);
+      expect(st.received, closeTo(900, 1e-9));
+      expect(st.closing, closeTo(-900, 1e-9));
+      expect(st.advances, closeTo(900, 1e-9));
+      expect(repo.money(projectId: 'p').received, closeTo(900, 1e-9));
+    });
+
+    test('paying above a term becomes credit for the next invoices', () async {
+      final q = await withTerms();
+      final a = await receive('a1', 800, quotationId: 'q', termIndex: 0);
+      final t0 = await issue('t0', 660, quotationId: 'q', termIndex: 0);
+      final t1 = await issue('t1', 1320, quotationId: 'q', termIndex: 1);
+      expect(repo.paymentState(t0), PaymentState.paid);
+      expect(repo.paidOn(t1), closeTo(140, 1e-9));
+      expect(repo.balanceOf(t1), closeTo(1180, 1e-9));
+      expect(repo.termStatus(q, 0).received, closeTo(660, 1e-9));
+      expect(repo.unappliedOf(a), 0);
+    });
+
+    test('money on a cancelled invoice becomes credit', () async {
+      await setup();
+      final i1 = await issue('i1', 754, day: 5);
+      final paid = await receive('r1', 754, invoiceId: 'i1', day: 6);
+      expect(repo.unappliedOf(paid), 0);
+      await repo.saveInvoice(i1.copyWith(status: InvoiceStatus.cancelled));
+      expect(repo.unappliedOf(paid), 754);
+      expect(receiptPurpose(repo, paid), contains('cancelled'));
+      final i2 = await issue('i2', 800, day: 7);
+      expect(repo.paidOn(i2), closeTo(754, 1e-9));
+      expect(repo.balanceOf(i2), closeTo(46, 1e-9));
+      final st = buildStatement(repo, 'c');
+      expect(st.closing, closeTo(46, 1e-9));
+      expect(st.dueOnInvoices, closeTo(46, 1e-9));
+    });
+
+    test('totals are settled to the cent', () async {
+      await setup();
+      // 369.9963 prints as \$370.00; two of them are paid with \$740.00.
+      final a = await issue('a', 369.9963, day: 5);
+      final b = await issue('b', 369.9963, day: 6);
+      final dep = await receive('d1', 740, day: 7);
+      expect(repo.balanceOf(a), 0);
+      expect(repo.balanceOf(b), 0);
+      expect(repo.paymentState(b), PaymentState.paid);
+      expect(repo.unappliedOf(dep), 0);
+    });
+
+    test('invoices of the same day settle in number order', () async {
+      await setup();
+      await receive('d1', 1000, day: 1);
+      final first = await issue('a', 754, at: DateTime(2026, 10, 15, 10, 30));
+      final second = await issue('b', 500, at: DateTime(2026, 10, 15));
+      expect(repo.paymentState(first), PaymentState.paid);
+      expect(repo.balanceOf(second), closeTo(254, 1e-9));
+    });
+
+    test('set-offs read during a reload are not kept', () async {
+      await setup();
+      final inv = await issue('i1', 754, day: 5);
+      // A receipt arrives from the cloud: written to the database, then
+      // the lists reload while the screen keeps reading.
+      final t = repo.now();
+      await repo.local.save(
+        'payments',
+        Payment(
+          id: 'd1',
+          createdAt: t,
+          updatedAt: t,
+          date: DateTime(2026, 10, 6),
+          amount: 2000,
+          clientId: 'c',
+        ).toMap(),
+      );
+      var done = false;
+      final reload = repo.reload().then((_) => done = true);
+      while (!done) {
+        repo.balanceOf(inv);
+        await Future<void>.delayed(Duration.zero);
+      }
+      await reload;
+      expect(repo.balanceOf(repo.invoice('i1')!), 0);
     });
   });
 }

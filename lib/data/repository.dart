@@ -83,6 +83,7 @@ class Repository extends ChangeNotifier {
   }
 
   Future<void> reload() async {
+    _allocations.clear();
     members = (await local.all('members')).map(Member.fromMap).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     stages = (await local.all('stages')).map(Stage.fromMap).toList()
@@ -115,6 +116,8 @@ class Repository extends ChangeNotifier {
     companyName = await local.getSetting('company_name') ?? companyName;
     final logo = await local.getSetting('company_logo');
     companyLogo = logo == null || logo.isEmpty ? null : base64Decode(logo);
+    // A screen may have read set-offs while the lists were half loaded.
+    _allocations.clear();
     notifyListeners();
   }
 
@@ -207,99 +210,266 @@ class Repository extends ChangeNotifier {
   static bool _upTo(DateTime d, DateTime? until) =>
       until == null || !_day(d).isAfter(_day(until));
 
-  double _paidDirect(Invoice i, [DateTime? until]) => payments
-      .where((p) => p.invoiceId == i.id && _upTo(p.date, until))
-      .fold(0.0, (s, p) => s + p.amount);
+  static double _cents(double v) => (v * 100).round() / 100;
 
-  /// Receipts taken on a payment term, applied to the invoices issued for
-  /// that same term, oldest first, up to what each invoice still owes.
-  /// Returns the amount applied per invoice id and per receipt id.
-  Map<String, double> _applyTerm(
-    String quotationId,
-    int termIndex, [
-    DateTime? until,
-  ]) {
-    final out = <String, double>{};
-    final pool =
-        payments
-            .where(
-              (p) =>
-                  !p.onInvoice &&
-                  p.quotationId == quotationId &&
-                  p.termIndex == termIndex &&
-                  _upTo(p.date, until),
-            )
-            .toList()
-          ..sort(_byDateThenNumber);
-    if (pool.isEmpty) return out;
-    final targets =
-        invoices
-            .where(
-              (i) =>
-                  i.quotationId == quotationId &&
-                  i.termIndex == termIndex &&
-                  i.status == InvoiceStatus.sent &&
-                  _upTo(i.date, until),
-            )
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date));
-    var k = 0;
-    var left = pool.first.amount;
-    for (final i in targets) {
-      var need = i.total - _paidDirect(i, until);
-      while (need > 0.005 && k < pool.length) {
-        final take = need < left ? need : left;
-        out[i.id] = (out[i.id] ?? 0) + take;
-        out[pool[k].id] = (out[pool[k].id] ?? 0) + take;
-        need -= take;
-        left -= take;
-        if (left <= 0.005 && ++k < pool.length) left = pool[k].amount;
+  /// Receipts taken on an invoice. On an issued invoice this stops at the
+  /// invoice total: anything paid above it is credit on the account.
+  double _paidDirect(Invoice i, [DateTime? until]) {
+    final paid = payments
+        .where((p) => p.invoiceId == i.id && _upTo(p.date, until))
+        .fold(0.0, (s, p) => s + p.amount);
+    if (i.status != InvoiceStatus.sent) return paid;
+    final total = _cents(i.total);
+    return paid > total ? total : paid;
+  }
+
+  /// Advances set against invoices, per client and cut-off day. Rebuilt
+  /// whenever the data changes.
+  final _allocations = <String, _Allocation>{};
+
+  _Allocation _allocation(String? clientId, [DateTime? until]) =>
+      _allocations['$clientId|${until == null ? '' : _day(until)}'] ??=
+          _allocate(clientId, until);
+
+  /// The project money held from a receipt belongs to: its invoice's
+  /// project, its quotation's, or its own.
+  String? homeProject(Payment p) => p.onInvoice
+      ? invoice(p.invoiceId)?.projectId ?? p.projectId
+      : p.projectId ?? quotation(p.quotationId)?.projectId;
+
+  /// The money of a client's receipts that is not taken on an issued
+  /// invoice, and so can be set against invoices:
+  ///  - an advance on a payment term, up to the term's amount;
+  ///  - money on account, and whatever was paid above a term's amount (or
+  ///    on a term that no longer exists);
+  ///  - a receipt on an invoice that was cancelled, set back to draft or
+  ///    deleted, and whatever was paid above an invoice's total.
+  List<_Credit> _creditsOf(String clientId, DateTime? until) {
+    final out = <_Credit>[];
+    final onTerms = <String, List<Payment>>{};
+    final onInvoices = <String, List<Payment>>{};
+    for (final p in payments) {
+      if (payerOf(p) != clientId || !_upTo(p.date, until)) continue;
+      if (p.onInvoice) {
+        (onInvoices[p.invoiceId] ??= []).add(p);
+      } else if (p.quotationId != null && p.termIndex != null) {
+        (onTerms['${p.quotationId}|${p.termIndex}'] ??= []).add(p);
+      } else {
+        out.add(_Credit(p, p.amount, projectId: p.projectId));
       }
-      if (k >= pool.length) break;
+    }
+    // Fills [cap] with the receipts in order; the part of each receipt
+    // above it becomes money on account of [project].
+    void split(
+      List<Payment> group,
+      double cap,
+      String? project, {
+      String? quotationId,
+      int? termIndex,
+      bool keep = true,
+    }) {
+      group.sort(_byDateThenNumber);
+      var room = cap;
+      for (final p in group) {
+        final inside = p.amount < room ? p.amount : room;
+        room -= inside;
+        if (inside > 0.005 && keep) {
+          out.add(
+            _Credit(
+              p,
+              inside,
+              projectId: project,
+              quotationId: quotationId,
+              termIndex: termIndex,
+            ),
+          );
+        }
+        final rest = p.amount - inside;
+        if (rest > 0.005) out.add(_Credit(p, rest, projectId: project));
+      }
+    }
+
+    for (final group in onTerms.values) {
+      final p = group.first;
+      final q = quotation(p.quotationId);
+      final t = p.termIndex!;
+      final live =
+          q != null &&
+          q.status != QuotationStatus.rejected &&
+          t < q.paymentTerms.length;
+      split(
+        group,
+        live ? _cents(q.paymentTerms[t].valueOf(q.total)) : 0,
+        p.projectId ?? q?.projectId,
+        quotationId: p.quotationId,
+        termIndex: t,
+      );
+    }
+    for (final MapEntry(key: id, value: group) in onInvoices.entries) {
+      final i = invoice(id);
+      final issued = i != null && i.status == InvoiceStatus.sent;
+      split(
+        group,
+        issued ? _cents(i.total) : 0,
+        i?.projectId ?? group.first.projectId,
+        keep: false, // the part within the total is paid on the invoice
+      );
+    }
+    return out..sort((a, b) => _byDateThenNumber(a.payment, b.payment));
+  }
+
+  /// Sets every credit (see [_creditsOf]) against the client's issued
+  /// invoices.
+  ///
+  /// Invoices are settled oldest first, so a new invoice never changes how
+  /// older ones were paid. For each invoice the money is taken, oldest
+  /// receipt first, from:
+  ///  1. advances on the invoice's own payment term;
+  ///  2. for an invoice on a quotation but not on one term (a full or
+  ///     progress invoice), advances on any term of that quotation;
+  ///  3. money on account for the same project, or with no project.
+  /// Whatever is left stays as credit: an advance waits for its term's
+  /// invoice, money on account for the client's next invoice.
+  _Allocation _allocate(String? clientId, DateTime? until) {
+    final out = _Allocation();
+    if (clientId == null) return out;
+    final credits = _creditsOf(clientId, until);
+    out.credits.addAll(credits);
+    if (credits.isEmpty) return out;
+    final left = [for (final c in credits) c.amount];
+    final targets = [
+      for (final i in invoices)
+        if (i.clientId == clientId &&
+            i.status == InvoiceStatus.sent &&
+            _upTo(i.date, until))
+          i,
+    ]..sort(_byInvoiceDate);
+    for (final i in targets) {
+      var need = _cents(i.total) - _paidDirect(i, until);
+      if (need <= 0.005) continue;
+      final groups = <bool Function(_Credit)>[
+        if (i.quotationId != null && i.termIndex != null)
+          (c) => c.quotationId == i.quotationId && c.termIndex == i.termIndex,
+        if (i.quotationId != null && i.termIndex == null)
+          (c) => c.onTerm && c.quotationId == i.quotationId,
+        (c) =>
+            !c.onTerm &&
+            (c.projectId == null ||
+                i.projectId == null ||
+                c.projectId == i.projectId),
+      ];
+      for (final inGroup in groups) {
+        for (var k = 0; k < credits.length && need > 0.005; k++) {
+          final c = credits[k];
+          if (left[k] <= 0.005 || !inGroup(c)) continue;
+          final take = left[k] < need ? left[k] : need;
+          left[k] -= take;
+          need -= take;
+          (out.toInvoice[i.id] ??= []).add((c, take));
+          out.add(c.payment.id, i, take);
+        }
+      }
     }
     return out;
   }
 
+  /// Receipts in the order they were taken.
+  static int receiptOrder(Payment a, Payment b) => _byDateThenNumber(a, b);
+
+  /// By day, then receipt number, so a receipt dated with a time and one
+  /// picked as a bare date sort the same way.
   static int _byDateThenNumber(Payment a, Payment b) {
-    final c = a.date.compareTo(b.date);
-    return c != 0 ? c : a.number.compareTo(b.number);
+    var c = _day(a.date).compareTo(_day(b.date));
+    if (c == 0) c = a.number.compareTo(b.number);
+    return c != 0 ? c : a.date.compareTo(b.date);
   }
 
-  /// Advance receipts (taken on this invoice's payment term) applied to it.
+  static int _byInvoiceDate(Invoice a, Invoice b) {
+    var c = _day(a.date).compareTo(_day(b.date));
+    if (c == 0) c = a.number.compareTo(b.number);
+    return c != 0 ? c : a.date.compareTo(b.date);
+  }
+
+  /// Advances and money on account set against an invoice.
   double advanceOn(Invoice i, {DateTime? until}) =>
-      i.quotationId == null || i.termIndex == null
-      ? 0
-      : _applyTerm(i.quotationId!, i.termIndex!, until)[i.id] ?? 0;
+      _allocation(i.clientId, until).onInvoice(i.id);
 
-  /// The advance receipts applied to an invoice, with the amount of each.
+  /// The receipts set against an invoice (not taken on it), with the
+  /// amount of each.
   List<(Payment, double)> advancesOn(Invoice i) {
-    if (i.quotationId == null || i.termIndex == null) return const [];
-    final applied = _applyTerm(i.quotationId!, i.termIndex!);
-    return [
-      for (final p in payments)
-        if ((applied[p.id] ?? 0) > 0 &&
-            p.quotationId == i.quotationId &&
-            p.termIndex == i.termIndex)
-          (p, applied[p.id]!),
-    ];
+    final out = <(Payment, double)>[];
+    for (final (c, a)
+        in _allocation(i.clientId).toInvoice[i.id] ??
+            const <(_Credit, double)>[]) {
+      final k = out.indexWhere((e) => e.$1.id == c.payment.id);
+      if (k < 0) {
+        out.add((c.payment, a));
+      } else {
+        out[k] = (c.payment, out[k].$2 + a);
+      }
+    }
+    return out;
   }
 
-  /// Everything received on an invoice: receipts taken on it, plus advances
-  /// on its payment term.
+  /// The invoices a receipt's credit was set against.
+  List<(Invoice, double)> appliedTo(Payment p, {DateTime? until}) =>
+      _allocation(payerOf(p), until).fromReceipt[p.id] ?? const [];
+
+  /// Everything received on an invoice: receipts taken on it, plus
+  /// advances and money on account set against it.
   double paidOn(Invoice i, {DateTime? until}) =>
       _paidDirect(i, until) + advanceOn(i, until: until);
 
-  double balanceOf(Invoice i) => i.total - paidOn(i);
+  /// Still to collect on an invoice, to the cent.
+  double balanceOf(Invoice i) {
+    final b = _cents(i.total) - paidOn(i);
+    return b.abs() < .005 ? 0 : b;
+  }
 
-  /// The part of a receipt not yet set against an invoice: an advance on
-  /// a payment term not invoiced yet, or money on account.
+  /// The part of a receipt not yet set against an invoice: credit held as
+  /// an advance on a payment term, or on the client's account.
   double unappliedOf(Payment p, {DateTime? until}) {
-    if (p.onInvoice) return 0;
-    if (p.quotationId == null || p.termIndex == null) return p.amount;
-    final used = _applyTerm(p.quotationId!, p.termIndex!, until)[p.id] ?? 0;
-    final left = p.amount - used;
+    final a = _allocation(payerOf(p), until);
+    var left = 0.0;
+    for (final c in a.credits) {
+      if (c.payment.id == p.id) left += c.amount;
+    }
+    for (final (_, used)
+        in a.fromReceipt[p.id] ?? const <(Invoice, double)>[]) {
+      left -= used;
+    }
     return left.abs() < .005 ? 0 : left;
   }
+
+  /// The part of a receipt that went to one project (null: to no
+  /// project): taken on its invoices, set against its invoices, or held
+  /// as credit for it. The parts of every receipt add up to its amount.
+  double receivedFor(Payment p, String? projectId, {DateTime? until}) {
+    final a = _allocation(payerOf(p), until);
+    var credit = 0.0;
+    for (final c in a.credits) {
+      if (c.payment.id == p.id) credit += c.amount;
+    }
+    final home = homeProject(p) == projectId;
+    var out = home ? p.amount - credit : 0.0; // taken on its own invoice
+    for (final (i, used)
+        in a.fromReceipt[p.id] ?? const <(Invoice, double)>[]) {
+      credit -= used;
+      if (i.projectId == projectId) out += used;
+    }
+    if (home) out += credit; // still held as credit
+    return out.abs() < .005 ? 0 : out;
+  }
+
+  /// Received for a project (all receipts when [projectId] is null), by
+  /// receipt date.
+  double receivedOn({String? projectId, DateTime? since}) => payments
+      .where((p) => since == null || !p.date.isBefore(since))
+      .fold(
+        0.0,
+        (s, p) =>
+            s + (projectId == null ? p.amount : receivedFor(p, projectId)),
+      );
 
   /// Received before [p] on the same invoice or term, in receipt order.
   double receivedBefore(Payment p) {
@@ -326,12 +496,14 @@ class Repository extends ChangeNotifier {
   List<Payment> receipts({String? clientId, String? projectId}) => [
     for (final p in payments)
       if ((clientId == null || payerOf(p) == clientId) &&
-          (projectId == null || projectOfPayment(p) == projectId))
+          (projectId == null ||
+              projectOfPayment(p) == projectId ||
+              receivedFor(p, projectId) > 0))
         p,
   ]..sort((a, b) => b.date.compareTo(a.date));
 
   /// Where a payment term of a quotation stands.
-  TermStatus termStatus(Quotation q, int index) {
+  TermStatus termStatus(Quotation q, int index, {DateTime? until}) {
     final term = q.paymentTerms[index];
     final termInvoices = invoices
         .where(
@@ -341,16 +513,23 @@ class Repository extends ChangeNotifier {
               i.status != InvoiceStatus.cancelled,
         )
         .toList();
-    final direct = payments.where(
-      (p) => p.quotationId == q.id && p.termIndex == index && !p.onInvoice,
-    );
+    bool mine(_Credit c) => c.quotationId == q.id && c.termIndex == index;
+    final a = _allocation(q.clientId, until);
+    // Advances held on the term (up to its amount), receipts on the term's
+    // invoices, and other money set against them.
+    var received = a.credits.where(mine).fold(0.0, (s, c) => s + c.amount);
+    for (final i in termInvoices) {
+      received += _paidDirect(i, until);
+      for (final (c, used)
+          in a.toInvoice[i.id] ?? const <(_Credit, double)>[]) {
+        if (!mine(c)) received += used;
+      }
+    }
     return TermStatus(
       term: term,
       value: term.valueOf(q.total),
       invoices: termInvoices,
-      received:
-          direct.fold(0.0, (s, p) => s + p.amount) +
-          termInvoices.fold(0.0, (s, i) => s + _paidDirect(i)),
+      received: received,
     );
   }
 
@@ -429,9 +608,8 @@ class Repository extends ChangeNotifier {
           )
           .fold(0.0, (s, q) => s + q.total),
       invoiced: live.fold(0.0, (s, i) => s + i.total),
-      received: payments
-          .where((p) => inProject(projectOfPayment(p)) && inRange(p.date))
-          .fold(0.0, (s, p) => s + p.amount),
+      revenue: live.fold(0.0, (s, i) => s + i.net),
+      received: receivedOn(projectId: projectId, since: since),
       expenses: expenses
           .where((e) => inProject(e.projectId) && inRange(e.date))
           .fold(0.0, (s, e) => s + e.amount),
@@ -443,7 +621,7 @@ class Repository extends ChangeNotifier {
         return b > 0 ? s + b : s;
       }),
       advances: payments
-          .where((p) => inProject(projectOfPayment(p)) && inRange(p.date))
+          .where((p) => inProject(homeProject(p)) && inRange(p.date))
           .fold(0.0, (s, p) => s + unappliedOf(p)),
     );
   }
@@ -710,5 +888,47 @@ class Repository extends ChangeNotifier {
   Future<void> setCurrentMember(String? id) async {
     await local.setSetting('current_member_id', id);
     await reload();
+  }
+}
+
+/// Which receipts paid how much of which invoice.
+/// Money from one receipt that can be set against invoices. One receipt
+/// can give two: the part within a payment term, and what was paid above.
+class _Credit {
+  _Credit(
+    this.payment,
+    this.amount, {
+    this.projectId,
+    this.quotationId,
+    this.termIndex,
+  });
+
+  final Payment payment;
+  final double amount;
+  final String? projectId;
+
+  /// Set on an advance held for one payment term.
+  final String? quotationId;
+  final int? termIndex;
+
+  bool get onTerm => quotationId != null && termIndex != null;
+}
+
+class _Allocation {
+  final credits = <_Credit>[];
+  final toInvoice = <String, List<(_Credit, double)>>{};
+  final fromReceipt = <String, List<(Invoice, double)>>{};
+
+  double onInvoice(String id) =>
+      toInvoice[id]?.fold<double>(0, (s, e) => s + e.$2) ?? 0;
+
+  void add(String paymentId, Invoice i, double amount) {
+    final list = fromReceipt[paymentId] ??= [];
+    final k = list.indexWhere((e) => e.$1.id == i.id);
+    if (k < 0) {
+      list.add((i, amount));
+    } else {
+      list[k] = (i, list[k].$2 + amount);
+    }
   }
 }

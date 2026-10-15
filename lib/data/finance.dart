@@ -722,6 +722,7 @@ class MoneySummary {
     required this.overdue,
     required this.outstanding,
     this.advances = 0,
+    this.revenue = 0,
   });
 
   /// Total of accepted quotations: the agreed fee.
@@ -740,7 +741,18 @@ class MoneySummary {
   /// terms and money on account.
   final double advances;
 
-  double get profit => received - expenses;
+  /// Issued invoices before VAT: income earned (VAT is owed to the tax
+  /// office).
+  final double revenue;
+
+  /// Profit on invoiced work: income without VAT, less expenses.
+  double get profit => revenue - expenses;
+
+  /// Profit as a share of income, in percent; null before any income.
+  double? get margin => revenue.abs() < .005 ? null : profit / revenue * 100;
+
+  /// Money in hand: received less spent.
+  double get cash => received - expenses;
 }
 
 /// Standard stages per service. Design keeps its original names so existing
