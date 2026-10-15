@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../format.dart';
+import '../maps.dart';
 import '../widgets/common.dart';
 import 'client_form.dart';
 
@@ -38,6 +39,7 @@ class _ProjectFormState extends State<ProjectForm> {
   late final TextEditingController _location;
   late final TextEditingController _notes;
   late final TextEditingController _area;
+  late final TextEditingController _mapLink;
   ProjectType _type = ProjectType.residential;
   String? _clientId;
   String? _stageId;
@@ -58,8 +60,9 @@ class _ProjectFormState extends State<ProjectForm> {
     _location = TextEditingController(text: p?.location ?? '');
     _notes = TextEditingController(text: p?.notes ?? '');
     _clientId = p?.clientId ?? widget.clientId;
-    _stageId = p?.stageId ?? repo.stages.firstOrNull?.id;
     _service = p?.service ?? ServiceType.design;
+    _stageId = p?.stageId ?? repo.stagesFor(_service).firstOrNull?.id;
+    _mapLink = TextEditingController(text: p?.mapLink ?? '');
     _status = p?.status ?? ProjectStatus.active;
     _abroad = p?.abroad ?? false;
     _start = p?.startDate ?? (p == null ? repo.now() : null);
@@ -80,6 +83,7 @@ class _ProjectFormState extends State<ProjectForm> {
     _name.dispose();
     _location.dispose();
     _area.dispose();
+    _mapLink.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -109,10 +113,21 @@ class _ProjectFormState extends State<ProjectForm> {
         teamIds: _team.toList()..sort(),
         type: _type,
         areaSqm: double.tryParse(_area.text.replaceAll(',', '').trim()),
+        mapLink: _mapLink.text.trim(),
         notes: _notes.text.trim(),
       ),
     );
     if (mounted) Navigator.pop(context);
+  }
+
+  ServiceType get _effectiveService =>
+      _abroad ? ServiceType.consultancy : _service;
+
+  /// Keeps the stage when it belongs to the chosen service, otherwise moves
+  /// to that service's first stage.
+  void _fitStage(Repository repo) {
+    final list = repo.stagesFor(_effectiveService);
+    if (!list.any((s) => s.id == _stageId)) _stageId = list.firstOrNull?.id;
   }
 
   Future<void> _newClient() async {
@@ -202,9 +217,11 @@ class _ProjectFormState extends State<ProjectForm> {
                 onChanged: (v) => setState(() {
                   _abroad = v;
                   if (v) _service = ServiceType.consultancy;
+                  _fitStage(repo);
                 }),
               ),
               SegmentedButton<ServiceType>(
+                showSelectedIcon: false,
                 segments: [
                   for (final s in ServiceType.values)
                     ButtonSegment(
@@ -214,7 +231,10 @@ class _ProjectFormState extends State<ProjectForm> {
                     ),
                 ],
                 selected: {_service},
-                onSelectionChanged: (v) => setState(() => _service = v.first),
+                onSelectionChanged: (v) => setState(() {
+                  _service = v.first;
+                  _fitStage(repo);
+                }),
               ),
               gap,
               DropdownButtonFormField<ProjectType>(
@@ -265,20 +285,60 @@ class _ProjectFormState extends State<ProjectForm> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _mapLink,
+                keyboardType: TextInputType.url,
+                decoration: InputDecoration(
+                  labelText: 'Google Maps link',
+                  hintText: 'Paste the pin link from Google Maps',
+                  prefixIcon: const Icon(Icons.place_outlined),
+                  suffixIcon: IconButton(
+                    tooltip: 'Find on Google Maps',
+                    icon: const Icon(Icons.map_outlined),
+                    onPressed: () => openUri(
+                      _mapLink.text.trim().isNotEmpty
+                          ? Uri.parse(
+                              _mapLink.text.trim().startsWith('http')
+                                  ? _mapLink.text.trim()
+                                  : 'https://${_mapLink.text.trim()}',
+                            )
+                          : mapSearchUri(
+                              _location.text.trim().isEmpty
+                                  ? 'Lebanon'
+                                  : _location.text,
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 4),
+                child: Text(
+                  'Tap the map button, drop a pin on the site, press Share, '
+                  'copy the link and paste it here.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
               gap,
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      initialValue: repo.stage(_stageId) == null
-                          ? null
-                          : _stageId,
+                      key: ValueKey(_effectiveService),
+                      initialValue:
+                          repo
+                              .stagesFor(_effectiveService)
+                              .any((s) => s.id == _stageId)
+                          ? _stageId
+                          : null,
                       isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Current stage',
+                      decoration: InputDecoration(
+                        labelText:
+                            'Current stage (${serviceLabel(_effectiveService).toLowerCase()})',
                       ),
                       items: [
-                        for (final s in repo.stages)
+                        for (final s in repo.stagesFor(_effectiveService))
                           DropdownMenuItem(value: s.id, child: Text(s.name)),
                       ],
                       onChanged: (v) => setState(() => _stageId = v),

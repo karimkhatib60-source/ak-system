@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repository.dart';
+import 'screens/assistant_screen.dart';
 import 'screens/client_detail_screen.dart';
+import 'screens/finance_screen.dart';
 import 'screens/lists_screens.dart';
 import 'screens/overview_screen.dart';
 import 'screens/settings_screen.dart';
@@ -21,21 +23,34 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  static const _pages = [
+  static const _all = [
     (Icons.dashboard_outlined, Icons.dashboard, 'Overview'),
     (Icons.folder_outlined, Icons.folder, 'Projects'),
-    (Icons.checklist_outlined, Icons.checklist, 'Tasks'),
-    (Icons.description_outlined, Icons.description, 'Deliverables'),
+    (Icons.task_alt_outlined, Icons.task_alt, 'Work'),
     (Icons.people_outline, Icons.people, 'Clients'),
+    (
+      Icons.account_balance_wallet_outlined,
+      Icons.account_balance_wallet,
+      'Finance',
+    ),
   ];
+
+  /// Finance is the owner's only.
+  List<(IconData, IconData, String)> get _pages =>
+      context.read<Repository>().isOwner ? _all : _all.sublist(0, 4);
 
   Widget _body() => switch (_index) {
     0 => const OverviewScreen(),
     1 => const ProjectsScreen(),
-    2 => const TasksScreen(),
-    3 => const DeliverablesScreen(),
-    _ => const ClientsScreen(),
+    2 => const WorkScreen(),
+    3 => const ClientsScreen(),
+    _ => const FinanceScreen(),
   };
+
+  void _openAssistant() => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const AssistantScreen()),
+  );
 
   void _openSettings() => Navigator.push(
     context,
@@ -46,7 +61,13 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
     final wide = MediaQuery.sizeOf(context).width >= 900;
+    if (_index >= _pages.length) _index = 0;
     final actions = [
+      IconButton(
+        tooltip: 'To cover',
+        icon: const Icon(Icons.fact_check_outlined),
+        onPressed: _openAssistant,
+      ),
       const SyncBadge(),
       IconButton(
         tooltip: 'Settings',

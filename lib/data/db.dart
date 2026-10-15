@@ -4,13 +4,13 @@ import 'package:sqflite/sqflite.dart';
 /// Every table also has: id, created_at, updated_at, deleted, dirty.
 const syncedTables = <String, String>{
   'members': 'name TEXT, email TEXT, role TEXT',
-  'stages': 'name TEXT, position INTEGER',
+  'stages': 'name TEXT, position INTEGER, service TEXT',
   'clients': 'name TEXT, company TEXT, phone TEXT, email TEXT, country TEXT, notes TEXT',
   'projects':
       'code TEXT, name TEXT, client_id TEXT, service TEXT, '
       'location TEXT, abroad INTEGER, stage_id TEXT, status TEXT, '
       'start_date TEXT, due_date TEXT, team_ids TEXT, notes TEXT, '
-      'project_type TEXT, area_sqm REAL',
+      'project_type TEXT, area_sqm REAL, map_link TEXT',
   'tasks':
       'project_id TEXT, title TEXT, assignee_id TEXT, due_date TEXT, '
       'status TEXT, priority TEXT, stage_id TEXT, notes TEXT, category TEXT',
@@ -19,7 +19,23 @@ const syncedTables = <String, String>{
       'version INTEGER, status TEXT, due_date TEXT, submitted_at TEXT, '
       'approved_at TEXT, file_link TEXT, notes TEXT, discipline TEXT, '
       'doc_type TEXT, doc_number INTEGER',
+  'quotations':
+      'number TEXT, title TEXT, client_id TEXT, project_id TEXT, date TEXT, '
+      'valid_until TEXT, items TEXT, discount REAL, vat_rate REAL, '
+      'status TEXT, terms TEXT, notes TEXT',
+  'invoices':
+      'number TEXT, title TEXT, client_id TEXT, project_id TEXT, '
+      'quotation_id TEXT, date TEXT, due_date TEXT, items TEXT, '
+      'discount REAL, vat_rate REAL, status TEXT, notes TEXT',
+  'payments':
+      'invoice_id TEXT, date TEXT, amount REAL, method TEXT, reference TEXT',
+  'expenses':
+      'project_id TEXT, date TEXT, category TEXT, amount REAL, vendor TEXT, '
+      'notes TEXT',
 };
+
+/// Money tables. Only the owner syncs these.
+const financeTables = {'quotations', 'invoices', 'payments', 'expenses'};
 
 /// Local SQLite store. Everything the app shows is read from here, so the app
 /// works with no internet; the sync service copies changes to and from the
@@ -29,7 +45,7 @@ class LocalDb {
 
   final Database db;
 
-  static const _version = 2;
+  static const _version = 3;
 
   /// Columns added after the first release, by the version that added them.
   static const _added = {
@@ -41,7 +57,20 @@ class LocalDb {
       'deliverables ADD COLUMN doc_type TEXT',
       'deliverables ADD COLUMN doc_number INTEGER',
     ],
+    3: ['stages ADD COLUMN service TEXT', 'projects ADD COLUMN map_link TEXT'],
   };
+
+  /// Tables added after the first release, by the version that added them.
+  static const _newTables = {
+    3: ['quotations', 'invoices', 'payments', 'expenses'],
+  };
+
+  static Future<void> _createTable(Database db, String name) => db.execute(
+    'CREATE TABLE IF NOT EXISTS $name ('
+    'id TEXT PRIMARY KEY, created_at TEXT NOT NULL, '
+    'updated_at TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, '
+    'dirty INTEGER NOT NULL DEFAULT 1, ${syncedTables[name]})',
+  );
 
   static Future<LocalDb> open(String path, {DatabaseFactory? factory}) async {
     final f = factory ?? databaseFactory;
@@ -52,13 +81,8 @@ class LocalDb {
         // Each in-memory database (used in tests) is its own copy.
         singleInstance: path != inMemoryDatabasePath,
         onCreate: (db, _) async {
-          for (final e in syncedTables.entries) {
-            await db.execute(
-              'CREATE TABLE ${e.key} ('
-              'id TEXT PRIMARY KEY, created_at TEXT NOT NULL, '
-              'updated_at TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, '
-              'dirty INTEGER NOT NULL DEFAULT 1, ${e.value})',
-            );
+          for (final t in syncedTables.keys) {
+            await _createTable(db, t);
           }
           await db.execute(
             'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)',
@@ -73,6 +97,9 @@ class LocalDb {
             for (final change in _added[v] ?? const <String>[]) {
               await db.execute('ALTER TABLE $change');
             }
+            for (final t in _newTables[v] ?? const <String>[]) {
+              await _createTable(db, t);
+            }
           }
         },
       ),
@@ -82,6 +109,10 @@ class LocalDb {
 
   Future<List<Map<String, Object?>>> all(String table) =>
       db.query(table, where: 'deleted = 0');
+
+  /// Every row, deleted ones included.
+  Future<List<Map<String, Object?>>> everything(String table) =>
+      db.query(table);
 
   /// Saves a record changed on this device and marks it for upload.
   Future<void> save(String table, Map<String, Object?> row) => db.insert(

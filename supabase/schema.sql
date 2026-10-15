@@ -226,3 +226,56 @@ alter table tasks add column if not exists category text;
 alter table deliverables add column if not exists discipline text;
 alter table deliverables add column if not exists doc_type text;
 alter table deliverables add column if not exists doc_number integer;
+
+-- v3: stages per service, map link, and money (owner only). Safe to re-run.
+alter table public.stages add column if not exists service text;
+alter table public.projects add column if not exists map_link text;
+
+create table if not exists public.quotations (
+  id uuid primary key, created_at timestamptz not null,
+  updated_at timestamptz not null, deleted boolean not null default false,
+  synced_at timestamptz not null default now(),
+  number text, title text, client_id uuid, project_id uuid, date text,
+  valid_until text, items text, discount double precision,
+  vat_rate double precision, status text, terms text, notes text
+);
+create table if not exists public.invoices (
+  id uuid primary key, created_at timestamptz not null,
+  updated_at timestamptz not null, deleted boolean not null default false,
+  synced_at timestamptz not null default now(),
+  number text, title text, client_id uuid, project_id uuid,
+  quotation_id uuid, date text, due_date text, items text,
+  discount double precision, vat_rate double precision, status text,
+  notes text
+);
+create table if not exists public.payments (
+  id uuid primary key, created_at timestamptz not null,
+  updated_at timestamptz not null, deleted boolean not null default false,
+  synced_at timestamptz not null default now(),
+  invoice_id uuid, date text, amount double precision, method text,
+  reference text
+);
+create table if not exists public.expenses (
+  id uuid primary key, created_at timestamptz not null,
+  updated_at timestamptz not null, deleted boolean not null default false,
+  synced_at timestamptz not null default now(),
+  project_id uuid, date text, category text,
+  amount double precision, vendor text, notes text
+);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['quotations', 'invoices', 'payments', 'expenses']
+  loop
+    execute format('drop trigger if exists stamp_synced_at on public.%I', t);
+    execute format(
+      'create trigger stamp_synced_at before insert or update on public.%I '
+      'for each row execute function public.stamp_synced_at()', t);
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists owner_all on public.%I', t);
+    execute format(
+      'create policy owner_all on public.%I for all using (public.is_owner()) '
+      'with check (public.is_owner())', t);
+  end loop;
+end $$;

@@ -240,7 +240,10 @@ class _DeliverableFormState extends State<DeliverableForm> {
                     DropdownMenuItem(value: p.id, child: Text(p.name)),
                 ],
                 onChanged: d == null
-                    ? (v) => setState(() => _projectId = v)
+                    ? (v) => setState(() {
+                        _projectId = v;
+                        _stageId = repo.project(v)?.stageId;
+                      })
                     : null,
                 validator: (v) => v == null ? 'Choose a project' : null,
               ),
@@ -249,9 +252,11 @@ class _DeliverableFormState extends State<DeliverableForm> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      initialValue: repo.stage(_stageId) == null
-                          ? null
-                          : _stageId,
+                      key: ValueKey(_projectId),
+                      initialValue:
+                          repo.stagesOf(_projectId).any((s) => s.id == _stageId)
+                          ? _stageId
+                          : null,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Stage'),
                       items: [
@@ -259,7 +264,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
                           value: null,
                           child: Text('None'),
                         ),
-                        for (final s in repo.stages)
+                        for (final s in repo.stagesOf(_projectId))
                           DropdownMenuItem(value: s.id, child: Text(s.name)),
                       ],
                       onChanged: (v) => setState(() => _stageId = v),

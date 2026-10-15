@@ -3,7 +3,11 @@
 import 'dart:io';
 
 import 'package:ak_system/data/models.dart';
+import 'package:ak_system/data/repository.dart';
 import 'package:ak_system/main.dart';
+import 'package:ak_system/ui/app_shell.dart';
+import 'package:ak_system/ui/pdf_docs.dart';
+import 'package:provider/provider.dart';
 import 'package:ak_system/sync/cloud_account.dart';
 import 'package:ak_system/sync/sync_service.dart';
 import 'package:flutter/material.dart';
@@ -57,7 +61,9 @@ void main() {
     final repo = (await tester.runAsync(() async {
       final r = await memoryRepo(clock);
       final t = r.now();
-      final s = r.stages;
+      final s = r.stagesFor(ServiceType.design);
+      final cs = r.stagesFor(ServiceType.consultancy);
+      final ks = r.stagesFor(ServiceType.contracting);
       Future<void> client(String id, String name, String country) =>
           r.saveClient(
             Client(
@@ -81,6 +87,8 @@ void main() {
           clientId: 'c1',
           stageId: s[3].id,
           location: 'Byblos',
+          areaSqm: 450,
+          mapLink: 'https://maps.app.goo.gl/example',
           dueDate: DateTime(2026, 12, 20),
         ),
       );
@@ -94,7 +102,7 @@ void main() {
           clientId: 'c2',
           service: ServiceType.consultancy,
           abroad: true,
-          stageId: s[2].id,
+          stageId: cs[3].id,
           location: 'Doha',
         ),
       );
@@ -107,7 +115,8 @@ void main() {
           name: 'Apartment fit-out, Achrafieh',
           clientId: 'c3',
           service: ServiceType.contracting,
-          stageId: s[7].id,
+          stageId: ks[6].id,
+          areaSqm: 180,
           location: 'Beirut',
           dueDate: DateTime(2026, 11, 5),
         ),
@@ -196,6 +205,107 @@ void main() {
         1,
         7,
       );
+      final q = Quotation(
+        id: 'q1',
+        createdAt: t,
+        updatedAt: t,
+        number: 'QT-26-001',
+        title: 'Architectural design services, Villa Byblos',
+        clientId: 'c1',
+        projectId: 'p1',
+        date: DateTime(2026, 9, 2),
+        validUntil: DateTime(2026, 10, 2),
+        status: QuotationStatus.accepted,
+        items: const [
+          LineItem(description: 'Concept design', rate: 4000),
+          LineItem(description: 'Permit drawings', rate: 6000),
+          LineItem(description: 'Construction drawings', rate: 9000),
+          LineItem(
+            description: 'Site supervision visits',
+            quantity: 10,
+            unit: 'visit',
+            rate: 150,
+          ),
+        ],
+      );
+      await r.saveQuotation(q);
+      final inv = r.invoiceFromQuotation(q);
+      await r.saveInvoice(
+        Invoice(
+          id: 'i1',
+          createdAt: t,
+          updatedAt: t,
+          number: 'INV-26-001',
+          title: 'Advance payment 30%',
+          clientId: 'c1',
+          projectId: 'p1',
+          quotationId: 'q1',
+          date: DateTime(2026, 9, 5),
+          dueDate: DateTime(2026, 9, 19),
+          status: InvoiceStatus.sent,
+          items: [
+            LineItem(
+              description: '30% advance on ${q.number}',
+              rate: q.net * .3,
+            ),
+          ],
+          vatRate: inv.vatRate,
+        ),
+      );
+      await r.savePayment(
+        Payment(
+          id: 'pay1',
+          createdAt: t,
+          updatedAt: t,
+          invoiceId: 'i1',
+          date: DateTime(2026, 9, 12),
+          amount: 4000,
+        ),
+      );
+      await r.saveInvoice(
+        Invoice(
+          id: 'i2',
+          createdAt: t,
+          updatedAt: t,
+          number: 'INV-26-002',
+          title: 'Review memos 1-3',
+          clientId: 'c2',
+          projectId: 'p2',
+          date: DateTime(2026, 10, 1),
+          dueDate: DateTime(2026, 10, 15),
+          status: InvoiceStatus.sent,
+          vatRate: 0,
+          items: const [
+            LineItem(
+              description: 'Design review',
+              quantity: 3,
+              unit: 'memo',
+              rate: 1800,
+            ),
+          ],
+        ),
+      );
+      Future<void> exp(
+        String id,
+        String? p,
+        ExpenseCategory c,
+        double a,
+        String v,
+      ) => r.saveExpense(
+        Expense(
+          id: id,
+          createdAt: t,
+          updatedAt: t,
+          projectId: p,
+          date: DateTime(2026, 10, 3),
+          category: c,
+          amount: a,
+          vendor: v,
+        ),
+      );
+      await exp('e1', 'p1', ExpenseCategory.printing, 120, 'Print House Jbeil');
+      await exp('e2', null, ExpenseCategory.software, 290, 'AutoCAD licence');
+      await exp('e3', 'p3', ExpenseCategory.subcontractor, 2400, 'Tiling team');
       return r;
     }))!;
     final sync = SyncService(repo.local, repo);
@@ -241,11 +351,83 @@ void main() {
       find.byType(AkApp),
       matchesGoldenFile('out/phone_tasks.png'),
     );
-    await tester.tap(find.byType(NavigationDestination).at(3));
+    await tester.tap(find.text('Deliverables'));
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(AkApp),
       matchesGoldenFile('out/phone_deliverables.png'),
+    );
+  });
+
+  testWidgets('phone finance', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_finance.png'),
+    );
+    await tester.tap(find.text('Advance payment 30%'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_invoice.png'),
+    );
+  });
+
+  testWidgets('sample PDFs', (tester) async {
+    await pump(tester, const Size(400, 860));
+    final repo = tester.element(find.byType(AppShell)).read<Repository>();
+    await repo.setCompanyInfo({
+      'phone': '+961 3 000 000',
+      'email': 'info@ak-dac.com',
+      'bank': 'Bank name · IBAN LB00 0000 0000 0000 0000 0000 0000',
+    });
+    await tester.runAsync(() async {
+      File('test_screens/out/sample_quotation.pdf')
+          .writeAsBytesSync(await buildPdf(repo, repo.quotation('q1')!));
+      File('test_screens/out/sample_invoice.pdf')
+          .writeAsBytesSync(await buildPdf(repo, repo.invoice('i1')!));
+    });
+  });
+
+  testWidgets('phone assistant', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byTooltip('To cover'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_assistant.png'),
+    );
+  });
+
+  testWidgets('phone project form', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Apartment fit-out, Achrafieh'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit project'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -380));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_project_form.png'),
+    );
+  });
+
+  testWidgets('laptop finance', (tester) async {
+    await pump(tester, const Size(1366, 768));
+    await tester.tap(find.text('Projects').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Villa Byblos'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Finance').last);
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/laptop_project_finance.png'),
     );
   });
 
@@ -255,6 +437,8 @@ void main() {
       find.byType(AkApp),
       matchesGoldenFile('out/laptop_overview.png'),
     );
+    await tester.tap(find.text('Work').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Deliverables').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Design development set'));

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'ai/assistant.dart';
 import 'data/repository.dart';
 import 'platform/open_db.dart';
 import 'sync/cloud_account.dart';
@@ -41,6 +42,7 @@ class AkApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: repo),
         ChangeNotifierProvider.value(value: sync),
         ChangeNotifierProvider.value(value: cloud),
+        ChangeNotifierProvider(create: (_) => Assistant(repo)..loadKey()),
       ],
       child: MaterialApp(
         title: 'AK System',

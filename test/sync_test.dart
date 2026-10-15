@@ -45,8 +45,9 @@ void main() {
   test('stages are not duplicated across devices', () async {
     await phoneSync.syncNow();
     await laptopSync.syncNow();
-    expect(laptop.stages, hasLength(8));
-    expect(cloud.tables['stages'], hasLength(8));
+    final n = serviceStages.values.fold(0, (s, l) => s + l.length);
+    expect(laptop.stages, hasLength(n));
+    expect(cloud.tables['stages'], hasLength(n));
   });
 
   test('the most recent edit wins when both devices change a row', () async {

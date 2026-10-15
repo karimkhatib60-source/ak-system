@@ -43,6 +43,10 @@ dependencies:
   provider: ^6.1.5+1
   supabase_flutter: ^2.18.3
   sqflite_common_ffi_web: ^1.2.0
+  url_launcher: ^6.3.3
+  pdf: ^3.13.1
+  printing: ^5.15.1
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

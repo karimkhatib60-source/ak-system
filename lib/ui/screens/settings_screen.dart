@@ -24,16 +24,7 @@ class SettingsScreen extends StatelessWidget {
             const _CloudSection(),
             const SectionHeader('Team'),
             const _TeamSection(),
-            SectionHeader(
-              'Project stages',
-              trailing: repo.isOwner
-                  ? TextButton.icon(
-                      onPressed: () => _editStage(context, null),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add stage'),
-                    )
-                  : null,
-            ),
+            const SectionHeader('Project stages'),
             const _StagesSection(),
             if (repo.isOwner) ...[
               const SectionHeader('Company'),
@@ -51,13 +42,36 @@ class SettingsScreen extends StatelessWidget {
                   if (v != null && v.isNotEmpty) await repo.setCompanyName(v);
                 },
               ),
+              for (final k in companyInfoKeys)
+                ListTile(
+                  dense: true,
+                  leading: Icon(_infoIcon(k)),
+                  title: Text(_infoLabel(k)),
+                  subtitle: Text(
+                    (repo.companyInfo[k] ?? '').isEmpty
+                        ? 'Not set'
+                        : repo.companyInfo[k]!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Icons.edit_outlined, size: 18),
+                  onTap: () async {
+                    final v = await _ask(
+                      context,
+                      _infoLabel(k),
+                      repo.companyInfo[k] ?? '',
+                      multiline: k == 'bank' || k == 'terms' || k == 'address',
+                    );
+                    if (v != null) await repo.setCompanyInfo({k: v});
+                  },
+                ),
             ],
             const SectionHeader('About'),
             const ListTile(
               leading: Icon(Icons.info_outline),
-              title: Text('AK System · Phase 1'),
+              title: Text('AK System · version 3'),
               subtitle: Text(
-                'Projects, tasks and deliverables. Works offline; syncs when online.',
+                'Projects, tasks, deliverables and finance. Works offline; syncs when online.',
               ),
             ),
           ],
@@ -67,7 +81,33 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-Future<String?> _ask(BuildContext context, String title, String initial) {
+String _infoLabel(String k) => switch (k) {
+  'address' => 'Address',
+  'phone' => 'Phone',
+  'email' => 'Email',
+  'website' => 'Website',
+  'tax_number' => 'VAT / tax number',
+  'bank' => 'Bank details (on invoices)',
+  'terms' => 'Standard terms (on quotations and invoices)',
+  _ => k,
+};
+
+IconData _infoIcon(String k) => switch (k) {
+  'address' => Icons.location_on_outlined,
+  'phone' => Icons.phone_outlined,
+  'email' => Icons.mail_outline,
+  'website' => Icons.language,
+  'tax_number' => Icons.receipt_long_outlined,
+  'bank' => Icons.account_balance_outlined,
+  _ => Icons.gavel_outlined,
+};
+
+Future<String?> _ask(
+  BuildContext context,
+  String title,
+  String initial, {
+  bool multiline = false,
+}) {
   final ctrl = TextEditingController(text: initial);
   return showDialog<String>(
     context: context,
@@ -76,7 +116,9 @@ Future<String?> _ask(BuildContext context, String title, String initial) {
       content: TextField(
         controller: ctrl,
         autofocus: true,
-        onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        minLines: multiline ? 3 : 1,
+        maxLines: multiline ? 6 : 1,
+        onSubmitted: multiline ? null : (v) => Navigator.pop(ctx, v.trim()),
       ),
       actions: [
         TextButton(
@@ -92,7 +134,11 @@ Future<String?> _ask(BuildContext context, String title, String initial) {
   );
 }
 
-Future<void> _editStage(BuildContext context, Stage? s) async {
+Future<void> _editStage(
+  BuildContext context,
+  Stage? s,
+  ServiceType service,
+) async {
   final repo = context.read<Repository>();
   final name = await _ask(
     context,
@@ -108,20 +154,43 @@ Future<void> _editStage(BuildContext context, Stage? s) async {
           createdAt: now,
           updatedAt: now,
           name: name,
-          position: repo.stages.length,
+          position: repo.stagesFor(service).length,
+          service: service,
         ),
   );
 }
 
-class _StagesSection extends StatelessWidget {
+class _StagesSection extends StatefulWidget {
   const _StagesSection();
+
+  @override
+  State<_StagesSection> createState() => _StagesSectionState();
+}
+
+class _StagesSectionState extends State<_StagesSection> {
+  ServiceType _service = ServiceType.design;
 
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
-    final stages = repo.stages;
+    final stages = repo.stagesFor(_service);
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ServiceType>(
+              showSelectedIcon: false,
+              segments: [
+                for (final s in ServiceType.values)
+                  ButtonSegment(value: s, label: Text(serviceLabel(s))),
+              ],
+              selected: {_service},
+              onSelectionChanged: (v) => setState(() => _service = v.first),
+            ),
+          ),
+        ),
         for (var i = 0; i < stages.length; i++)
           ListTile(
             dense: true,
@@ -130,7 +199,9 @@ class _StagesSection extends StatelessWidget {
               child: Text('${i + 1}', style: const TextStyle(fontSize: 11)),
             ),
             title: Text(stages[i].name),
-            onTap: repo.isOwner ? () => _editStage(context, stages[i]) : null,
+            onTap: repo.isOwner
+                ? () => _editStage(context, stages[i], _service)
+                : null,
             trailing: !repo.isOwner
                 ? null
                 : Row(
@@ -177,6 +248,20 @@ class _StagesSection extends StatelessWidget {
                       ),
                     ],
                   ),
+          ),
+        if (repo.isOwner)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: TextButton.icon(
+                onPressed: () => _editStage(context, null, _service),
+                icon: const Icon(Icons.add),
+                label: Text(
+                  'Add ${serviceLabel(_service).toLowerCase()} stage',
+                ),
+              ),
+            ),
           ),
       ],
     );

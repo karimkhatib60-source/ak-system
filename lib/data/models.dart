@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+part 'finance.dart';
+
 // Data records for Phase 1. Every record carries the same sync columns
 // (id, created_at, updated_at, deleted) so the sync service can treat all
 // tables alike.
@@ -184,6 +188,9 @@ class Project implements Record {
   /// Built-up area in square metres.
   final double? areaSqm;
 
+  /// Google Maps link to the site.
+  final String mapLink;
+
   const Project({
     required this.id,
     required this.createdAt,
@@ -203,6 +210,7 @@ class Project implements Record {
     this.notes = '',
     this.type = ProjectType.residential,
     this.areaSqm,
+    this.mapLink = '',
   });
 
   factory Project.fromMap(Map<String, Object?> m) => Project(
@@ -232,6 +240,7 @@ class Project implements Record {
       ProjectType.residential,
     ),
     areaSqm: (m['area_sqm'] as num?)?.toDouble(),
+    mapLink: (m['map_link'] ?? '') as String,
   );
 
   @override
@@ -251,6 +260,7 @@ class Project implements Record {
     'notes': notes,
     'project_type': type.name,
     'area_sqm': areaSqm,
+    'map_link': mapLink,
   };
 
   Project copyWith({
@@ -287,6 +297,7 @@ class Project implements Record {
     notes: notes ?? this.notes,
     type: type,
     areaSqm: areaSqm,
+    mapLink: mapLink,
   );
 }
 
@@ -557,6 +568,9 @@ class Stage implements Record {
   final String name;
   final int position;
 
+  /// The service this stage belongs to: design, consultancy or contracting.
+  final ServiceType service;
+
   const Stage({
     required this.id,
     required this.createdAt,
@@ -564,6 +578,7 @@ class Stage implements Record {
     this.deleted = false,
     required this.name,
     required this.position,
+    this.service = ServiceType.design,
   });
 
   factory Stage.fromMap(Map<String, Object?> m) => Stage(
@@ -573,6 +588,7 @@ class Stage implements Record {
     deleted: m['deleted'] == 1 || m['deleted'] == true,
     name: (m['name'] ?? '') as String,
     position: (m['position'] as num?)?.toInt() ?? 0,
+    service: _enumByName(ServiceType.values, m['service'], ServiceType.design),
   );
 
   @override
@@ -580,6 +596,7 @@ class Stage implements Record {
     ..._base(this),
     'name': name,
     'position': position,
+    'service': service.name,
   };
 
   Stage copyWith({
@@ -594,6 +611,7 @@ class Stage implements Record {
     deleted: deleted ?? this.deleted,
     name: name ?? this.name,
     position: position ?? this.position,
+    service: service,
   );
 }
 

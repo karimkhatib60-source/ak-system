@@ -8,11 +8,31 @@ void main() {
 
   setUp(() => clock = TestClock(DateTime(2026, 10, 14, 9)));
 
-  test('seeds the eight standard stages once', () async {
+  test('seeds each service its own stages, once', () async {
     final repo = await memoryRepo(clock);
-    expect(repo.stages.map((s) => s.name), defaultStages);
+    expect(
+      repo.stagesFor(ServiceType.design).map((s) => s.name),
+      defaultStages,
+    );
+    expect(
+      repo.stagesFor(ServiceType.contracting).first.name,
+      'Quotation and BOQ',
+    );
+    expect(repo.stagesFor(ServiceType.consultancy), hasLength(8));
+    final count = repo.stages.length;
     await repo.load();
-    expect(repo.stages, hasLength(8));
+    expect(repo.stages, hasLength(count));
+  });
+
+  test('a deleted stage does not come back on the next start', () async {
+    final repo = await memoryRepo(clock);
+    final s = repo.stagesFor(ServiceType.consultancy).last;
+    await repo.deleteStage(s);
+    await repo.load();
+    expect(
+      repo.stagesFor(ServiceType.consultancy).map((x) => x.id),
+      isNot(contains(s.id)),
+    );
   });
 
   test('stage ids are identical on every device', () async {
@@ -133,7 +153,8 @@ void main() {
     final repo = await memoryRepo(clock);
     final permit = repo.stages.firstWhere((s) => s.name == 'Permit');
     await repo.moveStage(permit, -1);
-    expect(repo.stages[3].name, 'Permit');
-    expect(repo.stages[4].name, 'Design development');
+    final design = repo.stagesFor(ServiceType.design);
+    expect(design[3].name, 'Permit');
+    expect(design[4].name, 'Design development');
   });
 }

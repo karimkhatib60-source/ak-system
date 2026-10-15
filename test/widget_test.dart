@@ -90,6 +90,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Villa Byblos'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Current'),
+      200,
+      scrollable: find
+          .byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+          )
+          .first,
+    );
     expect(find.text('Concept design'), findsWidgets);
     expect(find.text('Current'), findsOneWidget);
   });

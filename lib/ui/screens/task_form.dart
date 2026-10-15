@@ -153,7 +153,10 @@ class _TaskFormState extends State<TaskForm> {
                   for (final p in repo.visibleProjects)
                     DropdownMenuItem(value: p.id, child: Text(p.name)),
                 ],
-                onChanged: (v) => setState(() => _projectId = v),
+                onChanged: (v) => setState(() {
+                  _projectId = v;
+                  _stageId = repo.project(v)?.stageId;
+                }),
                 validator: (v) => v == null ? 'Choose a project' : null,
               ),
               gap,
@@ -203,12 +206,16 @@ class _TaskFormState extends State<TaskForm> {
                 gap,
               ],
               DropdownButtonFormField<String?>(
-                initialValue: repo.stage(_stageId) == null ? null : _stageId,
+                key: ValueKey(_projectId),
+                initialValue:
+                    repo.stagesOf(_projectId).any((s) => s.id == _stageId)
+                    ? _stageId
+                    : null,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Stage'),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('None')),
-                  for (final s in repo.stages)
+                  for (final s in repo.stagesOf(_projectId))
                     DropdownMenuItem(value: s.id, child: Text(s.name)),
                 ],
                 onChanged: (v) => setState(() => _stageId = v),

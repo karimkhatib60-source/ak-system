@@ -134,6 +134,57 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
 enum _TaskFilter { mine, open, late, done }
 
+/// Tasks and deliverables together, switched at the top.
+class WorkScreen extends StatefulWidget {
+  const WorkScreen({super.key});
+
+  @override
+  State<WorkScreen> createState() => _WorkScreenState();
+}
+
+class _WorkScreenState extends State<WorkScreen> {
+  bool _deliverables = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Readable(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.checklist, size: 18),
+                    label: Text('Tasks'),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.description_outlined, size: 18),
+                    label: Text('Deliverables'),
+                  ),
+                ],
+                selected: {_deliverables},
+                onSelectionChanged: (v) =>
+                    setState(() => _deliverables = v.first),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: _deliverables
+              ? const DeliverablesScreen()
+              : const TasksScreen(),
+        ),
+      ],
+    );
+  }
+}
+
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
 

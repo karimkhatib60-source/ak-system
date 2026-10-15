@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/advisor.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../format.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/tiles.dart';
+import 'assistant_screen.dart';
+import 'finance_screen.dart' show InvoiceTile;
 import 'project_detail_screen.dart' show compareTasks;
 
 /// Today's picture: what is late, what is due this week, and what is
@@ -50,6 +54,16 @@ class OverviewScreen extends StatelessWidget {
     final revise = dels
         .where((d) => d.status == DeliverableStatus.revise)
         .toList();
+    final unpaid = repo.isOwner
+        ? repo.invoices.where((i) {
+            final st = repo.paymentState(i);
+            return st == PaymentState.overdue ||
+                st == PaymentState.unpaid ||
+                st == PaymentState.partlyPaid;
+          }).toList()
+        : <Invoice>[];
+    unpaid.sort((a, b) => (a.dueDate ?? a.date).compareTo(b.dueDate ?? b.date));
+    final advice = reviewOffice(repo);
 
     final name = repo.currentMember?.name.split(' ').first ?? 'Karim';
     final hour = now.hour;
@@ -163,6 +177,14 @@ class OverviewScreen extends StatelessWidget {
                   for (final t in lateTasks) TaskTile(t),
                 ]),
               ],
+              if (unpaid.isNotEmpty) ...[
+                SectionHeader(
+                  'To collect · ${fmtMoneyShort(unpaid.fold(0.0, (s, i) => s + repo.balanceOf(i)))}',
+                ),
+                _Group([
+                  for (final i in unpaid) InvoiceTile(i, showProject: true),
+                ]),
+              ],
               if (revise.isNotEmpty) ...[
                 const SectionHeader('Client asked for changes'),
                 _Group([for (final d in revise) DeliverableTile(d)]),
@@ -179,6 +201,22 @@ class OverviewScreen extends StatelessWidget {
                 const SectionHeader('Waiting for client approval'),
                 _Group([for (final d in waiting) DeliverableTile(d)]),
               ],
+              if (advice.isNotEmpty) ...[
+                SectionHeader(
+                  'To cover',
+                  trailing: TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AssistantScreen(),
+                      ),
+                    ),
+                    child: Text('See all ${advice.length}'),
+                  ),
+                ),
+                _Group([for (final a in advice.take(5)) AdviceTile(a)]),
+              ],
+              const SizedBox(height: 24),
             ],
           ),
         ),

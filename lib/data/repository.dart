@@ -6,6 +6,25 @@ import 'models.dart';
 
 const _uuid = Uuid();
 
+/// Company details printed on quotations and invoices.
+const companyInfoKeys = [
+  'address',
+  'phone',
+  'email',
+  'website',
+  'tax_number',
+  'bank',
+  'terms',
+];
+
+const companyInfoDefaults = {
+  'address': 'Lebanon',
+  'website': 'www.ak-dac.com',
+  'terms':
+      'Prices in US dollars. Payment due within 14 days of the invoice date. '
+      'Quotation valid for 30 days.',
+};
+
 /// In-memory view of the local database that the screens read from.
 /// Every change is written to SQLite first, then the lists are reloaded.
 class Repository extends ChangeNotifier {
@@ -24,6 +43,13 @@ class Repository extends ChangeNotifier {
   List<Project> projects = [];
   List<Task> tasks = [];
   List<Deliverable> deliverables = [];
+  List<Quotation> quotations = [];
+  List<Invoice> invoices = [];
+  List<Payment> payments = [];
+  List<Expense> expenses = [];
+
+  /// Company details printed on quotations and invoices.
+  Map<String, String> companyInfo = {};
 
   /// The signed-in team member. Null means the app is used on its own,
   /// without cloud sync, and the user is treated as the owner.
@@ -39,7 +65,7 @@ class Repository extends ChangeNotifier {
   bool get isOwner => currentMember == null || currentMember!.isOwner;
 
   Future<void> load() async {
-    if ((await local.all('stages')).isEmpty) await _seedStages();
+    await _seedStages();
     await reload();
   }
 
@@ -47,7 +73,11 @@ class Repository extends ChangeNotifier {
     members = (await local.all('members')).map(Member.fromMap).toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     stages = (await local.all('stages')).map(Stage.fromMap).toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+      ..sort(
+        (a, b) => a.service != b.service
+            ? a.service.index.compareTo(b.service.index)
+            : a.position.compareTo(b.position),
+      );
     clients = (await local.all('clients')).map(Client.fromMap).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     projects = (await local.all('projects')).map(Project.fromMap).toList()
@@ -56,29 +86,48 @@ class Repository extends ChangeNotifier {
     deliverables = (await local.all('deliverables'))
         .map(Deliverable.fromMap)
         .toList();
+    quotations = (await local.all('quotations')).map(Quotation.fromMap).toList()
+      ..sort((a, b) => b.number.compareTo(a.number));
+    invoices = (await local.all('invoices')).map(Invoice.fromMap).toList()
+      ..sort((a, b) => b.number.compareTo(a.number));
+    payments = (await local.all('payments')).map(Payment.fromMap).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    expenses = (await local.all('expenses')).map(Expense.fromMap).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    companyInfo = {
+      for (final k in companyInfoKeys)
+        k: await local.getSetting('company_$k') ?? companyInfoDefaults[k] ?? '',
+    };
     currentMemberId = await local.getSetting('current_member_id');
     companyName = await local.getSetting('company_name') ?? companyName;
     notifyListeners();
   }
 
-  /// Standard stages, with fixed ids and an old timestamp so every device
-  /// creates the same rows and any edit made in the cloud wins over them.
+  /// Standard stages for each service, with fixed ids and an old timestamp
+  /// so every device creates the same rows and any edit made in the cloud
+  /// wins over them. A service is only seeded once, so stages the owner
+  /// deleted do not come back.
   Future<void> _seedStages() async {
+    final existing = (await local.everything('stages')).map(Stage.fromMap);
     final t = DateTime.utc(2026, 1, 1);
-    for (var i = 0; i < defaultStages.length; i++) {
-      await local.save(
-        'stages',
-        Stage(
-          id: _uuid.v5(
-            Namespace.url.value,
-            'ak-system/stage/${defaultStages[i]}',
-          ),
-          createdAt: t,
-          updatedAt: t,
-          name: defaultStages[i],
-          position: i,
-        ).toMap(),
-      );
+    for (final e in serviceStages.entries) {
+      if (existing.any((s) => s.service == e.key)) continue;
+      for (var i = 0; i < e.value.length; i++) {
+        final key = e.key == ServiceType.design
+            ? 'ak-system/stage/${e.value[i]}'
+            : 'ak-system/stage/${e.key.name}/${e.value[i]}';
+        await local.save(
+          'stages',
+          Stage(
+            id: _uuid.v5(Namespace.url.value, key),
+            createdAt: t,
+            updatedAt: t,
+            name: e.value[i],
+            position: i,
+            service: e.key,
+          ).toMap(),
+        );
+      }
     }
   }
 
@@ -121,6 +170,100 @@ class Repository extends ChangeNotifier {
         ..sort((a, b) => a.title.compareTo(b.title));
   List<Project> projectsFor(String clientId) =>
       projects.where((p) => p.clientId == clientId).toList();
+
+  /// Stages of one service, in order.
+  List<Stage> stagesFor(ServiceType service) =>
+      stages.where((s) => s.service == service).toList();
+
+  /// Stages that apply to a project, by its service.
+  List<Stage> stagesOf(String? projectId) =>
+      stagesFor(project(projectId)?.service ?? ServiceType.design);
+
+  // ---- Money --------------------------------------------------------------
+
+  Quotation? quotation(String? id) =>
+      quotations.where((q) => q.id == id).firstOrNull;
+  Invoice? invoice(String? id) => invoices.where((i) => i.id == id).firstOrNull;
+
+  List<Payment> paymentsFor(String invoiceId) =>
+      payments.where((p) => p.invoiceId == invoiceId).toList();
+
+  double paidOn(Invoice i) => paymentsFor(i.id).fold(0, (s, p) => s + p.amount);
+
+  double balanceOf(Invoice i) => i.total - paidOn(i);
+
+  PaymentState paymentState(Invoice i) {
+    if (i.status == InvoiceStatus.cancelled) return PaymentState.cancelled;
+    if (i.status == InvoiceStatus.draft) return PaymentState.draft;
+    final paid = paidOn(i);
+    if (paid >= i.total - 0.005) return PaymentState.paid;
+    final due = i.dueDate;
+    if (due != null && _day(now()).isAfter(_day(due))) {
+      return PaymentState.overdue;
+    }
+    return paid > 0 ? PaymentState.partlyPaid : PaymentState.unpaid;
+  }
+
+  static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  List<Quotation> quotationsFor(String projectId) =>
+      quotations.where((q) => q.projectId == projectId).toList();
+  List<Invoice> invoicesFor(String projectId) =>
+      invoices.where((i) => i.projectId == projectId).toList();
+  List<Expense> expensesFor(String projectId) =>
+      expenses.where((e) => e.projectId == projectId).toList();
+
+  /// Money position of one project, or of everything when [projectId] is
+  /// null. [since] limits it to documents dated on or after that day.
+  MoneySummary money({String? projectId, DateTime? since}) {
+    bool inRange(DateTime d) => since == null || !d.isBefore(since);
+    bool inProject(String? id) => projectId == null || id == projectId;
+    final live = invoices.where(
+      (i) =>
+          inProject(i.projectId) &&
+          inRange(i.date) &&
+          i.status == InvoiceStatus.sent,
+    );
+    return MoneySummary(
+      quoted: quotations
+          .where(
+            (q) =>
+                inProject(q.projectId) &&
+                inRange(q.date) &&
+                q.status == QuotationStatus.accepted,
+          )
+          .fold(0.0, (s, q) => s + q.total),
+      invoiced: live.fold(0.0, (s, i) => s + i.total),
+      received: live.fold(0.0, (s, i) => s + paidOn(i)),
+      expenses: expenses
+          .where((e) => inProject(e.projectId) && inRange(e.date))
+          .fold(0.0, (s, e) => s + e.amount),
+      overdue: live
+          .where((i) => paymentState(i) == PaymentState.overdue)
+          .fold(0.0, (s, i) => s + balanceOf(i)),
+    );
+  }
+
+  String _nextNumber(String kind, Iterable<String> used) {
+    final yy = (now().year % 100).toString().padLeft(2, '0');
+    final prefix = '$kind-$yy-';
+    var max = 0;
+    for (final n in used) {
+      if (n.startsWith(prefix)) {
+        final v = int.tryParse(n.substring(prefix.length)) ?? 0;
+        if (v > max) max = v;
+      }
+    }
+    return '$prefix${(max + 1).toString().padLeft(3, '0')}';
+  }
+
+  /// e.g. QT-26-004
+  String nextQuotationNumber() =>
+      _nextNumber('QT', quotations.map((q) => q.number));
+
+  /// e.g. INV-26-012
+  String nextInvoiceNumber() =>
+      _nextNumber('INV', invoices.map((i) => i.number));
 
   /// Next project code for the current year, e.g. AK-26-004.
   String nextProjectCode() {
@@ -169,6 +312,54 @@ class Repository extends ChangeNotifier {
       _write('deliverables', d.toMap());
   Future<void> saveStage(Stage s) => _write('stages', s.toMap());
   Future<void> saveMember(Member m) => _write('members', m.toMap());
+  Future<void> saveQuotation(Quotation q) => _write('quotations', q.toMap());
+  Future<void> saveInvoice(Invoice i) => _write('invoices', i.toMap());
+  Future<void> savePayment(Payment p) => _write('payments', p.toMap());
+  Future<void> saveExpense(Expense e) => _write('expenses', e.toMap());
+  Future<void> deleteQuotation(Quotation q) =>
+      _write('quotations', q.copyWith(deleted: true).toMap());
+  Future<void> deletePayment(Payment p) =>
+      _write('payments', p.copyWith(deleted: true).toMap());
+  Future<void> deleteExpense(Expense e) =>
+      _write('expenses', e.copyWith(deleted: true).toMap());
+
+  /// Deleting an invoice also removes the payments recorded against it.
+  Future<void> deleteInvoice(Invoice i) async {
+    for (final p in paymentsFor(i.id)) {
+      await local.save('payments', {
+        ...p.copyWith(deleted: true).toMap(),
+        'updated_at': now().toUtc().toIso8601String(),
+      });
+    }
+    await _write('invoices', i.copyWith(deleted: true).toMap());
+  }
+
+  /// A new draft invoice carrying the quotation's lines.
+  Invoice invoiceFromQuotation(Quotation q) {
+    final t = now();
+    return Invoice(
+      id: newId(),
+      createdAt: t,
+      updatedAt: t,
+      number: nextInvoiceNumber(),
+      title: q.title,
+      clientId: q.clientId,
+      projectId: q.projectId,
+      quotationId: q.id,
+      date: t,
+      dueDate: t.add(const Duration(days: 14)),
+      items: q.items,
+      discount: q.discount,
+      vatRate: q.vatRate,
+    );
+  }
+
+  Future<void> setCompanyInfo(Map<String, String> info) async {
+    for (final e in info.entries) {
+      await local.setSetting('company_${e.key}', e.value);
+    }
+    await reload();
+  }
 
   Future<void> deleteClient(Client c) =>
       _write('clients', c.copyWith(deleted: true).toMap());
@@ -222,7 +413,7 @@ class Repository extends ChangeNotifier {
   );
 
   Future<void> moveStage(Stage s, int delta) async {
-    final list = [...stages];
+    final list = stagesFor(s.service);
     final i = list.indexWhere((x) => x.id == s.id);
     final j = i + delta;
     if (i < 0 || j < 0 || j >= list.length) return;

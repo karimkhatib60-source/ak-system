@@ -156,3 +156,78 @@ String fmtArea(double? a) {
       : a.toStringAsFixed(1);
   return '${NumberFormat.decimalPattern().format(double.parse(s))} m²';
 }
+
+final _money = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+final _moneyRound = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+
+/// "$12,500.00"
+String fmtMoney(double v) => _money.format(v);
+
+/// "$12,500", for summaries.
+String fmtMoneyShort(double v) => _moneyRound.format(v);
+
+String quotationStatusLabel(QuotationStatus s) => switch (s) {
+  QuotationStatus.draft => 'Draft',
+  QuotationStatus.sent => 'Sent',
+  QuotationStatus.accepted => 'Accepted',
+  QuotationStatus.rejected => 'Rejected',
+};
+
+Color quotationStatusColor(QuotationStatus s) => switch (s) {
+  QuotationStatus.draft => AkPalette.slate,
+  QuotationStatus.sent => AkPalette.blue,
+  QuotationStatus.accepted => AkPalette.good,
+  QuotationStatus.rejected => AkPalette.bad,
+};
+
+String paymentStateLabel(PaymentState s) => switch (s) {
+  PaymentState.draft => 'Draft',
+  PaymentState.unpaid => 'Unpaid',
+  PaymentState.partlyPaid => 'Part paid',
+  PaymentState.paid => 'Paid',
+  PaymentState.overdue => 'Overdue',
+  PaymentState.cancelled => 'Cancelled',
+};
+
+Color paymentStateColor(PaymentState s) => switch (s) {
+  PaymentState.draft => AkPalette.slate,
+  PaymentState.unpaid => AkPalette.blue,
+  PaymentState.partlyPaid => AkPalette.warn,
+  PaymentState.paid => AkPalette.good,
+  PaymentState.overdue => AkPalette.bad,
+  PaymentState.cancelled => AkPalette.slate,
+};
+
+String paymentMethodLabel(PaymentMethod m) => switch (m) {
+  PaymentMethod.bankTransfer => 'Bank transfer',
+  PaymentMethod.cash => 'Cash',
+  PaymentMethod.cheque => 'Cheque',
+  PaymentMethod.card => 'Card',
+  PaymentMethod.other => 'Other',
+};
+
+String expenseCategoryLabel(ExpenseCategory c) => switch (c) {
+  ExpenseCategory.subcontractor => 'Subcontractor',
+  ExpenseCategory.materials => 'Materials',
+  ExpenseCategory.salaries => 'Salaries and fees to team',
+  ExpenseCategory.rent => 'Office rent and utilities',
+  ExpenseCategory.software => 'Software and licences',
+  ExpenseCategory.transport => 'Transport and site visits',
+  ExpenseCategory.printing => 'Printing and models',
+  ExpenseCategory.marketing => 'Marketing',
+  ExpenseCategory.fees => 'Permits and official fees',
+  ExpenseCategory.other => 'Other',
+};
+
+IconData expenseCategoryIcon(ExpenseCategory c) => switch (c) {
+  ExpenseCategory.subcontractor => Icons.engineering_outlined,
+  ExpenseCategory.materials => Icons.inventory_2_outlined,
+  ExpenseCategory.salaries => Icons.badge_outlined,
+  ExpenseCategory.rent => Icons.apartment_outlined,
+  ExpenseCategory.software => Icons.computer_outlined,
+  ExpenseCategory.transport => Icons.directions_car_outlined,
+  ExpenseCategory.printing => Icons.print_outlined,
+  ExpenseCategory.marketing => Icons.campaign_outlined,
+  ExpenseCategory.fees => Icons.account_balance_outlined,
+  ExpenseCategory.other => Icons.receipt_outlined,
+};

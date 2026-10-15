@@ -144,7 +144,8 @@ class ProjectCard extends StatelessWidget {
     final late = tasks.where((t) => t.isOverdue(now)).length;
     final client = repo.client(p.clientId)?.name;
     final stage = repo.stage(p.stageId)?.name;
-    final stageIndex = repo.stages.indexWhere((s) => s.id == p.stageId);
+    final stages = repo.stagesFor(p.service);
+    final stageIndex = stages.indexWhere((s) => s.id == p.stageId);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -195,12 +196,12 @@ class ProjectCard extends StatelessWidget {
                 style: TextStyle(color: c.onSurfaceVariant),
               ),
               const SizedBox(height: 10),
-              StageBar(stages: repo.stages, currentId: p.stageId),
+              StageBar(stages: stages, currentId: p.stageId),
               const SizedBox(height: 6),
               Text(
                 stage == null
                     ? 'No stage set'
-                    : 'Stage ${stageIndex + 1} of ${repo.stages.length} · $stage',
+                    : 'Stage ${stageIndex + 1} of ${stages.length} · $stage',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../format.dart';
+import '../maps.dart';
 import '../widgets/common.dart';
 import '../widgets/tiles.dart';
 import 'client_detail_screen.dart';
 import 'deliverable_form.dart';
+import 'finance_screen.dart';
 import 'project_form.dart';
 import 'task_form.dart';
 
@@ -29,8 +31,9 @@ class ProjectDetailScreen extends StatelessWidget {
         ),
       );
     }
+    final money = repo.isOwner;
     return DefaultTabController(
-      length: 3,
+      length: money ? 4 : 3,
       child: Scaffold(
         appBar: AppBar(
           title: Text(p.name),
@@ -58,11 +61,14 @@ class ProjectDetailScreen extends StatelessWidget {
               ),
             ],
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: 'Overview'),
-              Tab(text: 'Tasks'),
-              Tab(text: 'Deliverables'),
+              const Tab(text: 'Overview'),
+              const Tab(text: 'Tasks'),
+              const Tab(text: 'Deliverables'),
+              if (money) const Tab(text: 'Finance'),
             ],
           ),
         ),
@@ -71,6 +77,7 @@ class ProjectDetailScreen extends StatelessWidget {
             _Overview(p: p),
             _Tasks(p: p),
             _Deliverables(p: p),
+            if (money) ProjectMoneyTab(project: p),
           ],
         ),
       ),
@@ -91,7 +98,9 @@ class _Overview extends StatelessWidget {
     final now = repo.now();
     final tasks = repo.tasksFor(p.id);
     final dels = repo.deliverablesFor(p.id);
-    final currentIndex = repo.stages.indexWhere((s) => s.id == p.stageId);
+    final stages = repo.stagesFor(p.service);
+    final currentIndex = stages.indexWhere((s) => s.id == p.stageId);
+    final map = mapUri(p);
 
     Widget fact(String label, String value) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -138,6 +147,15 @@ class _Overview extends StatelessWidget {
                   fact('Type', projectTypeLabel(p.type)),
                   if (p.areaSqm != null) fact('Area', fmtArea(p.areaSqm)),
                   if (p.location.isNotEmpty) fact('Location', p.location),
+                  if (map != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: OutlinedButton.icon(
+                        onPressed: () => openUri(map),
+                        icon: const Icon(Icons.place_outlined),
+                        label: const Text('Open in Google Maps'),
+                      ),
+                    ),
                   fact('Start', fmtDate(p.startDate)),
                   fact('Deadline', fmtDate(p.dueDate)),
                   if (p.teamIds.isNotEmpty)
@@ -197,11 +215,11 @@ class _Overview extends StatelessWidget {
               ),
             ],
           ),
-          const SectionHeader('Stages'),
+          SectionHeader('${serviceLabel(p.service)} stages'),
           Card(
             child: Column(
               children: [
-                for (var i = 0; i < repo.stages.length; i++)
+                for (var i = 0; i < stages.length; i++)
                   ListTile(
                     dense: true,
                     leading: Icon(
@@ -213,7 +231,7 @@ class _Overview extends StatelessWidget {
                       color: i <= currentIndex ? c.primary : c.outline,
                     ),
                     title: Text(
-                      repo.stages[i].name,
+                      stages[i].name,
                       style: TextStyle(
                         fontWeight: i == currentIndex ? FontWeight.w700 : null,
                       ),
@@ -223,7 +241,7 @@ class _Overview extends StatelessWidget {
                         : repo.isOwner
                         ? TextButton(
                             onPressed: () => repo.saveProject(
-                              p.copyWith(stageId: repo.stages[i].id),
+                              p.copyWith(stageId: stages[i].id),
                             ),
                             child: const Text('Set'),
                           )
