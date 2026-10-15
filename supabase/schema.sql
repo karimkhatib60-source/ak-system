@@ -286,3 +286,7 @@ alter table public.quotations add column if not exists markup_rate double precis
 alter table public.quotations add column if not exists show_markup boolean;
 alter table public.invoices add column if not exists markup_rate double precision;
 alter table public.invoices add column if not exists show_markup boolean;
+
+-- v5: invoice phase and receipt numbers. Safe to re-run.
+alter table public.invoices add column if not exists stage_id text;
+alter table public.payments add column if not exists number text;

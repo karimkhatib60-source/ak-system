@@ -3,6 +3,7 @@
 import 'dart:io';
 
 import 'package:ak_system/data/models.dart';
+import 'package:ak_system/data/project_statement.dart';
 import 'package:ak_system/data/repository.dart';
 import 'package:ak_system/data/statement.dart';
 import 'package:ak_system/main.dart';
@@ -300,26 +301,26 @@ void main() {
           projectId: 'p3',
           date: DateTime(2026, 10, 10),
           validUntil: DateTime(2026, 11, 10),
-          status: QuotationStatus.sent,
+          status: QuotationStatus.accepted,
           markupRate: 15,
           terms: r.companyInfo['terms'] ?? '',
           items: [
             li(
-              'Demolition',
+              'Demolition and removal',
               'Removal of existing floor tiles and screed down to slab',
               'm²',
               150,
               4,
             ),
             li(
-              'Demolition',
+              'Demolition and removal',
               'Demolition of existing block walls including removal of debris',
               'm²',
               36,
               9,
             ),
             li(
-              'Demolition',
+              'Demolition and removal',
               'Debris removal and disposal to an approved dump site',
               'trip',
               6,
@@ -340,35 +341,35 @@ void main() {
               9,
             ),
             li(
-              'Tiling and flooring',
+              'Screeds and flooring',
               'Cement screed 5 cm for floor finishes',
               'm²',
               150,
               7,
             ),
             li(
-              'Tiling and flooring',
+              'Screeds and flooring',
               'Porcelain floor tiles 60x60 cm, supply and installation, with grout',
               'm²',
               150,
               32,
             ),
             li(
-              'Tiling and flooring',
+              'Screeds and flooring',
               'Porcelain wall tiles for bathrooms and kitchen, full height',
               'm²',
               70,
               30,
             ),
             li(
-              'Gypsum and ceilings',
+              'Gypsum board and ceilings',
               'Gypsum board false ceiling on galvanized steel frame, painted',
               'm²',
               120,
               22,
             ),
             li(
-              'Gypsum and ceilings',
+              'Gypsum board and ceilings',
               'Gypsum cornice / light cove with concealed LED profile',
               'lin. m',
               45,
@@ -382,28 +383,28 @@ void main() {
               6.5,
             ),
             li(
-              'Electrical',
+              'Electrical works',
               'Lighting point including conduit, wiring and switch',
               'point',
               38,
               35,
             ),
             li(
-              'Electrical',
+              'Electrical works',
               'Power socket 13 A including conduit and wiring',
               'point',
               44,
               32,
             ),
             li(
-              'Plumbing and sanitary',
+              'Plumbing and drainage',
               'Water supply network (hot and cold), PPR pipes, per wet point',
               'point',
               14,
               85,
             ),
             li(
-              'Plumbing and sanitary',
+              'Plumbing and drainage',
               'Wall-hung WC with concealed cistern and flush plate',
               'no.',
               2,
@@ -412,11 +413,12 @@ void main() {
           ],
         ),
       );
-      for (final (id, n, d, pct) in [
-        ('i3', 'INV-26-003', DateTime(2026, 8, 20), .4),
-        ('i4', 'INV-26-004', DateTime(2026, 9, 25), .3),
+      for (final (id, n, d, pct, stage) in [
+        ('i3', 'INV-26-003', DateTime(2026, 8, 20), .4, 3),
+        ('i4', 'INV-26-004', DateTime(2026, 9, 25), .3, 6),
       ]) {
         final q2 = r.quotation('q2')!;
+        final draft = r.progressInvoice(q2, pct * 100);
         await r.saveInvoice(
           Invoice(
             id: id,
@@ -424,18 +426,38 @@ void main() {
             updatedAt: t,
             number: n,
             title: 'Progress payment ${(pct * 100).round()}%',
+            stageId: ks[stage].id,
+            markupRate: q2.markupRate,
+            discount: draft.discount,
             clientId: 'c3',
             projectId: 'p3',
             quotationId: 'q2',
             date: d,
             dueDate: d.add(const Duration(days: 14)),
             status: InvoiceStatus.sent,
-            items: [
-              LineItem(
-                description: '${(pct * 100).round()}% of ${q2.number}',
-                rate: q2.net * pct,
-              ),
-            ],
+            items: draft.items,
+          ),
+        );
+      }
+      final ksTasks = [
+        ('k1', 'Strip floor tiles and screed', 3, TaskStatus.done),
+        ('k2', 'Build new partitions', 4, TaskStatus.done),
+        ('k3', 'Electrical first fix', 5, TaskStatus.done),
+        ('k4', 'Plumbing first fix', 5, TaskStatus.done),
+        ('k5', 'Lay porcelain flooring', 6, TaskStatus.inProgress),
+        ('k6', 'Gypsum ceilings and light coves', 6, TaskStatus.todo),
+        ('k7', 'Painting, final coats', 6, TaskStatus.todo),
+      ];
+      for (final (id, title, stage, status) in ksTasks) {
+        await r.saveTask(
+          Task(
+            id: id,
+            createdAt: t,
+            updatedAt: t,
+            projectId: 'p3',
+            title: title,
+            stageId: ks[stage].id,
+            status: status,
           ),
         );
       }
@@ -580,6 +602,15 @@ void main() {
       File(
         'test_screens/out/sample_boq_fee_in_rates.pdf',
       ).writeAsBytesSync(await buildPdf(repo, boq.copyWith(showMarkup: false)));
+      File('test_screens/out/sample_receipt.pdf').writeAsBytesSync(
+        await buildReceiptPdf(
+          repo,
+          repo.payments.firstWhere((p) => p.id == 'pay2'),
+        ),
+      );
+      File('test_screens/out/sample_project_statement.pdf').writeAsBytesSync(
+        await buildProjectStatementPdf(repo, buildProjectStatement(repo, 'p3')),
+      );
       File('test_screens/out/sample_statement.pdf').writeAsBytesSync(
         await buildStatementPdf(repo, buildStatement(repo, 'c3')),
       );

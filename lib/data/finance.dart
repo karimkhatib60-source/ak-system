@@ -252,6 +252,9 @@ class Invoice with PricedDocument implements Record {
   final String? clientId;
   final String? projectId;
   final String? quotationId;
+
+  /// The project phase (stage) this invoice bills for.
+  final String? stageId;
   final DateTime date;
   final DateTime? dueDate;
   @override
@@ -277,6 +280,7 @@ class Invoice with PricedDocument implements Record {
     this.clientId,
     this.projectId,
     this.quotationId,
+    this.stageId,
     required this.date,
     this.dueDate,
     this.items = const [],
@@ -298,6 +302,7 @@ class Invoice with PricedDocument implements Record {
     clientId: m['client_id'] as String?,
     projectId: m['project_id'] as String?,
     quotationId: m['quotation_id'] as String?,
+    stageId: m['stage_id'] as String?,
     date: _date(m['date']) ?? _date(m['created_at'])!,
     dueDate: _date(m['due_date']),
     items: _items(m['items']),
@@ -317,6 +322,7 @@ class Invoice with PricedDocument implements Record {
     'client_id': clientId,
     'project_id': projectId,
     'quotation_id': quotationId,
+    'stage_id': stageId,
     'date': _dateStr(date),
     'due_date': _dateStr(dueDate),
     'items': _itemsStr(items),
@@ -328,19 +334,26 @@ class Invoice with PricedDocument implements Record {
     'notes': notes,
   };
 
-  Invoice copyWith({InvoiceStatus? status, bool? deleted}) => Invoice(
+  Invoice copyWith({
+    InvoiceStatus? status,
+    bool? deleted,
+    String? stageId,
+    List<LineItem>? items,
+    String? title,
+  }) => Invoice(
     id: id,
     createdAt: createdAt,
     updatedAt: updatedAt,
     deleted: deleted ?? this.deleted,
     number: number,
-    title: title,
+    title: title ?? this.title,
     clientId: clientId,
     projectId: projectId,
     quotationId: quotationId,
+    stageId: stageId ?? this.stageId,
     date: date,
     dueDate: dueDate,
-    items: items,
+    items: items ?? this.items,
     discount: discount,
     vatRate: vatRate,
     markupRate: markupRate,
@@ -365,6 +378,9 @@ class Payment implements Record {
   final PaymentMethod method;
   final String reference;
 
+  /// Receipt number, e.g. RCT-26-001.
+  final String number;
+
   const Payment({
     required this.id,
     required this.createdAt,
@@ -375,6 +391,7 @@ class Payment implements Record {
     required this.amount,
     this.method = PaymentMethod.bankTransfer,
     this.reference = '',
+    this.number = '',
   });
 
   factory Payment.fromMap(Map<String, Object?> m) => Payment(
@@ -391,6 +408,7 @@ class Payment implements Record {
       PaymentMethod.bankTransfer,
     ),
     reference: (m['reference'] ?? '') as String,
+    number: (m['number'] ?? '') as String,
   );
 
   @override
@@ -401,9 +419,10 @@ class Payment implements Record {
     'amount': amount,
     'method': method.name,
     'reference': reference,
+    'number': number,
   };
 
-  Payment copyWith({bool? deleted}) => Payment(
+  Payment copyWith({bool? deleted, String? number}) => Payment(
     id: id,
     createdAt: createdAt,
     updatedAt: updatedAt,
@@ -413,6 +432,7 @@ class Payment implements Record {
     amount: amount,
     method: method,
     reference: reference,
+    number: number ?? this.number,
   );
 }
 

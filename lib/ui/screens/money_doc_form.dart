@@ -129,6 +129,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   String? _clientId;
   String? _projectId;
   String? _quotationId;
+  String? _stageId;
   DateTime _date = DateTime.now();
   DateTime? _until;
   QuotationStatus _qStatus = QuotationStatus.draft;
@@ -189,6 +190,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     _qStatus = q?.status ?? QuotationStatus.draft;
     _iStatus = i?.status ?? InvoiceStatus.draft;
     _quotationId = i?.quotationId;
+    _stageId = i?.stageId ?? (i == null ? project?.stageId : null);
   }
 
   @override
@@ -244,6 +246,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     clientId: _clientId,
     projectId: _projectId,
     quotationId: _quotationId,
+    stageId: _stageId,
     date: _date,
     dueDate: _until,
     items: _items,
@@ -306,6 +309,26 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     final nav = Navigator.of(context);
     nav.pop();
     await openInvoiceForm(nav.context, draft: repo.invoiceFromQuotation(q));
+  }
+
+  /// Bills a share of an accepted quotation, line by line, so every item
+  /// can be followed on the project statement.
+  Future<void> _progressInvoice() async {
+    if (!await _store(close: false)) return;
+    if (!mounted) return;
+    final repo = context.read<Repository>();
+    final pct = await _askPercent(context);
+    if (pct == null || !mounted) return;
+    var q = _quotation(repo.now());
+    if (_qStatus != QuotationStatus.accepted) {
+      setState(() => _qStatus = QuotationStatus.accepted);
+      q = q.copyWith(status: QuotationStatus.accepted);
+      await repo.saveQuotation(q);
+    }
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    nav.pop();
+    await openInvoiceForm(nav.context, draft: repo.progressInvoice(q, pct));
   }
 
   /// Adds lines, replacing the single empty line a new document starts with.
@@ -466,6 +489,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                               icon: const Icon(Icons.receipt_long_outlined),
                               label: const Text('Accept and invoice'),
                             ),
+                          if (!widget.isInvoice)
+                            OutlinedButton.icon(
+                              onPressed: _progressInvoice,
+                              icon: const Icon(Icons.percent),
+                              label: const Text('Progress invoice'),
+                            ),
                           if (widget.isInvoice &&
                               _iStatus != InvoiceStatus.cancelled)
                             FilledButton.icon(
@@ -561,6 +590,27 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 value: _until,
                 onChanged: (d) => setState(() => _until = d),
               ),
+              if (widget.isInvoice && _projectId != null) ...[
+                gap,
+                DropdownButtonFormField<String?>(
+                  key: ValueKey('ph$_projectId'),
+                  initialValue:
+                      repo.stagesOf(_projectId).any((s) => s.id == _stageId)
+                      ? _stageId
+                      : null,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Phase billed'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Not linked to a phase'),
+                    ),
+                    for (final st in repo.stagesOf(_projectId))
+                      DropdownMenuItem(value: st.id, child: Text(st.name)),
+                  ],
+                  onChanged: (v) => setState(() => _stageId = v),
+                ),
+              ],
               const SectionHeader('Items'),
               for (var i = 0; i < _lines.length; i++)
                 _LineEditor(
@@ -681,20 +731,34 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       title: Text(fmtMoney(payments[k].amount)),
                       subtitle: Text(
                         [
+                          if (payments[k].number.isNotEmpty) payments[k].number,
                           fmtDate(payments[k].date),
                           paymentMethodLabel(payments[k].method),
                           if (payments[k].reference.isNotEmpty)
                             payments[k].reference,
                         ].join(' · '),
                       ),
-                      trailing: IconButton(
-                        tooltip: 'Remove payment',
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () async {
-                          if (await confirmDelete(context, 'this payment')) {
-                            await repo.deletePayment(payments[k]);
-                          }
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Send receipt',
+                            icon: const Icon(Icons.receipt_outlined, size: 20),
+                            onPressed: () => shareReceiptPdf(repo, payments[k]),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove payment',
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () async {
+                              if (await confirmDelete(
+                                context,
+                                'this payment',
+                              )) {
+                                await repo.deletePayment(payments[k]);
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -983,9 +1047,10 @@ Future<void> showPaymentDialog(
   final v = _parse(amount.text);
   if (ok == true && v != null && v > 0) {
     final now = repo.now();
+    final id = repo.newId();
     await repo.savePayment(
       Payment(
-        id: repo.newId(),
+        id: id,
         createdAt: now,
         updatedAt: now,
         invoiceId: invoice.id,
@@ -995,7 +1060,61 @@ Future<void> showPaymentDialog(
         reference: ref.text.trim(),
       ),
     );
+    final saved = repo.payments.where((p) => p.id == id).firstOrNull;
+    if (saved != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment saved as receipt ${saved.number}'),
+          action: SnackBarAction(
+            label: 'Send receipt',
+            onPressed: () => shareReceiptPdf(repo, saved),
+          ),
+        ),
+      );
+    }
   }
+}
+
+Future<double?> _askPercent(BuildContext context) async {
+  final ctrl = TextEditingController(text: '30');
+  final v = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Progress invoice'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Bill a share of every item in this quotation. You can adjust '
+            'each line on the invoice afterwards.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Percent to bill',
+              suffixText: '%',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, ctrl.text),
+          child: const Text('Create invoice'),
+        ),
+      ],
+    ),
+  );
+  final pct = v == null ? null : _parse(v.replaceAll('%', ''));
+  return pct == null || pct <= 0 ? null : pct;
 }
 
 /// The AK master library: search or browse by trade, tick items, and they

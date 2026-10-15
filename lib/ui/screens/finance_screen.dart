@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
+import '../../data/project_statement.dart';
 import '../../data/repository.dart';
 import '../format.dart';
+import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'money_doc_form.dart';
@@ -405,6 +407,18 @@ class ProjectMoneyTab extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 40),
         children: [
           MoneyPanel(m),
+          if (p.clientId != null && repo.client(p.clientId) != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: FilledButton.tonalIcon(
+                onPressed: () => shareProjectStatementPdf(
+                  repo,
+                  buildProjectStatement(repo, p.id),
+                ),
+                icon: const Icon(Icons.request_quote_outlined),
+                label: const Text('Project statement (by phase, trade, item)'),
+              ),
+            ),
           if (m.quoted > 0)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),

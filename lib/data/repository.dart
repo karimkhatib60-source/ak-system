@@ -280,6 +280,10 @@ class Repository extends ChangeNotifier {
   String nextInvoiceNumber() =>
       _nextNumber('INV', invoices.map((i) => i.number));
 
+  /// Next receipt number, e.g. RCT-26-004.
+  String nextReceiptNumber() =>
+      _nextNumber('RCT', payments.map((p) => p.number));
+
   /// Next project code for the current year, e.g. AK-26-004.
   String nextProjectCode() {
     final yy = (now().year % 100).toString().padLeft(2, '0');
@@ -329,7 +333,48 @@ class Repository extends ChangeNotifier {
   Future<void> saveMember(Member m) => _write('members', m.toMap());
   Future<void> saveQuotation(Quotation q) => _write('quotations', q.toMap());
   Future<void> saveInvoice(Invoice i) => _write('invoices', i.toMap());
-  Future<void> savePayment(Payment p) => _write('payments', p.toMap());
+
+  /// Saves a payment, giving it the next receipt number if it has none.
+  Future<void> savePayment(Payment p) => _write(
+    'payments',
+    (p.number.isEmpty ? p.copyWith(number: nextReceiptNumber()) : p).toMap(),
+  );
+
+  /// The payment with its receipt number, numbering older payments that
+  /// were recorded before receipts existed.
+  Future<Payment> withReceiptNumber(Payment p) async {
+    if (p.number.isNotEmpty) return p;
+    final numbered = p.copyWith(number: nextReceiptNumber());
+    await _write('payments', numbered.toMap());
+    return numbered;
+  }
+
+  /// A progress invoice billing [percent] of every line of an accepted
+  /// quotation, so each item can be tracked as it is invoiced.
+  Invoice progressInvoice(Quotation q, double percent, {String? stageId}) {
+    final t = now();
+    final f = percent / 100;
+    String p(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
+    return Invoice(
+      id: newId(),
+      createdAt: t,
+      updatedAt: t,
+      number: nextInvoiceNumber(),
+      title: 'Progress invoice ${p(percent)}% of ${q.number}',
+      clientId: q.clientId,
+      projectId: q.projectId,
+      quotationId: q.id,
+      stageId: stageId ?? project(q.projectId)?.stageId,
+      date: t,
+      dueDate: t.add(const Duration(days: 14)),
+      items: [for (final i in q.items) i.copyWith(quantity: i.quantity * f)],
+      discount: q.discount * f,
+      vatRate: q.vatRate,
+      markupRate: q.markupRate,
+      showMarkup: q.showMarkup,
+    );
+  }
+
   Future<void> saveExpense(Expense e) => _write('expenses', e.toMap());
   Future<void> deleteQuotation(Quotation q) =>
       _write('quotations', q.copyWith(deleted: true).toMap());
@@ -361,6 +406,7 @@ class Repository extends ChangeNotifier {
       clientId: q.clientId,
       projectId: q.projectId,
       quotationId: q.id,
+      stageId: project(q.projectId)?.stageId,
       date: t,
       dueDate: t.add(const Duration(days: 14)),
       items: q.items,

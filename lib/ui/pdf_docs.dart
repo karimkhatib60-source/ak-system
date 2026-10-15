@@ -7,7 +7,9 @@ import '../data/boq_library.dart';
 import '../data/company_links.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/project_statement.dart';
 import '../data/statement.dart';
+import '../data/words.dart';
 import 'format.dart';
 
 const _graphite = PdfColor.fromInt(0xFF14171C);
@@ -528,92 +530,11 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
     title: 'Statement of account ${client.name}',
     author: repo.companyName,
   );
-  pw.Widget label(String s) => pw.Text(
-    s.toUpperCase(),
-    style: const pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
-  );
-  const cell = pw.TextStyle(fontSize: 8.5);
-  final bold = pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold);
-  final head = pw.TextStyle(
-    color: PdfColors.white,
-    fontWeight: pw.FontWeight.bold,
-    fontSize: 8,
-  );
-  const pad = pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5);
+  const label = _label;
+  const table = _table;
   String m(double v) => v == 0 ? '' : fmtMoney(v);
-
-  pw.Widget table(
-    List<String> headers,
-    List<List<String>> rows, {
-    required Map<int, pw.TableColumnWidth> widths,
-    required Set<int> right,
-    Set<int> boldRows = const {},
-    Set<int> softRows = const {},
-  }) {
-    pw.Widget c(String t, int k, pw.TextStyle style) => pw.Padding(
-      padding: pad,
-      child: pw.Text(
-        t,
-        style: style,
-        textAlign: right.contains(k) ? pw.TextAlign.right : null,
-      ),
-    );
-    return pw.Table(
-      columnWidths: widths,
-      children: [
-        pw.TableRow(
-          decoration: const pw.BoxDecoration(color: _graphite),
-          children: [for (final (k, h) in headers.indexed) c(h, k, head)],
-        ),
-        for (final (r, row) in rows.indexed)
-          pw.TableRow(
-            decoration: pw.BoxDecoration(
-              color: softRows.contains(r) ? _soft : null,
-              border: const pw.Border(
-                bottom: pw.BorderSide(color: _line, width: .6),
-              ),
-            ),
-            children: [
-              for (final (k, t) in row.indexed)
-                c(t, k, boldRows.contains(r) ? bold : cell),
-            ],
-          ),
-      ],
-    );
-  }
-
-  pw.Widget tile(String l, double v, {bool strong = false}) => pw.Expanded(
-    child: pw.Container(
-      margin: const pw.EdgeInsets.only(right: 6),
-      padding: const pw.EdgeInsets.all(8),
-      decoration: pw.BoxDecoration(
-        color: strong ? _graphite : _soft,
-        borderRadius: pw.BorderRadius.circular(5),
-      ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            l.toUpperCase(),
-            style: pw.TextStyle(
-              fontSize: 6.5,
-              letterSpacing: .8,
-              color: strong ? PdfColors.white : _muted,
-            ),
-          ),
-          pw.SizedBox(height: 3),
-          pw.Text(
-            fmtMoney(v),
-            style: pw.TextStyle(
-              fontSize: 11,
-              fontWeight: pw.FontWeight.bold,
-              color: strong ? PdfColors.white : _graphite,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+  pw.Widget tile(String l, double v, {bool strong = false}) =>
+      _tile(l, fmtMoney(v), strong: strong);
 
   final moves = <List<String>>[
     if (st.from != null)
@@ -840,5 +761,578 @@ Future<void> shareStatementPdf(Repository repo, Statement st) async {
   await Printing.sharePdf(
     bytes: bytes,
     filename: 'Statement-$name-${st.to.toIso8601String().substring(0, 10)}.pdf',
+  );
+}
+
+pw.Widget _label(String s) => pw.Text(
+  s.toUpperCase(),
+  style: const pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
+);
+
+/// A data table with a graphite header row, as used on statements.
+pw.Widget _table(
+  List<String> headers,
+  List<List<String>> rows, {
+  required Map<int, pw.TableColumnWidth> widths,
+  required Set<int> right,
+  Set<int> boldRows = const {},
+  Set<int> softRows = const {},
+}) {
+  const cell = pw.TextStyle(fontSize: 8.5);
+  final bold = pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold);
+  final head = pw.TextStyle(
+    color: PdfColors.white,
+    fontWeight: pw.FontWeight.bold,
+    fontSize: 8,
+  );
+  const pad = pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5);
+  pw.Widget c(String t, int k, pw.TextStyle style) => pw.Padding(
+    padding: pad,
+    child: pw.Text(
+      t,
+      style: style,
+      textAlign: right.contains(k) ? pw.TextAlign.right : null,
+    ),
+  );
+  return pw.Table(
+    columnWidths: widths,
+    children: [
+      pw.TableRow(
+        repeat: true,
+        decoration: const pw.BoxDecoration(color: _graphite),
+        children: [for (final (k, h) in headers.indexed) c(h, k, head)],
+      ),
+      for (final (r, row) in rows.indexed)
+        pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: softRows.contains(r) ? _soft : null,
+            border: const pw.Border(
+              bottom: pw.BorderSide(color: _line, width: .6),
+            ),
+          ),
+          children: [
+            for (final (k, t) in row.indexed)
+              c(t, k, boldRows.contains(r) ? bold : cell),
+          ],
+        ),
+    ],
+  );
+}
+
+/// A summary figure box; [strong] is the dark one for the key figure.
+pw.Widget _tile(String l, String value, {bool strong = false}) => pw.Expanded(
+  child: pw.Container(
+    margin: const pw.EdgeInsets.only(right: 6),
+    padding: const pw.EdgeInsets.all(8),
+    decoration: pw.BoxDecoration(
+      color: strong ? _graphite : _soft,
+      borderRadius: pw.BorderRadius.circular(5),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          l.toUpperCase(),
+          style: pw.TextStyle(
+            fontSize: 6.5,
+            letterSpacing: .8,
+            color: strong ? PdfColors.white : _muted,
+          ),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 11,
+            fontWeight: pw.FontWeight.bold,
+            color: strong ? PdfColors.white : _graphite,
+          ),
+        ),
+      ],
+    ),
+  ),
+);
+
+/// Two signature lines: the company on the left, [other] on the right.
+pw.Widget _signatures(Repository repo, String other) {
+  pw.Widget line(String t) => pw.Expanded(
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(height: .6, color: _graphite),
+        pw.SizedBox(height: 4),
+        pw.Text(t, style: const pw.TextStyle(fontSize: 8)),
+      ],
+    ),
+  );
+  return pw.Row(
+    children: [
+      line('For ${repo.companyName}'),
+      pw.SizedBox(width: 60),
+      line(other),
+    ],
+  );
+}
+
+/// The "prepared for" client block with a facts box on the right.
+pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
+    pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _label(caption),
+              pw.SizedBox(height: 3),
+              pw.Text(
+                client?.name ?? '—',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
+              if (client != null && client.company.isNotEmpty)
+                pw.Text(client.company, style: const pw.TextStyle(fontSize: 9)),
+              if (client != null)
+                pw.Text(
+                  [
+                    client.phone,
+                    client.email,
+                    client.country,
+                  ].where((s) => s.isNotEmpty).join(' · '),
+                  style: const pw.TextStyle(fontSize: 9, color: _muted),
+                ),
+            ],
+          ),
+        ),
+        pw.SizedBox(width: 20),
+        pw.Container(
+          width: 210,
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: _soft,
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: facts,
+          ),
+        ),
+      ],
+    );
+
+String _pct(double v) => '${v.toStringAsFixed(v >= 10 || v == 0 ? 0 : 1)}%';
+
+/// Builds the receipt for one payment received.
+Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
+  final inv = repo.invoice(pay.invoiceId);
+  final client = repo.client(inv?.clientId);
+  final project = repo.project(inv?.projectId);
+  final paidToDate = inv == null
+      ? pay.amount
+      : repo
+            .paymentsFor(inv.id)
+            .where((p) => !p.date.isAfter(pay.date))
+            .fold(0.0, (s, p) => s + p.amount);
+  final pdf = pw.Document(
+    theme: await _theme(),
+    title: '${pay.number} Receipt',
+    author: repo.companyName,
+  );
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
+      header: (ctx) => _header(repo, 'RECEIPT', pay.number),
+      footer: (ctx) => _footer(ctx, repo),
+      build: (ctx) => [
+        _partyBlock('Received from', client, [
+          _kv('Date', fmtDate(pay.date)),
+          _kv('Method', paymentMethodLabel(pay.method)),
+          if (pay.reference.isNotEmpty) _kv('Reference', pay.reference),
+          if (project != null) _kv('Project', project.code),
+        ]),
+        pw.SizedBox(height: 22),
+        pw.Container(
+          padding: const pw.EdgeInsets.all(16),
+          decoration: pw.BoxDecoration(
+            color: _graphite,
+            borderRadius: pw.BorderRadius.circular(8),
+          ),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'AMOUNT RECEIVED',
+                      style: const pw.TextStyle(
+                        fontSize: 7.5,
+                        letterSpacing: 1,
+                        color: PdfColors.grey300,
+                      ),
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Text(
+                      dollarsInWords(pay.amount),
+                      style: const pw.TextStyle(
+                        fontSize: 10,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 16),
+              pw.Text(
+                fmtMoney(pay.amount),
+                style: pw.TextStyle(
+                  fontSize: 22,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 22),
+        if (inv != null) ...[
+          _label('Payment for'),
+          pw.SizedBox(height: 5),
+          _table(
+            ['Invoice', 'Subject', 'Invoice total', 'Paid to date', 'Balance'],
+            [
+              [
+                inv.number,
+                inv.title.isNotEmpty ? inv.title : (project?.name ?? ''),
+                fmtMoney(inv.total),
+                fmtMoney(paidToDate),
+                fmtMoney(inv.total - paidToDate),
+              ],
+            ],
+            widths: {
+              0: const pw.FixedColumnWidth(70),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(72),
+              3: const pw.FixedColumnWidth(72),
+              4: const pw.FixedColumnWidth(66),
+            },
+            right: {2, 3, 4},
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text(
+            inv.total - paidToDate <= 0.005
+                ? '${inv.number} is now fully paid. Thank you.'
+                : 'Remaining on ${inv.number}: '
+                      '${fmtMoney(inv.total - paidToDate)}.',
+            style: const pw.TextStyle(fontSize: 9, color: _muted),
+          ),
+        ],
+        pw.SizedBox(height: 40),
+        _signatures(repo, 'Received by'),
+      ],
+    ),
+  );
+  return pdf.save();
+}
+
+Future<void> shareReceiptPdf(Repository repo, Payment pay) async {
+  final numbered = await repo.withReceiptNumber(pay);
+  final bytes = await buildReceiptPdf(repo, numbered);
+  await Printing.sharePdf(bytes: bytes, filename: '${numbered.number}.pdf');
+}
+
+/// Builds the detailed project statement: by phase, by trade and item,
+/// and the account movements.
+Future<Uint8List> buildProjectStatementPdf(
+  Repository repo,
+  ProjectStatement ps,
+) async {
+  final info = repo.companyInfo;
+  final st = ps.account;
+  final p = ps.project;
+  final pdf = pw.Document(
+    theme: await _theme(),
+    title: 'Project statement ${p.code}',
+    author: repo.companyName,
+  );
+  String m(double v) => v.abs() < .005 ? '—' : fmtMoney(v);
+
+  final phaseRows = <List<String>>[
+    for (final ph in ps.phases)
+      [
+        ph.name + (ph.stage?.id == ps.currentStageId ? '  (current)' : ''),
+        ph.tasks.isEmpty ? '—' : '${ph.tasksDone} of ${ph.tasks.length}',
+        m(ph.invoiced),
+        m(ph.received),
+        m(ph.balance),
+      ],
+    [
+      'Total',
+      '${ps.phases.fold(0, (s, ph) => s + ph.tasksDone)} of '
+          '${ps.phases.fold(0, (s, ph) => s + ph.tasks.length)}',
+      fmtMoney(st.invoiced),
+      fmtMoney(st.received),
+      fmtMoney(st.closing),
+    ],
+  ];
+
+  final layerRows = <List<String>>[];
+  final layerHeads = <int>{};
+  final layerTotals = <int>{};
+  var g = 0;
+  for (final l in ps.layers) {
+    g++;
+    final sectioned = ps.layers.length > 1 || l.name.isNotEmpty;
+    if (sectioned) {
+      layerHeads.add(layerRows.length);
+      layerRows.add([
+        '$g',
+        (l.name.isEmpty ? 'General' : l.name).toUpperCase(),
+        '',
+        m(l.contractAmount),
+        m(l.invoicedAmount),
+        l.contractAmount == 0 ? '' : _pct(l.percent),
+      ]);
+    }
+    for (final (k, i) in l.items.indexed) {
+      layerRows.add([
+        sectioned ? '$g.${k + 1}' : '${k + 1}',
+        i.description,
+        i.unit,
+        m(i.contractAmount),
+        m(i.invoicedAmount),
+        i.contractAmount == 0 ? '' : _pct(i.percent),
+      ]);
+    }
+  }
+  final contractNet = ps.layers.fold(0.0, (s, l) => s + l.contractAmount);
+  final invoicedNet = ps.layers.fold(0.0, (s, l) => s + l.invoicedAmount);
+  layerTotals.add(layerRows.length);
+  layerRows.add([
+    '',
+    'Total before VAT',
+    '',
+    fmtMoney(contractNet),
+    fmtMoney(invoicedNet),
+    contractNet == 0 ? '' : _pct(invoicedNet / contractNet * 100),
+  ]);
+
+  final moves = <List<String>>[
+    for (final l in st.lines)
+      [
+        fmtDate(l.date),
+        l.reference,
+        l.description,
+        l.debit == 0 ? '' : fmtMoney(l.debit),
+        l.credit == 0 ? '' : fmtMoney(l.credit),
+        fmtMoney(l.balance),
+      ],
+    [
+      fmtDate(st.to),
+      '',
+      'Closing balance',
+      fmtMoney(st.invoiced),
+      fmtMoney(st.received),
+      fmtMoney(st.closing),
+    ],
+  ];
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
+      header: (ctx) =>
+          _header(repo, 'PROJECT STATEMENT', 'As of ${fmtDate(st.to)}'),
+      footer: (ctx) => _footer(ctx, repo),
+      build: (ctx) => [
+        _partyBlock('Prepared for', st.client, [
+          _kv('Project', p.code),
+          _kv('Name', p.name),
+          if (p.location.isNotEmpty) _kv('Location', p.location),
+          _kv('Phase', repo.stage(p.stageId)?.name ?? '—'),
+          _kv('Currency', 'USD'),
+        ]),
+        pw.SizedBox(height: 16),
+        pw.Row(
+          children: [
+            _tile('Contract value', fmtMoney(ps.contractValue)),
+            _tile('Invoiced', fmtMoney(st.invoiced)),
+            _tile('Received', fmtMoney(st.received)),
+            _tile('Billed', _pct(ps.billedPercent)),
+            _tile('Balance due', fmtMoney(st.closing), strong: true),
+          ],
+        ),
+        pw.SizedBox(height: 18),
+        _label('1 · By phase'),
+        pw.SizedBox(height: 5),
+        _table(
+          ['Phase', 'Tasks done', 'Invoiced', 'Received', 'Balance'],
+          phaseRows,
+          widths: {
+            0: const pw.FlexColumnWidth(3),
+            1: const pw.FixedColumnWidth(64),
+            2: const pw.FixedColumnWidth(72),
+            3: const pw.FixedColumnWidth(72),
+            4: const pw.FixedColumnWidth(72),
+          },
+          right: {1, 2, 3, 4},
+          boldRows: {phaseRows.length - 1},
+          softRows: {phaseRows.length - 1},
+        ),
+        for (final ph in ps.phases)
+          if (ph.tasks.isNotEmpty || ph.invoices.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 10),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    ph.name,
+                    style: pw.TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  for (final t in ph.tasks)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(left: 8, top: 2),
+                      child: pw.Row(
+                        children: [
+                          pw.SizedBox(
+                            width: 60,
+                            child: pw.Text(
+                              _taskState(t.status),
+                              style: pw.TextStyle(
+                                fontSize: 8,
+                                color: t.status == TaskStatus.done
+                                    ? _blue
+                                    : _muted,
+                              ),
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Text(
+                              t.title,
+                              style: const pw.TextStyle(fontSize: 8.5),
+                            ),
+                          ),
+                          pw.Text(
+                            t.dueDate == null ? '' : fmtDate(t.dueDate),
+                            style: const pw.TextStyle(
+                              fontSize: 8,
+                              color: _muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  for (final o in ph.invoices)
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(left: 8, top: 2),
+                      child: pw.Row(
+                        children: [
+                          pw.SizedBox(
+                            width: 60,
+                            child: pw.Text(
+                              o.invoice.number,
+                              style: const pw.TextStyle(fontSize: 8),
+                            ),
+                          ),
+                          pw.Expanded(
+                            child: pw.Text(
+                              o.invoice.title,
+                              style: const pw.TextStyle(fontSize: 8.5),
+                            ),
+                          ),
+                          pw.Text(
+                            '${fmtMoney(o.invoice.total)} · paid '
+                            '${fmtMoney(o.paid)}',
+                            style: const pw.TextStyle(fontSize: 8),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        if (ps.layers.isNotEmpty) ...[
+          pw.SizedBox(height: 18),
+          _label('2 · By trade and item (before VAT, fee included)'),
+          pw.SizedBox(height: 5),
+          _table(
+            ['#', 'Item', 'Unit', 'Contract', 'Invoiced', 'Billed'],
+            layerRows,
+            widths: {
+              0: const pw.FixedColumnWidth(26),
+              1: const pw.FlexColumnWidth(5),
+              2: const pw.FixedColumnWidth(40),
+              3: const pw.FixedColumnWidth(70),
+              4: const pw.FixedColumnWidth(70),
+              5: const pw.FixedColumnWidth(40),
+            },
+            right: {3, 4, 5},
+            boldRows: {...layerHeads, ...layerTotals},
+            softRows: {...layerHeads, ...layerTotals},
+          ),
+        ],
+        pw.SizedBox(height: 18),
+        _label('3 · Account movements'),
+        pw.SizedBox(height: 5),
+        _table(
+          ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Balance'],
+          moves,
+          widths: {
+            0: const pw.FixedColumnWidth(66),
+            1: const pw.FixedColumnWidth(64),
+            2: const pw.FlexColumnWidth(4),
+            3: const pw.FixedColumnWidth(62),
+            4: const pw.FixedColumnWidth(62),
+            5: const pw.FixedColumnWidth(66),
+          },
+          right: {3, 4, 5},
+          boldRows: {moves.length - 1},
+          softRows: {moves.length - 1},
+        ),
+        pw.SizedBox(height: 18),
+        if (info['bank']?.isNotEmpty ?? false) ...[
+          _label('Bank details'),
+          pw.SizedBox(height: 3),
+          pw.Text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
+          pw.SizedBox(height: 12),
+        ],
+        pw.Text(
+          st.closing > 0.005
+              ? 'Balance due: ${fmtMoney(st.closing)}. Please report any '
+                    'difference within 15 days of this statement.'
+              : 'The project account is fully settled. Thank you.',
+          style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+        ),
+        pw.SizedBox(height: 30),
+        _signatures(repo, 'Client confirmation'),
+      ],
+    ),
+  );
+  return pdf.save();
+}
+
+String _taskState(TaskStatus s) => switch (s) {
+  TaskStatus.done => 'Done',
+  TaskStatus.inProgress => 'In progress',
+  _ => 'To do',
+};
+
+Future<void> shareProjectStatementPdf(
+  Repository repo,
+  ProjectStatement ps,
+) async {
+  final bytes = await buildProjectStatementPdf(repo, ps);
+  await Printing.sharePdf(
+    bytes: bytes,
+    filename:
+        'Statement-${ps.project.code}-${ps.account.to.toIso8601String().substring(0, 10)}.pdf',
   );
 }
