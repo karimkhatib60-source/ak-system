@@ -196,7 +196,7 @@ class MoneyPanel extends StatelessWidget {
         Icons.hourglass_bottom,
         m.overdue > 0 ? ak.bad : null,
         m.advances > 0.005
-            ? 'Advances held {0}'.trArgs([fmtMoneyShort(m.advances)])
+            ? 'Credit held {0}'.trArgs([fmtMoneyShort(m.advances)])
             : null,
       ),
       if (showProfit) ...[
@@ -317,7 +317,7 @@ class QuotationTile extends StatelessWidget {
           ?client,
           if (showProject && project != null) project,
           fmtDate(q.date),
-        ].join(' · '),
+        ].dots(),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -370,7 +370,7 @@ class InvoiceTile extends StatelessWidget {
               state != PaymentState.paid &&
               state != PaymentState.cancelled)
             dueLine(i.dueDate!, repo.now()),
-        ].join(' · '),
+        ].dots(),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -732,7 +732,7 @@ class ClientAccountCard extends StatelessWidget {
               [
                 'CLIENT ACCOUNT'.tr,
                 if (clientName != null) clientName!.toUpperCase(),
-              ].join(' · '),
+              ].dots(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -758,7 +758,7 @@ class ClientAccountCard extends StatelessWidget {
                   '{0} of the contract'.trArgs([pct(m.onContract, m.quoted)]),
                 if (m.extras > 0.005)
                   '{0} extra work'.trArgs([fmtMoney(m.extras)]),
-              ].join(' · '),
+              ].dots(),
             ),
             row(
               'Received'.tr,

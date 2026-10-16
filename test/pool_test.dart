@@ -253,6 +253,33 @@ void main() {
     expect(repo.termStatus(q, 0).settled, isFalse);
   });
 
+  test('a draft invoice for an instalment does not stop the instalment '
+      'counting its advance', () async {
+    final q = await contract();
+    clock.now = DateTime(2026, 10, 1, 9);
+    await repo.saveInvoice(repo.invoiceForTerm(q, 0));
+    clock.now = DateTime(2026, 10, 20, 9);
+    final plain = await invoice('plain', 3000, project: 'A', day: 2);
+    await receive('adv', 3000, day: 5, quotationId: 'q', termIndex: 0);
+    expect(repo.balanceOf(plain), 0);
+    expect(repo.termStatus(q, 0).received, closeTo(3000, 1e-6));
+  });
+
+  test('what a receipt adds to a project account counts only money up to '
+      'it', () async {
+    await receive('free', 5000, day: 1);
+    final forA = await receive('forA', 1000, day: 5, project: 'A');
+    await invoice('a1', 6000, project: 'A', day: 20);
+    double upTo(Payment pay) => repo.payments
+        .where((o) => o.id == pay.id || Repository.receiptOrder(o, pay) < 0)
+        .fold(
+          0.0,
+          (s, o) =>
+              s + repo.receivedFor(o, 'A', until: pay.date, through: pay),
+        );
+    expect(upTo(forA), closeTo(1000, 1e-6));
+  });
+
   group('receipt notes', () {
     test(
       'an advance that paid a contract invoice is not called credit',
@@ -299,6 +326,35 @@ void main() {
         note,
         contains('so \$3,000.00 of this receipt went to ${first.number}.'),
       );
+      expect(note, isNot(contains('held as credit')));
+    });
+
+    test('an instalment receipt that takes the place of older money shows '
+        'all of itself', () async {
+      final q = await contract();
+      await receive('free', 1000, day: 1);
+      clock.now = DateTime(2026, 10, 2, 9);
+      final half = repo.invoiceForTerm(q, 0);
+      await repo.saveInvoice(
+        half.copyWith(
+          status: InvoiceStatus.sent,
+          items: const [LineItem(description: 'Works', rate: 1500)],
+        ),
+      );
+      clock.now = DateTime(2026, 10, 20, 9);
+      await invoice('b1', 1000, project: 'B', day: 3);
+      final pay = await receive(
+        'adv',
+        2000,
+        day: 4,
+        quotationId: 'q',
+        termIndex: 0,
+      );
+      expect(repo.termStatus(q, 0).received, closeTo(2000, 1e-6));
+      expect(repo.termPartOf(q, 0, pay), closeTo(2000, 1e-6));
+      final note = receiptNote(repo, pay);
+      expect(note, contains(r'Remaining on this instalment: $1,000.00.'));
+      expect(note, contains(r'Money received earlier ($1,000.00)'));
       expect(note, isNot(contains('held as credit')));
     });
 

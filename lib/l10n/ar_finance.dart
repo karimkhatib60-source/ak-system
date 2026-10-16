@@ -25,7 +25,7 @@ const arFinance = <String, String>{
   'Invoiced': 'المفوتر',
   'Received': 'المقبوض',
   'Outstanding': 'غير المسدّد',
-  'Advances held {0}': 'دفعات مقدّمة: {0}',
+  'Credit held {0}': 'رصيد دائن: {0}',
   'Expenses': 'المصاريف',
   'Unpaid bills {0}': 'فواتير غير مدفوعة: {0}',
   'Without VAT': 'من دون الضريبة',

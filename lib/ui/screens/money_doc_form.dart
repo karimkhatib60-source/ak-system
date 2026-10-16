@@ -949,7 +949,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                               ? 'set off from advance on payment term'.tr
                               : 'set off from money on account'.tr,
                           fmtDate(a.date),
-                        ].join(' · '),
+                        ].dots(),
                       ),
                       trailing: IconButton(
                         tooltip: 'Send receipt'.tr,
@@ -983,7 +983,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                           if (payments[k].reference.isNotEmpty)
                             payments[k].reference,
                           ?_elsewhere(repo, payments[k], inv),
-                        ].join(' · '),
+                        ].dots(),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

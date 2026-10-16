@@ -121,7 +121,7 @@ class ProfitCard extends StatelessWidget {
                     'Fully invoiced'.tr,
                   if (f.extrasNet > 0.005)
                     '{0} extra work invoiced'.trArgs([fmtMoney(f.extrasNet)]),
-                ].join(' · '),
+                ].dots(),
               ),
               if (left != null)
                 row(

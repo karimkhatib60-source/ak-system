@@ -45,7 +45,7 @@ class TaskTile extends StatelessWidget {
           color: done ? c.outline : null,
         ),
       ),
-      subtitle: parts.isEmpty ? null : Text(parts.join(' · ')),
+      subtitle: parts.isEmpty ? null : Text(parts.dots()),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -121,7 +121,7 @@ class DeliverableTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        sub.join(' · '),
+        sub.dots(),
         style: TextStyle(color: late ? c.error : null),
       ),
       trailing: Pill(
@@ -196,7 +196,7 @@ class ProjectCard extends StatelessWidget {
                   serviceLabel(p.service),
                   if (p.areaSqm != null) fmtArea(p.areaSqm),
                   if (p.location.isNotEmpty) p.location,
-                ].join(' · '),
+                ].dots(),
                 style: TextStyle(color: c.onSurfaceVariant),
               ),
               const SizedBox(height: 10),

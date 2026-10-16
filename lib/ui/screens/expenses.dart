@@ -62,7 +62,7 @@ class ExpenseTile extends StatelessWidget {
                 ? '{0} item'.trArgs([e.items.length])
                 : '{0} items'.trArgs([e.items.length]),
           fmtDate(e.date),
-        ].join(' · '),
+        ].dots(),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,

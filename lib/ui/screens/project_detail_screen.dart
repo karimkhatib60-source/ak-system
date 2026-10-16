@@ -190,7 +190,7 @@ class _Overview extends StatelessWidget {
                         [
                           client.phone,
                           client.email,
-                        ].where((s) => s.isNotEmpty).join(' · '),
+                        ].where((s) => s.isNotEmpty).dots(),
                       ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(

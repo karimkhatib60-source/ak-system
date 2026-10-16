@@ -378,7 +378,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
                                   if (i.status == InvoiceStatus.draft)
                                     'draft'.tr,
                                   if (i.title.isNotEmpty) i.title,
-                                ].join(' · '),
+                                ].dots(),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -675,7 +675,7 @@ class ReceiptTile extends StatelessWidget {
             '{0} credit left'.trArgs([fmtMoneyShort(credit)]),
           paymentMethodLabel(p.method),
           fmtDate(p.date),
-        ].join(' · '),
+        ].dots(),
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -897,7 +897,7 @@ class TermStatusTile extends StatelessWidget {
               [
                 if (showQuotation) q.number,
                 if (st.term.due.isNotEmpty) st.term.due.tr,
-              ].join(' · '),
+              ].dots(),
               style: TextStyle(color: ak.muted, fontSize: 12.5),
             ),
           const SizedBox(height: 8),
@@ -919,7 +919,7 @@ class TermStatusTile extends StatelessWidget {
                       fmtMoney(st.remaining),
                     ]),
               if (live.isNotEmpty) live.map((i) => i.number).join(', '),
-            ].join(' · '),
+            ].dots(),
             style: TextStyle(
               fontSize: 12.5,
               color: st.settled ? ak.good : null,

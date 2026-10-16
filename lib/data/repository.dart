@@ -386,7 +386,7 @@ class Repository extends ChangeNotifier {
       // invoice holds, that invoice takes money another older one holds,
       // and so on, until one takes money still free. Move the most the
       // chain allows, and look again.
-      while (need > 0.005) {
+      while (need > 0.005 && left.any((x) => x > 0.005)) {
         // from[h]: credit h is taken by invoice from[h].$2, which gives up
         // credit from[h].$1 (none for this invoice itself).
         final from = <int, (int?, int)>{};
@@ -549,8 +549,13 @@ class Repository extends ChangeNotifier {
   /// The part of a receipt that went to one project (null: to no
   /// project): taken on its invoices, set against its invoices, or held
   /// as credit for it. The parts of every receipt add up to its amount.
-  double receivedFor(Payment p, String? projectId, {DateTime? until}) {
-    final a = _allocation(payerOf(p), until);
+  double receivedFor(
+    Payment p,
+    String? projectId, {
+    DateTime? until,
+    Payment? through,
+  }) {
+    final a = _allocation(payerOf(p), until, through);
     var credit = 0.0;
     for (final c in a.credits) {
       if (c.payment.id == p.id) credit += c.amount;
@@ -621,23 +626,56 @@ class Repository extends ChangeNotifier {
         )
         .toList();
     final a = _allocation(q.clientId, until, through, before);
-    // Everything that went to the term's invoices, plus the advances taken
-    // on the term (up to its amount) that are still held. An advance that
-    // paid an invoice billing this contract outside its schedule (or a
-    // plain invoice of its project) counts too, but only for the part of
-    // the term that no invoice of its own bills yet. An advance that
-    // settled any other invoice (another term's, extra work, another
-    // contract's) counts there instead.
     final value = term.valueOf(q.total);
-    var received = 0.0;
-    var billed = 0.0;
-    for (final i in termInvoices) {
-      received += a.onInvoice(i.id);
+    final c = _termCount(q, index, a, until);
+    var received = c.own;
+    final room = value - received;
+    if (c.held > 0 && room > 0) received += c.held < room ? c.held : room;
+    return TermStatus(
+      term: term,
+      value: value,
+      invoices: termInvoices,
+      received: received,
+    );
+  }
+
+  /// What counts on a payment term under allocation [a]: the money that
+  /// went to the term's invoices ([own]), and the advances taken on the
+  /// term that are still held ([held], before the term's room caps it).
+  /// An advance that paid an invoice billing this contract outside its
+  /// schedule (or a plain invoice of its project) counts too, but only for
+  /// the part of the term that no issued invoice of its own bills yet. An
+  /// advance that settled any other invoice (another term's, extra work,
+  /// another contract's) counts there instead. [skip] leaves one receipt
+  /// out.
+  ({double own, double held}) _termCount(
+    Quotation q,
+    int index,
+    _Allocation a,
+    DateTime? until, {
+    String? skip,
+  }) {
+    var own = 0.0, billed = 0.0;
+    for (final i in invoices) {
+      if (i.quotationId != q.id || i.termIndex != index) continue;
+      if (i.status != InvoiceStatus.sent) continue;
+      own += a.onInvoice(i.id);
       if (_upTo(i.date, until)) billed += _cents(i.total);
+    }
+    if (skip != null) {
+      for (final (i, used)
+          in a.fromReceipt[skip] ?? const <(Invoice, double)>[]) {
+        if (i.quotationId == q.id &&
+            i.termIndex == index &&
+            i.status == InvoiceStatus.sent) {
+          own -= used;
+        }
+      }
     }
     var unapplied = 0.0, onContract = 0.0;
     for (final c in a.credits) {
       if (c.quotationId != q.id || c.termIndex != index) continue;
+      if (c.payment.id == skip) continue;
       unapplied += c.amount;
       for (final (i, used)
           in a.fromReceipt[c.payment.id] ?? const <(Invoice, double)>[]) {
@@ -645,18 +683,28 @@ class Repository extends ChangeNotifier {
         if (billsContract(i, q)) onContract += used;
       }
     }
-    final unbilled = value - billed;
-    final held =
+    final unbilled = q.paymentTerms[index].valueOf(q.total) - billed;
+    final double held =
         (unapplied > 0 ? unapplied : 0) +
         (unbilled <= 0 ? 0 : (onContract < unbilled ? onContract : unbilled));
-    final room = value - received;
-    if (held > 0 && room > 0) received += held < room ? held : room;
-    return TermStatus(
-      term: term,
-      value: value,
-      invoices: termInvoices,
-      received: received,
-    );
+    return (own: own, held: held);
+  }
+
+  /// What one receipt taken on payment term [index] of [q] added to it, as
+  /// of the receipt's day: its money on the term's invoices, then the
+  /// credit it holds for the term, in the room older receipts left.
+  double termPartOf(Quotation q, int index, Payment pay) {
+    final a = _allocation(q.clientId, pay.date, pay);
+    final all = _termCount(q, index, a, pay.date);
+    final others = _termCount(q, index, a, pay.date, skip: pay.id);
+    double least(double x, double y) => x < y ? x : y;
+    var room = q.paymentTerms[index].valueOf(q.total) - all.own;
+    if (room < 0) room = 0;
+    var part = all.own - others.own;
+    final extra = least(all.held, room) - least(others.held, room);
+    if (extra > 0) part += extra;
+    if (part > pay.amount) part = pay.amount;
+    return part < 0.005 ? 0 : part;
   }
 
   /// A draft invoice for one payment term, for the term's amount.

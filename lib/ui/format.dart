@@ -10,6 +10,14 @@ import 'theme.dart';
 /// or a handle reads as typed ("+961 79 180 650", "@ak").
 String ltr(String s) => s.isEmpty ? s : '\u2066$s\u2069';
 
+/// Parts of a line joined by " · ". On Arabic screens each part keeps its
+/// own direction, so a date or an English name beside it stays whole.
+extension Dots on Iterable<String> {
+  String dots() => appLang == AppLang.ar
+      ? map((s) => s.isEmpty ? s : '\u2068$s\u2069').join(' · ')
+      : join(' · ');
+}
+
 /// A date in the language of the screens.
 String fmtDate(DateTime? d) => d == null ? '—' : dayIn(appLang, d);
 

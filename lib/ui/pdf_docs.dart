@@ -111,13 +111,10 @@ pw.Widget _text(String s, {pw.TextStyle? style, pw.TextAlign? align}) {
     );
   }
   if (!own) align ??= _rtl ? pw.TextAlign.right : pw.TextAlign.left;
-  // A short line of Arabic with Latin words in it, such as a statement line
-  // naming an invoice; long texts may run over pages, which [_MixedLines]
-  // cannot, and keep the pdf package's own line breaking.
-  if (arabic &&
-      _latinLetters.hasMatch(s) &&
-      !s.contains('\n') &&
-      s.length <= 240) {
+  // Arabic with Latin words in it, such as a statement line naming an
+  // invoice or a receipt note; very long texts may run over pages, which
+  // [_MixedLines] cannot, and keep the pdf package's own line breaking.
+  if (arabic && _latinLetters.hasMatch(s) && s.length <= 2400) {
     return _MixedLines(s, style, align ?? pw.TextAlign.start);
   }
   if (own) return pw.Text(s, style: style, textAlign: align);
@@ -236,6 +233,33 @@ class _MixedLines extends pw.Widget {
     pw.BoxConstraints constraints, {
     bool parentUsesSize = false,
   }) {
+    // Each paragraph is broken into lines of its own; an empty one keeps
+    // its blank line.
+    final lines = <pw.Widget>[
+      for (final p in text.split('\n'))
+        if (p.trim().isEmpty)
+          pw.Text(' ', style: style)
+        else
+          ..._paragraph(context, constraints, p),
+    ];
+    _child = lines.length == 1
+        ? lines.single
+        : pw.Column(
+            crossAxisAlignment: constraints.hasBoundedWidth
+                ? pw.CrossAxisAlignment.stretch
+                : pw.CrossAxisAlignment.start,
+            children: lines,
+          );
+    _child!.layout(context, constraints, parentUsesSize: parentUsesSize);
+    box = _child!.box;
+  }
+
+  /// The lines of one paragraph.
+  List<pw.Widget> _paragraph(
+    pw.Context context,
+    pw.BoxConstraints constraints,
+    String text,
+  ) {
     final words = text.split(' ');
     final rtl = !_latinFirst(text);
     // 1: a word in the other direction, 2: one in the text's direction,
@@ -290,14 +314,7 @@ class _MixedLines extends pw.Widget {
       }
       lines.add(_setLine(words, runs, tails, from, to, rtl));
     }
-    _child = lines.length == 1
-        ? lines.single
-        : pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: lines,
-          );
-    _child!.layout(context, constraints, parentUsesSize: parentUsesSize);
-    box = _child!.box;
+    return lines;
   }
 
   @override
@@ -742,7 +759,7 @@ pw.Widget _itemsTable(PricedDocument doc) {
     columnWidths: _colWidths({
       0: const pw.FixedColumnWidth(26),
       1: const pw.FlexColumnWidth(5),
-      2: const pw.FixedColumnWidth(36),
+      2: pw.FixedColumnWidth(_rtl ? 44 : 36),
       3: const pw.FixedColumnWidth(50),
       4: const pw.FixedColumnWidth(68),
       5: const pw.FixedColumnWidth(76),
@@ -1523,16 +1540,19 @@ String receiptNote(Repository repo, Payment pay) =>
     );
   } else if (q != null && term != null) {
     final value = (term.valueOf(q.total) * 100).round() / 100;
-    // Where the instalment stood just before this receipt and with it, as
-    // of its day. Part of the money may have settled older invoices first.
+    // Where the instalment stands with this receipt, as of its day, and
+    // what this receipt added. Part of the money may have settled older
+    // invoices first, and money that counted here before may now settle
+    // other invoices.
     final was = repo
         .termStatus(q, termIndex!, until: pay.date, through: pay, before: true)
         .received;
     final now = repo
         .termStatus(q, termIndex, until: pay.date, through: pay)
         .received;
-    final change = now - was;
-    final here = change < 0 ? 0.0 : (change > pay.amount ? pay.amount : change);
+    final here = repo.termPartOf(q, termIndex, pay);
+    final prior = now - here > 0.005 ? now - here : 0.0;
+    final moved = was - prior;
     final rest = value - now;
     final left = rest > 0 ? rest : 0.0;
     final label = term.label.isEmpty
@@ -1554,7 +1574,7 @@ String receiptNote(Repository repo, Payment pay) =>
           '${termIndex + 1}. $label$share',
           term.due.td,
           fmtMoney(value),
-          fmtMoney(was),
+          fmtMoney(prior),
           fmtMoney(here),
           fmtMoney(left.abs() < .005 ? 0 : left),
         ],
@@ -1574,9 +1594,15 @@ String receiptNote(Repository repo, Payment pay) =>
         repo,
         pay,
         pay.date,
-        left <= 0.005
-            ? 'This instalment is now fully paid.'.td
-            : 'Remaining on this instalment: {0}.'.tdArgs([fmtMoney(left)]),
+        [
+          left <= 0.005
+              ? 'This instalment is now fully paid.'.td
+              : 'Remaining on this instalment: {0}.'.tdArgs([fmtMoney(left)]),
+          if (moved > 0.005)
+            'Money received earlier ({0}) that counted on this instalment '
+                    'now settles other open invoices.'
+                .tdArgs([fmtMoney(moved)]),
+        ].join(' '),
         // As in termStatus: the instalment's own invoices, then invoices
         // billing the contract outside its schedule, then credit.
         (i) => i.quotationId == q.id && i.termIndex == termIndex,
@@ -1637,7 +1663,17 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       ? 0.0
       : repo.payments
             .where((o) => o.id == pay.id || Repository.receiptOrder(o, pay) < 0)
-            .fold(0.0, (s, o) => s + repo.receivedFor(o, project.id));
+            .fold(
+              0.0,
+              (s, o) =>
+                  s +
+                  repo.receivedFor(
+                    o,
+                    project.id,
+                    until: pay.date,
+                    through: pay,
+                  ),
+            );
 
   pdf.addPage(
     pw.MultiPage(
@@ -1833,7 +1869,7 @@ Future<Uint8List> buildProjectStatementPdf(
         m(ph.balance),
       ],
     if (st.advances > 0.005)
-      ['Advances not yet set off'.td, '', '—', m(st.advances), m(-st.advances)],
+      ['Credit not yet set off'.td, '', '—', m(st.advances), m(-st.advances)],
     [
       'Total'.td,
       '{0} of {1}'.tdArgs([
@@ -2105,9 +2141,9 @@ Future<Uint8List> buildProjectStatementPdf(
             widths: {
               0: const pw.FlexColumnWidth(2.6),
               1: const pw.FlexColumnWidth(2.4),
-              2: const pw.FixedColumnWidth(36),
+              2: pw.FixedColumnWidth(_rtl ? 44 : 36),
               3: const pw.FixedColumnWidth(62),
-              4: const pw.FixedColumnWidth(56),
+              4: pw.FixedColumnWidth(_rtl ? 66 : 56),
               5: const pw.FixedColumnWidth(62),
               6: const pw.FixedColumnWidth(62),
             },
@@ -2140,7 +2176,7 @@ Future<Uint8List> buildProjectStatementPdf(
               2: const pw.FixedColumnWidth(40),
               3: const pw.FixedColumnWidth(70),
               4: const pw.FixedColumnWidth(70),
-              5: const pw.FixedColumnWidth(40),
+              5: pw.FixedColumnWidth(_rtl ? 48 : 40),
             },
             right: {3, 4, 5},
             boldRows: {...layerHeads, ...layerTotals},

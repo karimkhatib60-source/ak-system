@@ -89,7 +89,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                                 count == 1
                                     ? '1 project'.tr
                                     : '{0} projects'.trArgs([count]),
-                              ].join(' · '),
+                              ].dots(),
                             ),
                             onTap: () => Navigator.push(
                               context,

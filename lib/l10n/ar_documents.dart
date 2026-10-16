@@ -82,7 +82,6 @@ const arDocuments = <String, String>{
   'Agreed contract': 'العقد المتفق عليه',
   'Opening balance': 'الرصيد الافتتاحي',
   'Closing balance': 'الرصيد الختامي',
-  'Advances held': 'الدفعات المقدّمة',
   'Credit held': 'رصيد دائن',
   'Credit balance': 'رصيد دائن',
   'Account movements': 'حركة الحساب',
@@ -175,6 +174,10 @@ const arDocuments = <String, String>{
       'وفقاً لجدول دفعات عرض السعر {0} – {1}، وقيمة العقد {2}.',
   'This instalment is now fully paid.': 'سُدّدت هذه الدفعة بالكامل.',
   'Remaining on this instalment: {0}.': 'المتبقي من هذه الدفعة: {0}.',
+  'Money received earlier ({0}) that counted on this instalment now '
+          'settles other open invoices.':
+      'المبلغ المقبوض سابقاً ({0}) الذي كان محسوباً على هذه الدفعة يسدّد الآن '
+      'فواتير مفتوحة أخرى.',
   'Payment on account': 'دفعة على الحساب',
   'Received on account. It is set against the open invoices{0}, oldest '
           'first; any balance stays as credit on the account.':
@@ -200,8 +203,8 @@ const arDocuments = <String, String>{
   'Phase': 'المرحلة',
   'Not linked to a phase': 'غير مرتبطة بمرحلة',
   '(current)': '(الحالية)',
-  'Advances not yet set off': 'دفعات مقدّمة لم تُخصم بعد',
-  'Billed': 'نسبة الفوترة',
+  'Credit not yet set off': 'رصيد دائن لم يُخصم بعد',
+  'Billed': 'الفوترة',
   '1 · By phase': '1 · حسب المرحلة',
   'Tasks done': 'مهام منجزة',
   'Done': 'منجزة',
