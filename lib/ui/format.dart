@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../l10n/lang.dart';
+
 import '../data/models.dart';
 import 'theme.dart';
 
-final _day = DateFormat('d MMM yyyy');
-final _dayShort = DateFormat('d MMM');
+/// A date in the language of the screens.
+String fmtDate(DateTime? d) => d == null ? '—' : dayIn(appLang, d);
 
-String fmtDate(DateTime? d) => d == null ? '—' : _day.format(d);
+/// A date in the language of printed documents.
+String fmtDocDate(DateTime? d) => d == null ? '—' : dayIn(docLang, d);
 
 /// "Today", "Tomorrow", "3 days late", or a short date.
 String fmtDue(DateTime? d, DateTime now) {
@@ -20,16 +23,16 @@ String fmtDue(DateTime? d, DateTime now) {
   if (diff == -1) return '1 day late';
   if (diff < 0) return '${-diff} days late';
   if (diff < 7) return 'In $diff days';
-  return _dayShort.format(d);
+  return dayIn(appLang, d, year: false);
 }
 
-String serviceLabel(ServiceType s) => switch (s) {
+String serviceLabel(ServiceType s, [AppLang? lang]) => switch (s) {
   ServiceType.design => 'Design',
   ServiceType.consultancy => 'Consultancy',
   ServiceType.contracting => 'Contracting',
 };
 
-String projectStatusLabel(ProjectStatus s) => switch (s) {
+String projectStatusLabel(ProjectStatus s, [AppLang? lang]) => switch (s) {
   ProjectStatus.lead => 'Lead',
   ProjectStatus.active => 'Active',
   ProjectStatus.onHold => 'On hold',
@@ -37,34 +40,36 @@ String projectStatusLabel(ProjectStatus s) => switch (s) {
   ProjectStatus.cancelled => 'Cancelled',
 };
 
-String taskStatusLabel(TaskStatus s) => switch (s) {
+String taskStatusLabel(TaskStatus s, [AppLang? lang]) => switch (s) {
   TaskStatus.todo => 'To do',
   TaskStatus.inProgress => 'In progress',
   TaskStatus.done => 'Done',
 };
 
-String priorityLabel(TaskPriority p) => switch (p) {
+String priorityLabel(TaskPriority p, [AppLang? lang]) => switch (p) {
   TaskPriority.low => 'Low',
   TaskPriority.normal => 'Normal',
   TaskPriority.high => 'High',
 };
 
-String deliverableStatusLabel(DeliverableStatus s) => switch (s) {
-  DeliverableStatus.draft => 'Draft',
-  DeliverableStatus.internalReview => 'Internal review',
-  DeliverableStatus.submitted => 'Submitted to client',
-  DeliverableStatus.approved => 'Approved',
-  DeliverableStatus.revise => 'Client asked for changes',
-};
+String deliverableStatusLabel(DeliverableStatus s, [AppLang? lang]) =>
+    switch (s) {
+      DeliverableStatus.draft => 'Draft',
+      DeliverableStatus.internalReview => 'Internal review',
+      DeliverableStatus.submitted => 'Submitted to client',
+      DeliverableStatus.approved => 'Approved',
+      DeliverableStatus.revise => 'Client asked for changes',
+    };
 
 /// Short label for list badges where space is tight.
-String deliverableStatusShort(DeliverableStatus s) => switch (s) {
-  DeliverableStatus.draft => 'Draft',
-  DeliverableStatus.internalReview => 'In review',
-  DeliverableStatus.submitted => 'With client',
-  DeliverableStatus.approved => 'Approved',
-  DeliverableStatus.revise => 'Changes',
-};
+String deliverableStatusShort(DeliverableStatus s, [AppLang? lang]) =>
+    switch (s) {
+      DeliverableStatus.draft => 'Draft',
+      DeliverableStatus.internalReview => 'In review',
+      DeliverableStatus.submitted => 'With client',
+      DeliverableStatus.approved => 'Approved',
+      DeliverableStatus.revise => 'Changes',
+    };
 
 /// "Due tomorrow", "Due 25 Oct", or "2 days late".
 String dueLine(DateTime d, DateTime now) {
@@ -74,7 +79,7 @@ String dueLine(DateTime d, DateTime now) {
   return 'Due ${first.toUpperCase() == first && int.tryParse(first) == null && !RegExp(r'^[A-Z][a-z]{2} ').hasMatch(s) ? first.toLowerCase() + s.substring(1) : s}';
 }
 
-String roleLabel(MemberRole r) => switch (r) {
+String roleLabel(MemberRole r, [AppLang? lang]) => switch (r) {
   MemberRole.owner => 'Owner',
   MemberRole.architect => 'Architect',
 };
@@ -101,7 +106,7 @@ Color priorityColor(TaskPriority p, ColorScheme c) => switch (p) {
   TaskPriority.high => c.error,
 };
 
-String projectTypeLabel(ProjectType t) => switch (t) {
+String projectTypeLabel(ProjectType t, [AppLang? lang]) => switch (t) {
   ProjectType.residential => 'Residential',
   ProjectType.commercial => 'Commercial / office',
   ProjectType.hospitality => 'Hospitality',
@@ -112,7 +117,7 @@ String projectTypeLabel(ProjectType t) => switch (t) {
   ProjectType.other => 'Other',
 };
 
-String taskCategoryLabel(TaskCategory c) => switch (c) {
+String taskCategoryLabel(TaskCategory c, [AppLang? lang]) => switch (c) {
   TaskCategory.design => 'Design',
   TaskCategory.drawings => 'Drawings',
   TaskCategory.siteVisit => 'Site visit',
@@ -130,7 +135,7 @@ IconData taskCategoryIcon(TaskCategory c) => switch (c) {
   TaskCategory.admin => Icons.inventory_2_outlined,
 };
 
-String disciplineLabel(Discipline d) => switch (d) {
+String disciplineLabel(Discipline d, [AppLang? lang]) => switch (d) {
   Discipline.architecture => 'Architecture',
   Discipline.interior => 'Interior design',
   Discipline.structure => 'Structure',
@@ -139,7 +144,7 @@ String disciplineLabel(Discipline d) => switch (d) {
   Discipline.general => 'General',
 };
 
-String docTypeLabel(DocType t) => switch (t) {
+String docTypeLabel(DocType t, [AppLang? lang]) => switch (t) {
   DocType.drawing => 'Drawing',
   DocType.report => 'Report',
   DocType.presentation => 'Presentation',
@@ -166,7 +171,7 @@ String fmtMoney(double v) => _money.format(v.abs() < .005 ? 0 : v);
 /// "$12,500", for summaries.
 String fmtMoneyShort(double v) => _moneyRound.format(v.abs() < .5 ? 0 : v);
 
-String quotationStatusLabel(QuotationStatus s) => switch (s) {
+String quotationStatusLabel(QuotationStatus s, [AppLang? lang]) => switch (s) {
   QuotationStatus.draft => 'Draft',
   QuotationStatus.sent => 'Sent',
   QuotationStatus.accepted => 'Approved',
@@ -180,7 +185,7 @@ Color quotationStatusColor(QuotationStatus s) => switch (s) {
   QuotationStatus.rejected => AkPalette.bad,
 };
 
-String paymentStateLabel(PaymentState s) => switch (s) {
+String paymentStateLabel(PaymentState s, [AppLang? lang]) => switch (s) {
   PaymentState.draft => 'Draft',
   PaymentState.unpaid => 'Unpaid',
   PaymentState.partlyPaid => 'Part paid',
@@ -198,7 +203,7 @@ Color paymentStateColor(PaymentState s) => switch (s) {
   PaymentState.cancelled => AkPalette.slate,
 };
 
-String paymentMethodLabel(PaymentMethod m) => switch (m) {
+String paymentMethodLabel(PaymentMethod m, [AppLang? lang]) => switch (m) {
   PaymentMethod.bankTransfer => 'Bank transfer',
   PaymentMethod.cash => 'Cash',
   PaymentMethod.cheque => 'Cheque',
@@ -206,7 +211,7 @@ String paymentMethodLabel(PaymentMethod m) => switch (m) {
   PaymentMethod.other => 'Other',
 };
 
-String expenseCategoryLabel(ExpenseCategory c) => switch (c) {
+String expenseCategoryLabel(ExpenseCategory c, [AppLang? lang]) => switch (c) {
   ExpenseCategory.materials => 'Materials',
   ExpenseCategory.subcontractor => 'Subcontractor',
   ExpenseCategory.labour => 'Labour (daily workers)',

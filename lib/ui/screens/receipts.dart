@@ -19,7 +19,7 @@ ReceiptAgainst receiptKind(Payment p) => p.onInvoice
     ? ReceiptAgainst.term
     : ReceiptAgainst.account;
 
-String termLabel(Quotation q, int index) {
+String termLabel(Quotation q, int index, [AppLang? lang]) {
   final t = q.paymentTerms[index];
   final pct = t.percent == 0 ? '' : ' · ${_plain(t.percent)}%';
   return '${t.label.isEmpty ? 'Payment ${index + 1}' : t.label}$pct';

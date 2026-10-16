@@ -29,6 +29,8 @@ class SettingsScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 32),
           children: [
+            SectionHeader('Language'.tr),
+            const _LanguageSection(),
             const SectionHeader('Cloud sync and login'),
             const _CloudSection(),
             const SectionHeader('Team'),
@@ -1097,4 +1099,63 @@ class _Pair extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Language of the screens and, for the owner, of printed documents.
+class _LanguageSection extends StatelessWidget {
+  const _LanguageSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.watch<Repository>();
+    final ak = AkColors.of(context);
+    Widget choice(
+      String label,
+      AppLang value,
+      Future<void> Function(AppLang) set,
+    ) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          SegmentedButton<AppLang>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: AppLang.en, label: Text('English')),
+              ButtonSegment(value: AppLang.ar, label: Text('العربية')),
+            ],
+            selected: {value},
+            onSelectionChanged: (v) => set(v.first),
+          ),
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              choice('Screens'.tr, repo.appLanguage, repo.setAppLanguage),
+              if (repo.isOwner)
+                choice(
+                  'Quotations, invoices and receipts'.tr,
+                  repo.docLanguage,
+                  repo.setDocLanguage,
+                ),
+              const SizedBox(height: 4),
+              Text(
+                'Each person chooses the language of their own screens. '
+                        'Documents print in the language chosen here.'
+                    .tr,
+                style: TextStyle(color: ak.muted, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

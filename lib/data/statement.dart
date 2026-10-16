@@ -258,7 +258,7 @@ String _method(PaymentMethod m) => switch (m) {
 
 /// What a receipt pays for, in words: "on INV-26-003", "Advance 30% of
 /// QT-26-002" or "on account".
-String receiptPurpose(Repository repo, Payment p) {
+String receiptPurpose(Repository repo, Payment p, [AppLang? lang]) {
   if (p.onInvoice) {
     final i = repo.invoice(p.invoiceId);
     if (i == null) return 'on account';

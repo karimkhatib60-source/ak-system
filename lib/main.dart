@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'ai/assistant.dart';
@@ -62,12 +63,20 @@ class AkApp extends StatelessWidget {
         if (updates != null) ChangeNotifierProvider.value(value: updates!),
         ChangeNotifierProvider(create: (_) => Assistant(repo)..loadKey()),
       ],
-      child: MaterialApp(
-        title: 'AK System',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
-        home: const AppShell(),
+      // A new language rebuilds every screen with its texts and direction.
+      child: Selector<Repository, AppLang>(
+        selector: (_, r) => r.appLanguage,
+        builder: (context, lang, _) => MaterialApp(
+          key: ValueKey(lang),
+          title: 'AK System',
+          debugShowCheckedModeBanner: false,
+          locale: Locale(lang.name),
+          supportedLocales: const [Locale('en'), Locale('ar')],
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
+          theme: buildTheme(Brightness.light, lang),
+          darkTheme: buildTheme(Brightness.dark, lang),
+          home: const AppShell(),
+        ),
       ),
     );
   }

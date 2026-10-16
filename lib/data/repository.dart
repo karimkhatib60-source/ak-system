@@ -5,9 +5,11 @@ import 'package:uuid/uuid.dart';
 
 import 'db.dart';
 import 'file_store.dart';
+import '../l10n/lang.dart';
 import 'models.dart';
 import 'report_theme.dart';
 
+export '../l10n/lang.dart';
 export 'report_theme.dart';
 
 const _uuid = Uuid();
@@ -82,6 +84,15 @@ class Repository extends ChangeNotifier {
   /// Colours of printed documents.
   ReportTheme reportTheme = reportThemes.first;
 
+  /// Language of the screens.
+  AppLang appLanguage = AppLang.en;
+
+  /// Language of quotations, invoices, receipts and statements.
+  AppLang docLanguage = AppLang.en;
+
+  static AppLang _langOf(String? v) =>
+      v == AppLang.ar.name ? AppLang.ar : AppLang.en;
+
   /// The signed-in team member. Null means the app is used on its own,
   /// without cloud sync, and the user is treated as the owner.
   String? currentMemberId;
@@ -142,6 +153,8 @@ class Repository extends ChangeNotifier {
     currentMemberId = await local.getSetting('current_member_id');
     companyName = await local.getSetting('company_name') ?? companyName;
     reportTheme = reportThemeById(await local.getSetting('report_theme'));
+    appLang = appLanguage = _langOf(await local.getSetting('app_language'));
+    docLang = docLanguage = _langOf(await local.getSetting('doc_language'));
     final logo = await local.getSetting('company_logo');
     companyLogo = logo == null || logo.isEmpty ? null : base64Decode(logo);
     // A screen may have read set-offs while the lists were half loaded.
@@ -950,6 +963,16 @@ class Repository extends ChangeNotifier {
       'company_logo',
       bytes == null ? '' : base64Encode(bytes),
     );
+    await reload();
+  }
+
+  Future<void> setAppLanguage(AppLang l) async {
+    await local.setSetting('app_language', l.name);
+    await reload();
+  }
+
+  Future<void> setDocLanguage(AppLang l) async {
+    await local.setSetting('doc_language', l.name);
     await reload();
   }
 

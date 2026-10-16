@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/lang.dart';
+
 // AK brand palette: monochrome graphite for structure, one engineering blue
 // as the only accent, neutral grey surfaces. Everything in the app reads its
 // colours from here.
@@ -92,7 +94,11 @@ const _dark = AkColors(
   info: Color(0xFF3FB3CF),
 );
 
-ThemeData buildTheme(Brightness brightness) {
+/// Manrope is the brand font; Arabic screens use IBM Plex Sans Arabic,
+/// which also has Latin letters and digits.
+ThemeData buildTheme(Brightness brightness, [AppLang lang = AppLang.en]) {
+  final font = lang == AppLang.ar ? 'IBMPlexSansArabic' : 'Manrope';
+  const fallback = ['IBMPlexSansArabic', 'Manrope'];
   final dark = brightness == Brightness.dark;
   final ak = dark ? _dark : _light;
   final bg = dark ? const Color(0xFF101215) : AkPalette.paper;
@@ -131,7 +137,8 @@ ThemeData buildTheme(Brightness brightness) {
   final base = ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
-    fontFamily: 'Manrope',
+    fontFamily: font,
+    fontFamilyFallback: fallback,
     scaffoldBackgroundColor: bg,
     extensions: [ak],
   );
@@ -158,7 +165,8 @@ ThemeData buildTheme(Brightness brightness) {
       elevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
-        fontFamily: 'Manrope',
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: ak.onChrome,
@@ -173,8 +181,9 @@ ThemeData buildTheme(Brightness brightness) {
       indicatorColor: ak.accent,
       indicatorSize: TabBarIndicatorSize.label,
       dividerColor: Colors.transparent,
-      labelStyle: const TextStyle(
-        fontFamily: 'Manrope',
+      labelStyle: TextStyle(
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         fontWeight: FontWeight.w700,
         fontSize: 14,
       ),
@@ -202,7 +211,8 @@ ThemeData buildTheme(Brightness brightness) {
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (s) => TextStyle(
-          fontFamily: 'Manrope',
+          fontFamily: font,
+          fontFamilyFallback: fallback,
           fontSize: 11,
           fontWeight: FontWeight.w700,
           color: s.contains(WidgetState.selected)
@@ -217,13 +227,15 @@ ThemeData buildTheme(Brightness brightness) {
       selectedIconTheme: const IconThemeData(color: Colors.white),
       unselectedIconTheme: IconThemeData(color: ak.onChromeMuted),
       selectedLabelTextStyle: TextStyle(
-        fontFamily: 'Manrope',
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         fontWeight: FontWeight.w700,
         fontSize: 12,
         color: Colors.white,
       ),
       unselectedLabelTextStyle: TextStyle(
-        fontFamily: 'Manrope',
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         fontWeight: FontWeight.w600,
         fontSize: 12,
         color: ak.onChromeMuted,
@@ -239,8 +251,9 @@ ThemeData buildTheme(Brightness brightness) {
       style: FilledButton.styleFrom(
         backgroundColor: ak.accent,
         foregroundColor: Colors.white,
-        textStyle: const TextStyle(
-          fontFamily: 'Manrope',
+        textStyle: TextStyle(
+          fontFamily: font,
+          fontFamilyFallback: fallback,
           fontWeight: FontWeight.w800,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -250,8 +263,9 @@ ThemeData buildTheme(Brightness brightness) {
       style: OutlinedButton.styleFrom(
         foregroundColor: ink,
         side: BorderSide(color: scheme.outline),
-        textStyle: const TextStyle(
-          fontFamily: 'Manrope',
+        textStyle: TextStyle(
+          fontFamily: font,
+          fontFamilyFallback: fallback,
           fontWeight: FontWeight.w700,
         ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -286,12 +300,14 @@ ThemeData buildTheme(Brightness brightness) {
       checkmarkColor: Colors.white,
       side: BorderSide(color: ak.line),
       labelStyle: TextStyle(
-        fontFamily: 'Manrope',
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         fontWeight: FontWeight.w600,
         color: ink,
       ),
-      secondaryLabelStyle: const TextStyle(
-        fontFamily: 'Manrope',
+      secondaryLabelStyle: TextStyle(
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         fontWeight: FontWeight.w700,
         color: Colors.white,
       ),
@@ -326,8 +342,9 @@ ThemeData buildTheme(Brightness brightness) {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AkPalette.graphite,
-      contentTextStyle: const TextStyle(
-        fontFamily: 'Manrope',
+      contentTextStyle: TextStyle(
+        fontFamily: font,
+        fontFamilyFallback: fallback,
         color: Colors.white,
       ),
       behavior: SnackBarBehavior.floating,
