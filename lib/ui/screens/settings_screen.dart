@@ -10,6 +10,7 @@ import '../../sync/cloud_account.dart';
 import '../../sync/sync_service.dart';
 import '../format.dart';
 import '../maps.dart';
+import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/common.dart';
@@ -74,6 +75,10 @@ class SettingsScreen extends StatelessWidget {
                     if (v != null) await repo.setCompanyInfo({k: v});
                   },
                 ),
+            ],
+            if (repo.isOwner) ...[
+              const SectionHeader('Document colours'),
+              const _ReportColours(),
             ],
             const SectionHeader('About'),
             const ListTile(
@@ -791,4 +796,305 @@ class _UpdatesTile extends StatelessWidget {
       },
     );
   }
+}
+
+/// Colours of quotations, invoices, receipts and statements.
+class _ReportColours extends StatefulWidget {
+  const _ReportColours();
+
+  @override
+  State<_ReportColours> createState() => _ReportColoursState();
+}
+
+class _ReportColoursState extends State<_ReportColours> {
+  bool _own = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = context.watch<Repository>();
+    final ak = AkColors.of(context);
+    final current = repo.reportTheme;
+    final own = _own || current.custom;
+    Widget swatch(int c, {double size = 14}) => Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Color(c),
+        borderRadius: BorderRadius.circular(size / 4),
+        border: Border.all(color: Colors.black12),
+      ),
+    );
+    Widget pickRow(
+      String label,
+      List<int> colours,
+      int selected,
+      ReportTheme Function(int) make,
+    ) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Text(label, style: TextStyle(color: ak.muted, fontSize: 12.5)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final c in colours)
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => repo.setReportTheme(make(c)),
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      width: 2,
+                      color: c == selected
+                          ? AkPalette.blue
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: swatch(c, size: 26),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ReportPreview(theme: current),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final t in reportThemes)
+                    ChoiceChip(
+                      selected: t.id == current.id,
+                      showCheckmark: false,
+                      avatar: _Pair(t),
+                      label: Text(t.name),
+                      onSelected: (_) {
+                        setState(() => _own = false);
+                        repo.setReportTheme(t);
+                      },
+                    ),
+                  ChoiceChip(
+                    selected: own,
+                    showCheckmark: false,
+                    avatar: const Icon(Icons.palette_outlined, size: 18),
+                    label: const Text('Own colours'),
+                    onSelected: (_) {
+                      setState(() => _own = true);
+                      if (!current.custom) {
+                        repo.setReportTheme(
+                          ReportTheme.customOf(current.ink, current.accent),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+              if (own) ...[
+                pickRow(
+                  'Main colour: headings, table headers and totals',
+                  reportInks,
+                  current.ink,
+                  (c) => ReportTheme.customOf(c, current.accent),
+                ),
+                pickRow(
+                  'Highlight colour: document number and accents',
+                  reportAccents,
+                  current.accent,
+                  (c) => ReportTheme.customOf(current.ink, c),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                'Used on every quotation, invoice, receipt and statement '
+                'from now on.',
+                style: TextStyle(color: ak.muted, fontSize: 12),
+              ),
+              if (repo.invoices.isNotEmpty || repo.quotations.isNotEmpty)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => sharePdf(
+                      repo,
+                      repo.invoices.isNotEmpty
+                          ? repo.invoices.first
+                          : repo.quotations.first,
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    label: Text(
+                      repo.invoices.isNotEmpty
+                          ? 'See it on ${repo.invoices.first.number}'
+                          : 'See it on ${repo.quotations.first.number}',
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small page drawn in a report theme, to compare themes at a glance.
+class ReportPreview extends StatelessWidget {
+  const ReportPreview({super.key, required this.theme});
+
+  final ReportTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = Color(theme.ink);
+    final accent = Color(theme.accent);
+    final soft = Color(theme.soft);
+    final line = Color(theme.line);
+    final muted = Color(theme.muted);
+    Widget bar(double w, Color c, {double h = 5}) => Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: c,
+        borderRadius: BorderRadius.circular(2),
+      ),
+    );
+    return Container(
+      height: 170,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AkPalette.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: ink,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  bar(70, ink),
+                  const SizedBox(height: 4),
+                  bar(46, muted, h: 3),
+                ],
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'INVOICE',
+                    style: TextStyle(
+                      color: ink,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  Text(
+                    'INV-0012',
+                    style: TextStyle(color: accent, fontSize: 9.5),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(height: 1.5, color: ink),
+          const SizedBox(height: 8),
+          Container(
+            height: 14,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            color: ink,
+            alignment: AlignmentDirectional.centerStart,
+            child: bar(60, Colors.white54, h: 3),
+          ),
+          for (var k = 0; k < 3; k++)
+            Container(
+              height: 13,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              decoration: BoxDecoration(
+                color: k == 1 ? soft : null,
+                border: Border(bottom: BorderSide(color: line)),
+              ),
+              child: Row(
+                children: [
+                  bar(80.0 - k * 14, muted.withValues(alpha: .5), h: 3),
+                  const Spacer(),
+                  bar(26, muted.withValues(alpha: .5), h: 3),
+                ],
+              ),
+            ),
+          const Spacer(),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: ink,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'TOTAL  \$4,440.00',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Two colours of a theme in one small square.
+class _Pair extends StatelessWidget {
+  const _Pair(this.theme);
+
+  final ReportTheme theme;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 18,
+    height: 18,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: Colors.white70),
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(theme.ink),
+          Color(theme.ink),
+          Color(theme.accent),
+          Color(theme.accent),
+        ],
+        stops: const [0, .6, .6, 1],
+      ),
+    ),
+  );
 }

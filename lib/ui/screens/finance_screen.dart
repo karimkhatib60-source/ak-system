@@ -765,7 +765,8 @@ class ClientAccountCard extends StatelessWidget {
                 m.advances,
                 bold: due <= 0.005,
                 color: ak.info,
-                hint: 'Received ahead; set off on the next invoices, '
+                hint:
+                    'Received ahead; set off on the next invoices, '
                     'oldest first',
               ),
             if (m.quoted > 0 || m.invoiced > 0) ...[

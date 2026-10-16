@@ -12,13 +12,16 @@ import '../data/statement.dart';
 import '../data/words.dart';
 import 'format.dart';
 
-const _graphite = PdfColor.fromInt(0xFF14171C);
-const _blue = PdfColor.fromInt(0xFF2F6BEB);
-const _muted = PdfColor.fromInt(0xFF5F6670);
-const _line = PdfColor.fromInt(0xFFE2E4E8);
-const _soft = PdfColor.fromInt(0xFFF4F5F7);
+/// Colours of the document being built, from the chosen report theme.
+var _colours = reportThemes.first;
+PdfColor get _graphite => PdfColor.fromInt(_colours.ink);
+PdfColor get _blue => PdfColor.fromInt(_colours.accent);
+PdfColor get _muted => PdfColor.fromInt(_colours.muted);
+PdfColor get _line => PdfColor.fromInt(_colours.line);
+PdfColor get _soft => PdfColor.fromInt(_colours.soft);
 
-Future<pw.ThemeData> _theme() async {
+Future<pw.ThemeData> _theme(Repository repo) async {
+  _colours = repo.reportTheme;
   Future<pw.Font> f(String w) async =>
       pw.Font.ttf(await rootBundle.load('assets/fonts/Manrope-$w.ttf'));
   return pw.ThemeData.withFont(base: await f('400'), bold: await f('700'));
@@ -44,14 +47,14 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
   final setOff = isInvoice ? repo.advanceOn(doc) : 0.0;
 
   final pdf = pw.Document(
-    theme: await _theme(),
+    theme: await _theme(repo),
     title: '$number ${isInvoice ? 'Invoice' : 'Quotation'}',
     author: repo.companyName,
   );
 
   pw.Widget label(String s) => pw.Text(
     s.toUpperCase(),
-    style: const pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
+    style: pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
   );
 
   pw.Widget moneyRow(String l, double v, {bool bold = false}) => pw.Padding(
@@ -115,7 +118,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
                         client.email,
                         client.country,
                       ].where((s) => s.isNotEmpty).join(' · '),
-                      style: const pw.TextStyle(fontSize: 9, color: _muted),
+                      style: pw.TextStyle(fontSize: 9, color: _muted),
                     ),
                 ],
               ),
@@ -156,7 +159,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
           if (project != null && project.location.isNotEmpty)
             pw.Text(
               '${project.name} · ${project.location}',
-              style: const pw.TextStyle(fontSize: 9, color: _muted),
+              style: pw.TextStyle(fontSize: 9, color: _muted),
             ),
           pw.SizedBox(height: 14),
         ],
@@ -191,7 +194,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
                     if (paid - setOff > 0.005)
                       moneyRow('Received', -(paid - setOff)),
                     if (setOff > 0.005)
-                      moneyRow('Set off from advance payments', -setOff),
+                      moneyRow('Set off from other payments', -setOff),
                     moneyRow('Balance due', repo.balanceOf(doc), bold: true),
                   ],
                 ],
@@ -221,10 +224,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
         if (terms.isNotEmpty) ...[
           label('Terms and conditions'),
           pw.SizedBox(height: 3),
-          pw.Text(
-            terms,
-            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
-          ),
+          pw.Text(terms, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
         ],
         if (!isInvoice) ...[
           pw.SizedBox(height: 36),
@@ -280,10 +280,7 @@ pw.Widget _kv(String k, String v) => pw.Padding(
     children: [
       pw.SizedBox(
         width: 70,
-        child: pw.Text(
-          k,
-          style: const pw.TextStyle(fontSize: 8.5, color: _muted),
-        ),
+        child: pw.Text(k, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
       ),
       pw.Expanded(
         child: pw.Text(
@@ -301,10 +298,10 @@ pw.Widget _signature(String who) => pw.Column(
     pw.SizedBox(height: 30),
     pw.Container(height: .8, color: _graphite),
     pw.SizedBox(height: 4),
-    pw.Text(who, style: const pw.TextStyle(fontSize: 8.5, color: _muted)),
+    pw.Text(who, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
     pw.Text(
       'Name, signature and date',
-      style: const pw.TextStyle(fontSize: 7.5, color: _muted),
+      style: pw.TextStyle(fontSize: 7.5, color: _muted),
     ),
   ],
 );
@@ -350,14 +347,14 @@ pw.Widget _itemsTable(PricedDocument doc) {
   }) => pw.TableRow(
     decoration: pw.BoxDecoration(
       color: fill,
-      border: const pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
+      border: pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
     ),
     children: [for (var k = 0; k < 6; k++) c(cells[k], k, style)],
   );
 
   final rows = <pw.TableRow>[
     pw.TableRow(
-      decoration: const pw.BoxDecoration(color: _graphite),
+      decoration: pw.BoxDecoration(color: _graphite),
       children: [
         for (final (k, h) in [
           '#',
@@ -493,7 +490,7 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
               ),
               pw.Text(
                 'Design · Consultancy · Contracting',
-                style: const pw.TextStyle(fontSize: 8, color: _muted),
+                style: pw.TextStyle(fontSize: 8, color: _muted),
               ),
             ],
           ),
@@ -510,10 +507,7 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
                 letterSpacing: 2,
               ),
             ),
-            pw.Text(
-              number,
-              style: const pw.TextStyle(fontSize: 10, color: _blue),
-            ),
+            pw.Text(number, style: pw.TextStyle(fontSize: 10, color: _blue)),
           ],
         ),
       ],
@@ -527,7 +521,7 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
 pw.Widget _footer(pw.Context ctx, Repository repo) {
   final links = companyLinks(repo.companyInfo);
   final address = repo.companyInfo['address'] ?? '';
-  const style = pw.TextStyle(fontSize: 7.5, color: _muted);
+  final style = pw.TextStyle(fontSize: 7.5, color: _muted);
   return pw.Column(
     children: [
       pw.Container(height: 0.6, color: _line),
@@ -568,7 +562,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
   final info = repo.companyInfo;
   final client = st.client;
   final pdf = pw.Document(
-    theme: await _theme(),
+    theme: await _theme(repo),
     title: 'Statement of account ${client.name}',
     author: repo.companyName,
   );
@@ -635,7 +629,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
                       client.email,
                       client.country,
                     ].where((s) => s.isNotEmpty).join(' · '),
-                    style: const pw.TextStyle(fontSize: 9, color: _muted),
+                    style: pw.TextStyle(fontSize: 9, color: _muted),
                   ),
                 ],
               ),
@@ -768,7 +762,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
             '${st.closing < 0 ? 'credit ' : ''}${fmtMoney(st.closing.abs())}. '
             'Please report any difference within 15 days of this '
             'statement; otherwise it is considered accepted.',
-            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+            style: pw.TextStyle(fontSize: 8.5, color: _muted),
           )
         else
           pw.Text(
@@ -781,7 +775,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
                       'Please report any difference within 15 days of this '
                       'statement; otherwise it is considered accepted.'
                 : 'Your account is fully settled. Thank you.',
-            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+            style: pw.TextStyle(fontSize: 8.5, color: _muted),
           ),
         pw.SizedBox(height: 30),
         pw.Row(
@@ -832,7 +826,7 @@ Future<void> shareStatementPdf(Repository repo, Statement st) async {
 
 pw.Widget _label(String s) => pw.Text(
   s.toUpperCase(),
-  style: const pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
+  style: pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
 );
 
 /// A data table with a graphite header row, as used on statements.
@@ -865,16 +859,14 @@ pw.Widget _table(
     children: [
       pw.TableRow(
         repeat: true,
-        decoration: const pw.BoxDecoration(color: _graphite),
+        decoration: pw.BoxDecoration(color: _graphite),
         children: [for (final (k, h) in headers.indexed) c(h, k, head)],
       ),
       for (final (r, row) in rows.indexed)
         pw.TableRow(
           decoration: pw.BoxDecoration(
             color: softRows.contains(r) ? _soft : null,
-            border: const pw.Border(
-              bottom: pw.BorderSide(color: _line, width: .6),
-            ),
+            border: pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
           ),
           children: [
             for (final (k, t) in row.indexed)
@@ -967,7 +959,7 @@ pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
                     client.email,
                     client.country,
                   ].where((s) => s.isNotEmpty).join(' · '),
-                  style: const pw.TextStyle(fontSize: 9, color: _muted),
+                  style: pw.TextStyle(fontSize: 9, color: _muted),
                 ),
             ],
           ),
@@ -1003,7 +995,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final client = repo.client(repo.payerOf(pay));
   final project = repo.project(repo.projectOfPayment(pay));
   final pdf = pw.Document(
-    theme: await _theme(),
+    theme: await _theme(repo),
     title: '${pay.number} Receipt',
     author: repo.companyName,
   );
@@ -1229,7 +1221,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         pw.SizedBox(height: 5),
         detail,
         pw.SizedBox(height: 8),
-        pw.Text(after, style: const pw.TextStyle(fontSize: 9, color: _muted)),
+        pw.Text(after, style: pw.TextStyle(fontSize: 9, color: _muted)),
         if (applied.any((e) => e.$1.id != inv?.id) || credit > 0.005) ...[
           pw.SizedBox(height: 18),
           _label('How this receipt was used · as of ${fmtDate(repo.now())}'),
@@ -1292,7 +1284,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
           pw.SizedBox(height: 12),
           pw.Text(
             'Payment by cheque is valid subject to collection.',
-            style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+            style: pw.TextStyle(fontSize: 8.5, color: _muted),
           ),
         ],
         pw.SizedBox(height: 40),
@@ -1328,7 +1320,7 @@ Future<Uint8List> buildProjectStatementPdf(
   final st = ps.account;
   final p = ps.project;
   final pdf = pw.Document(
-    theme: await _theme(),
+    theme: await _theme(repo),
     title: 'Project statement ${p.code}',
     author: repo.companyName,
   );
@@ -1540,10 +1532,7 @@ Future<Uint8List> buildProjectStatementPdf(
                           ),
                           pw.Text(
                             t.dueDate == null ? '' : fmtDate(t.dueDate),
-                            style: const pw.TextStyle(
-                              fontSize: 8,
-                              color: _muted,
-                            ),
+                            style: pw.TextStyle(fontSize: 8, color: _muted),
                           ),
                         ],
                       ),
@@ -1675,7 +1664,7 @@ Future<Uint8List> buildProjectStatementPdf(
               ? 'The project account is in credit by '
                     '${fmtMoney(-st.closing)}.'
               : 'The project account is fully settled. Thank you.',
-          style: const pw.TextStyle(fontSize: 8.5, color: _muted),
+          style: pw.TextStyle(fontSize: 8.5, color: _muted),
         ),
         pw.SizedBox(height: 30),
         _signatures(repo, 'Client confirmation'),

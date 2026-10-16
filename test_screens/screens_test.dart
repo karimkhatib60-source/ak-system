@@ -9,6 +9,7 @@ import 'package:ak_system/data/statement.dart';
 import 'package:ak_system/main.dart';
 import 'package:ak_system/ui/app_shell.dart';
 import 'package:ak_system/ui/pdf_docs.dart';
+import 'package:ak_system/ui/screens/settings_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:ak_system/sync/cloud_account.dart';
 import 'package:ak_system/sync/sync_service.dart';
@@ -734,7 +735,43 @@ void main() {
       File('test_screens/out/sample_statement.pdf').writeAsBytesSync(
         await buildStatementPdf(repo, buildStatement(repo, 'c3')),
       );
+      // The same invoice in another colour theme.
+      await repo.setReportTheme(reportThemeById('navy'));
+      File('test_screens/out/sample_invoice_navy.pdf')
+          .writeAsBytesSync(await buildPdf(repo, repo.invoice('i1')!));
+      await repo.setReportTheme(reportThemeById('forest'));
+      File('test_screens/out/sample_receipt_forest.pdf').writeAsBytesSync(
+        await buildReceiptPdf(
+          repo,
+          repo.payments.firstWhere((p) => p.id == 'pay2'),
+        ),
+      );
+      await repo.setReportTheme(reportThemes.first);
     });
+  });
+
+  testWidgets('phone document colours', (tester) async {
+    await pump(tester, const Size(400, 1400));
+    final repo = tester.element(find.byType(AppShell)).read<Repository>();
+    await repo.setReportTheme(ReportTheme.customOf(0xFF14284B, 0xFF14868C));
+    await tester.tap(find.byTooltip('Settings').first);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.textContaining('Highlight colour'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(SettingsScreen),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_document_colours.png'),
+    );
+    await repo.setReportTheme(reportThemes.first);
   });
 
   testWidgets('phone receipts', (tester) async {
