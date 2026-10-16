@@ -6,6 +6,10 @@ import '../l10n/lang.dart';
 import '../data/models.dart';
 import 'theme.dart';
 
+/// [s] kept left to right inside Arabic text, so a phone number, an email
+/// or a handle reads as typed ("+961 79 180 650", "@ak").
+String ltr(String s) => s.isEmpty ? s : '\u2066$s\u2069';
+
 /// A date in the language of the screens.
 String fmtDate(DateTime? d) => d == null ? '—' : dayIn(appLang, d);
 
@@ -174,7 +178,9 @@ String fmtArea(double? a) {
   final s = a == a.roundToDouble()
       ? a.toStringAsFixed(0)
       : a.toStringAsFixed(1);
-  return '${NumberFormat.decimalPattern().format(double.parse(s))} m²';
+  return '{0} m²'.trArgs([
+    NumberFormat.decimalPattern().format(double.parse(s)),
+  ]);
 }
 
 final _money = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
@@ -206,7 +212,7 @@ String paymentStateLabel(PaymentState s, [AppLang? lang]) => switch (s) {
   PaymentState.partlyPaid => 'Part paid'.inLang(lang ?? appLang),
   PaymentState.paid => 'Paid'.inLang(lang ?? appLang),
   PaymentState.overdue => 'Overdue'.inLang(lang ?? appLang),
-  PaymentState.cancelled => 'Cancelled'.inLang(lang ?? appLang),
+  PaymentState.cancelled => 'Cancelled@@invoice'.inLang(lang ?? appLang),
 };
 
 Color paymentStateColor(PaymentState s) => switch (s) {

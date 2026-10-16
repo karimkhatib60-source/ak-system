@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:ak_system/app_version.dart';
+import 'package:ak_system/l10n/lang.dart';
 import 'package:ak_system/update/update_service.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -244,7 +245,20 @@ void main() {
     expect(u.dismissed, isTrue);
   });
 
-  test('this build is version 11, released from the AK repository', () {
+  test('release notes show in the language of the screens', () {
+    Release notes(String body) => Release(
+      version: 12,
+      notes: body,
+      installer: Uri.parse('https://example.com/setup.exe'),
+      size: 1,
+    );
+    final both = notes('Version 12\n\n- New\n\n$arabicNotesMark\n\n- جديد');
+    expect(both.notesIn(AppLang.en), 'Version 12\n\n- New');
+    expect(both.notesIn(AppLang.ar), '- جديد');
+    expect(notes('Version 11').notesIn(AppLang.ar), 'Version 11');
+  });
+
+  test('this build is version 12, released from the AK repository', () {
     expect(appVersion, 12);
     expect(releaseRepo, 'karimkhatib60-source/ak-system');
   });

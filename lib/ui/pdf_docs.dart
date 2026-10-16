@@ -331,8 +331,8 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
   final second = isInvoice ? doc.dueDate : (doc as Quotation).validUntil;
   final notes = isInvoice ? doc.notes : (doc as Quotation).notes;
   final terms = isInvoice
-      ? repo.companyInfo['terms'] ?? ''
-      : (doc as Quotation).terms;
+      ? repo.companyText('terms', docLang)
+      : (doc as Quotation).terms.td;
   final client = repo.client(clientId);
   final project = repo.project(projectId);
   final info = repo.companyInfo;
@@ -515,7 +515,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
         if (terms.isNotEmpty) ...[
           label('Terms and conditions'.td),
           pw.SizedBox(height: 3),
-          _text(terms.td, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+          _text(terms, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
         ],
         if (!isInvoice) ...[
           pw.SizedBox(height: 36),
@@ -715,7 +715,7 @@ pw.Widget _itemsTable(PricedDocument doc) {
       rows.add(
         row([
           sectioned ? '$g.${k + 1}' : '$n',
-          i.description,
+          i.description.td,
           _qty(i.quantity),
           i.unit.td,
           fmtMoney(i.rate * factor),
@@ -826,7 +826,7 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
 
 pw.Widget _footer(pw.Context ctx, Repository repo) {
   final links = companyLinks(repo.companyInfo);
-  final address = repo.companyInfo['address'] ?? '';
+  final address = repo.companyText('address', docLang);
   final style = pw.TextStyle(fontSize: 7.5, color: _muted);
   return pw.Column(
     children: [
@@ -841,7 +841,7 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
               runSpacing: 2,
               children: [
                 if (address.isNotEmpty)
-                  _text(address.split('\n').first.td, style: style),
+                  _text(address.split('\n').first, style: style),
                 for (final l in links)
                   pw.UrlLink(
                     destination: l.url,
@@ -865,6 +865,12 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
 }
 
 String _linkLabel(String kind) => kind == 'instagram' ? 'Instagram ' : '';
+
+/// [s] with only the characters file names can hold, Arabic included.
+String _fileSafe(String s) => s
+    .replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '-')
+    .replaceAll(RegExp(r'-+'), '-')
+    .replaceAll(RegExp(r'^-|-$'), '');
 
 /// Builds the branded statement of account for a client.
 Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
@@ -1006,7 +1012,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
             tile('Invoiced'.td, st.invoiced),
             tile('Received'.td, st.received),
             if (st.advances > 0.005) ...[
-              tile('Advances held'.td, st.advances),
+              tile('Credit held'.td, st.advances),
               tile('Due on invoices'.td, st.dueOnInvoices, strong: true),
             ] else if (st.closing < -0.005)
               tile('Credit balance'.td, -st.closing, strong: true)
@@ -1049,9 +1055,9 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
               'Date'.td,
               'Due'.td,
               'Amount'.td,
-              'Paid'.td,
+              'Paid@@column'.td,
               'Balance'.td,
-              'Late'.td,
+              'Late@@column'.td,
             ],
             [
               for (final o in st.open)
@@ -1063,7 +1069,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
                   fmtMoney(o.paid),
                   fmtMoney(o.balance),
                   o.daysOverdue > 0
-                      ? '{0} days'.tdArgs([o.daysOverdue])
+                      ? '{0} days@@late'.tdArgs([o.daysOverdue])
                       : 'Not due'.td,
                 ],
             ],
@@ -1103,13 +1109,14 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
         ],
         if (st.advances > 0.005)
           _text(
-            'Advances held: {0} received on payment '
-                    'terms or on account and not yet set against an invoice. An '
-                    'advance on a payment term is set against that term\'s invoice; '
-                    'money on account against the next invoices. Due on issued '
-                    'invoices: {1}. Net account balance: {2}. '
-                    'Please report any difference within 15 days of this '
-                    'statement; otherwise it is considered accepted.'
+            'Credit held: {0} received and not yet set against an '
+                    'invoice. Every payment received, as an advance, on '
+                    'account or on an invoice, settles the issued invoices of '
+                    'the same project oldest first; the rest is set against '
+                    'the next invoices. Due on issued invoices: {1}. Net '
+                    'account balance: {2}. Please report any difference '
+                    'within 15 days of this statement; otherwise it is '
+                    'considered accepted.'
                 .tdArgs([
                   fmtMoney(st.advances),
                   fmtMoney(st.dueOnInvoices),
@@ -1172,10 +1179,12 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
 
 Future<void> shareStatementPdf(Repository repo, Statement st) async {
   final bytes = await buildStatementPdf(repo, st);
-  final name = st.client.name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-');
+  final name = _fileSafe(st.client.name);
   await Printing.sharePdf(
     bytes: bytes,
-    filename: 'Statement-$name-${st.to.toIso8601String().substring(0, 10)}.pdf',
+    filename:
+        '${_fileSafe('Statement@@file'.td)}-$name-'
+        '${st.to.toIso8601String().substring(0, 10)}.pdf',
   );
 }
 
@@ -1347,6 +1356,43 @@ String _pct(double v) => '${v.toStringAsFixed(v >= 10 || v == 0 ? 0 : 1)}%';
 
 /// Builds the receipt for one payment received: on an invoice, on a
 /// payment term of a quotation, or on account.
+/// [first], then where a receipt went as of its [day]: the part that
+/// settled older invoices (other than those [own] picks) and the part
+/// still held as credit. [kept] is the part counted on the receipt's own
+/// instalment.
+String _usedText(
+  Repository repo,
+  Payment pay,
+  DateTime day,
+  String first,
+  bool Function(Invoice) own, {
+  double? kept,
+}) {
+  final elsewhere = [
+    for (final (i, a) in repo.appliedTo(pay, until: day, through: pay))
+      if (!own(i)) (i, a),
+  ];
+  final went = elsewhere.fold(0.0, (s, e) => s + e.$2);
+  // Credit beyond what stayed on the receipt's own invoice or instalment.
+  final held = kept != null
+      ? pay.amount - kept - went
+      : repo.unappliedOf(pay, until: day, through: pay);
+  return [
+    first,
+    if (went > 0.005)
+      'Open invoices are settled oldest first, so {0} of '
+              'this receipt went to {1}.'
+          .tdArgs([
+            fmtMoney(went),
+            elsewhere.map((e) => e.$1.number).join(', '),
+          ]),
+    if (held > 0.005)
+      'The extra {0} is held as credit on the account.'.tdArgs([
+        fmtMoney(held),
+      ]),
+  ].join(' ');
+}
+
 Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final inv = repo.invoice(pay.invoiceId);
   final q = inv == null ? repo.quotation(pay.quotationId) : null;
@@ -1367,26 +1413,53 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final String purpose;
   final pw.Widget detail;
   final String after;
-  var extra = 0.0; // paid above the invoice or instalment
-  if (inv != null) {
+  if (inv != null && inv.status != InvoiceStatus.sent) {
+    // A draft or cancelled invoice takes no money: the receipt went to the
+    // open invoices like money on account.
+    purpose = 'Invoice {0}'.tdArgs([inv.number]);
+    detail = _table(
+      ['Description'.td, 'Amount'.td],
+      [
+        [
+          inv.title.isNotEmpty ? '${inv.number} · ${inv.title}' : inv.number,
+          fmtMoney(pay.amount),
+        ],
+      ],
+      widths: {
+        0: const pw.FlexColumnWidth(5),
+        1: const pw.FixedColumnWidth(80),
+      },
+      right: {1},
+    );
+    after = _usedText(
+      repo,
+      pay,
+      pay.date,
+      inv.status == InvoiceStatus.cancelled
+          ? '{0} is cancelled, so this receipt is set against the open '
+                    'invoices, oldest first.'
+                .tdArgs([inv.number])
+          : '{0} is not issued yet, so this receipt is set against the '
+                    'open invoices, oldest first.'
+                .tdArgs([inv.number]),
+      (i) => false,
+    );
+  } else if (inv != null) {
     // Every receipt goes to the client's open invoices oldest first, so
-    // part of this one may have settled older invoices on its day.
+    // part of this one may have settled older invoices on its day. An
+    // invoice dated after the receipt counts from its own date.
+    final cut = inv.date.isAfter(pay.date) ? inv.date : pay.date;
     var prior = 0.0, here = 0.0;
-    for (final (o, a) in repo.settledBy(inv, until: pay.date)) {
+    for (final (o, a) in repo.settledBy(inv, until: cut, through: pay)) {
       if (o.id == pay.id) {
         here += a;
-      } else if (Repository.receiptOrder(o, pay) < 0) {
+      } else {
         prior += a;
       }
     }
     final total = (inv.total * 100).round() / 100;
     final rest = total - prior - here;
     final left = rest > 0 ? rest : 0.0;
-    final elsewhere = [
-      for (final (i, a) in repo.appliedTo(pay, until: pay.date))
-        if (i.id != inv.id) (i, a),
-    ];
-    final held = repo.unappliedOf(pay, until: pay.date);
     purpose = 'Invoice {0}'.tdArgs([inv.number]);
     detail = _table(
       [
@@ -1410,50 +1483,29 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       widths: _receiptWidths,
       right: {2, 3, 4, 5},
     );
-    final went = elsewhere.fold(0.0, (s, e) => s + e.$2);
-    after = [
+    after = _usedText(
+      repo,
+      pay,
+      cut,
       left <= 0.005
           ? '{0} is now fully paid. Thank you.'.tdArgs([inv.number])
           : 'Remaining on {0}: {1}.'.tdArgs([inv.number, fmtMoney(left)]),
-      if (went > 0.005)
-        'Open invoices are settled oldest first, so {0} of '
-                'this receipt went to {1}.'
-            .tdArgs([
-              fmtMoney(went),
-              elsewhere.map((e) => e.$1.number).join(', '),
-            ]),
-      if (held > 0.005)
-        'The extra {0} is held as credit on the account.'.tdArgs([
-          fmtMoney(held),
-        ]),
-    ].join(' ');
+      (i) => i.id == inv.id,
+    );
   } else if (q != null && term != null) {
     final value = (term.valueOf(q.total) * 100).round() / 100;
-    // Everything received on this term up to the day before, plus earlier
-    // receipts on the term the same day.
-    final day = DateTime(pay.date.year, pay.date.month, pay.date.day);
-    final sameDayBefore = repo.payments
-        .where(
-          (o) =>
-              !o.onInvoice &&
-              o.quotationId == q.id &&
-              o.termIndex == termIndex &&
-              DateTime(o.date.year, o.date.month, o.date.day) == day &&
-              Repository.receiptOrder(o, pay) < 0,
-        )
-        .fold(0.0, (s, o) => s + o.amount);
-    final prior =
-        repo
-            .termStatus(
-              q,
-              termIndex!,
-              until: day.subtract(const Duration(days: 1)),
-            )
-            .received +
-        sameDayBefore;
-    final rest = value - prior - pay.amount;
+    // Where the instalment stood just before this receipt and with it, as
+    // of its day. Part of the money may have settled older invoices first.
+    final was = repo
+        .termStatus(q, termIndex!, until: pay.date, through: pay, before: true)
+        .received;
+    final now = repo
+        .termStatus(q, termIndex, until: pay.date, through: pay)
+        .received;
+    final change = now - was;
+    final here = change < 0 ? 0.0 : (change > pay.amount ? pay.amount : change);
+    final rest = value - now;
     final left = rest > 0 ? rest : 0.0;
-    extra = rest < -0.005 ? (-rest < pay.amount ? -rest : pay.amount) : 0;
     final label = term.label.isEmpty
         ? 'Payment {0}'.tdArgs([termIndex + 1])
         : term.label.td;
@@ -1473,8 +1525,8 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
           '${termIndex + 1}. $label$share',
           term.due.td,
           fmtMoney(value),
-          fmtMoney(prior),
-          fmtMoney(pay.amount),
+          fmtMoney(was),
+          fmtMoney(here),
           fmtMoney(left.abs() < .005 ? 0 : left),
         ],
       ],
@@ -1489,13 +1541,24 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
             ])
           : 'As per the payment schedule of {0} ({1}), contract value {2}.'
                 .tdArgs([q.number, q.title, fmtMoney(q.total)]),
-      left <= 0.005
-          ? 'This instalment is now fully paid.'.td
-          : 'Remaining on this instalment: {0}.'.tdArgs([fmtMoney(left)]),
-      if (extra > 0)
-        'The extra {0} is held as credit on the account.'.tdArgs([
-          fmtMoney(extra),
-        ]),
+      _usedText(
+        repo,
+        pay,
+        pay.date,
+        left <= 0.005
+            ? 'This instalment is now fully paid.'.td
+            : 'Remaining on this instalment: {0}.'.tdArgs([fmtMoney(left)]),
+        // Invoices of this instalment, or billing the contract outside its
+        // schedule, count on the instalment itself (as in termStatus).
+        (i) =>
+            i.termIndex == termIndex && i.quotationId == q.id ||
+            i.termIndex == null &&
+                (i.quotationId == q.id ||
+                    i.quotationId == null &&
+                        !i.extra &&
+                        i.projectId == q.projectId),
+        kept: here,
+      ),
     ].join(' ');
   } else {
     purpose = 'On account'.td;
@@ -1798,7 +1861,7 @@ Future<Uint8List> buildProjectStatementPdf(
     for (final (k, i) in l.items.indexed) {
       layerRows.add([
         sectioned ? '$g.${k + 1}' : '${k + 1}',
-        i.description,
+        i.description.td,
         i.unit.td,
         m(i.contractAmount),
         m(i.invoicedAmount),
@@ -1864,7 +1927,7 @@ Future<Uint8List> buildProjectStatementPdf(
             _tile('Invoiced'.td, fmtMoney(st.invoiced)),
             _tile('Received'.td, fmtMoney(st.received)),
             if (st.advances > 0.005) ...[
-              _tile('Advances held'.td, fmtMoney(st.advances)),
+              _tile('Credit held'.td, fmtMoney(st.advances)),
               _tile(
                 'Due on invoices'.td,
                 fmtMoney(st.dueOnInvoices),
@@ -2084,13 +2147,12 @@ Future<Uint8List> buildProjectStatementPdf(
         ],
         _text(
           st.advances > 0.005
-              ? 'Due on issued invoices: {0}. '
-                        'Advances of {1} are held on this '
-                        'project: an advance on a payment term is set against '
-                        'that term\'s invoice, money on account against the '
-                        'next invoices. '
-                        'Net account balance: {2}. Please report any '
-                        'difference within 15 days of this statement.'
+              ? 'Due on issued invoices: {0}. Credit of {1} is held on '
+                        'this project: every payment received settles the '
+                        'issued invoices oldest first, and the rest is set '
+                        'against the next invoices. Net account balance: {2}. '
+                        'Please report any difference within 15 days of this '
+                        'statement.'
                     .tdArgs([
                       fmtMoney(st.dueOnInvoices),
                       fmtMoney(st.advances),
@@ -2129,6 +2191,7 @@ Future<void> shareProjectStatementPdf(
   await Printing.sharePdf(
     bytes: bytes,
     filename:
-        'Statement-${ps.project.code}-${ps.account.to.toIso8601String().substring(0, 10)}.pdf',
+        '${_fileSafe('Statement@@file'.td)}-${ps.project.code}-'
+        '${ps.account.to.toIso8601String().substring(0, 10)}.pdf',
   );
 }

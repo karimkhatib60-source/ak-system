@@ -758,7 +758,7 @@ Future<void> showReceiptSheet(
             row('Received from'.tr, client?.name ?? '—'),
             if (project != null)
               row('Project'.tr, '${project.code} · ${project.name}'),
-            row('For'.tr, receiptPurpose(repo, p)),
+            row('Received for'.tr, receiptPurpose(repo, p)),
             row('Date'.tr, fmtDate(p.date)),
             row('Method'.tr, paymentMethodLabel(p.method)),
             if (p.reference.isNotEmpty) row('Reference'.tr, p.reference),

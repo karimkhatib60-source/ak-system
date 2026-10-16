@@ -42,7 +42,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
               heroTag: 'add-client',
               onPressed: () => openClientForm(context),
               icon: const Icon(Icons.person_add_alt),
-              label: Text('Client'.tr),
+              label: Text('Client@@button'.tr),
             )
           : null,
       body: Readable(
@@ -85,7 +85,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
                             subtitle: Text(
                               [
                                 if (c.company.isNotEmpty) c.company,
-                                if (c.country.isNotEmpty) c.country,
+                                if (c.country.isNotEmpty) c.country.tr,
                                 count == 1
                                     ? '1 project'.tr
                                     : '{0} projects'.trArgs([count]),
@@ -133,7 +133,7 @@ class ClientDetailScreen extends StatelessWidget {
 
     Widget contact(IconData icon, String value) => ListTile(
       leading: Icon(icon),
-      title: Text(value),
+      title: Text(ltr(value)),
       trailing: IconButton(
         tooltip: 'Copy'.tr,
         icon: const Icon(Icons.copy, size: 18),
@@ -185,7 +185,7 @@ class ClientDetailScreen extends StatelessWidget {
           ? FloatingActionButton.extended(
               onPressed: () => openProjectForm(context, clientId: c.id),
               icon: const Icon(Icons.add),
-              label: Text('Project'.tr),
+              label: Text('Project@@button'.tr),
             )
           : null,
       body: Readable(
@@ -199,7 +199,7 @@ class ClientDetailScreen extends StatelessWidget {
             if (c.country.isNotEmpty)
               ListTile(
                 leading: const Icon(Icons.public),
-                title: Text(c.country),
+                title: Text(c.country.tr),
               ),
             if (c.notes.isNotEmpty)
               ListTile(

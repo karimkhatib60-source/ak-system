@@ -57,7 +57,7 @@ const arDocuments = <String, String>{
   'Cost subtotal': 'مجموع الكلفة',
   'Cost-plus fee {0}%': 'نسبة الأتعاب فوق الكلفة {0}%',
   'Subtotal': 'المجموع الفرعي',
-  'VAT {0}%': 'الضريبة {0}%',
+  'VAT {0}%': 'الضريبة على القيمة المضافة {0}%',
   'Total (USD)': 'الإجمالي (دولار أميركي)',
   'Set off from other payments': 'مخصوم من دفعات أخرى',
   'Payment schedule': 'جدول الدفعات',
@@ -83,12 +83,15 @@ const arDocuments = <String, String>{
   'Opening balance': 'الرصيد الافتتاحي',
   'Closing balance': 'الرصيد الختامي',
   'Advances held': 'الدفعات المقدّمة',
+  'Credit held': 'رصيد دائن',
   'Credit balance': 'رصيد دائن',
   'Account movements': 'حركة الحساب',
   'Debit': 'مدين',
   'Balance': 'الرصيد',
   'Open invoices': 'الفواتير غير المسدّدة',
-  '{0} days': '{0} يوم',
+  '{0} days@@late': '{0}',
+  'Paid@@column': 'المدفوع',
+  'Late@@column': 'أيام التأخير',
   'Not due': 'غير مستحقة',
   'Not yet due': 'لم تستحق بعد',
   '1–30 days': '1–30 يوماً',
@@ -96,19 +99,27 @@ const arDocuments = <String, String>{
   '61–90 days': '61–90 يوماً',
   '90+ days': 'أكثر من 90 يوماً',
   'Bank details': 'التفاصيل المصرفية',
+  '{0} is cancelled, so this receipt is set against the open invoices, '
+          'oldest first.':
+      'الفاتورة {0} ملغاة، لذا يُخصم هذا الإيصال من الفواتير المفتوحة بدءاً '
+      'بالأقدم.',
+  '{0} is not issued yet, so this receipt is set against the open '
+          'invoices, oldest first.':
+      'الفاتورة {0} لم تصدر بعد، لذا يُخصم هذا الإيصال من الفواتير المفتوحة '
+      'بدءاً بالأقدم.',
   'credit {0}': 'دائن {0}',
-  "Advances held: {0} received on payment terms or on account and not yet "
-          "set against an invoice. An advance on a payment term is set "
-          "against that term's invoice; money on account against the next "
-          "invoices. Due on issued invoices: {1}. Net account balance: {2}. "
-          "Please report any difference within 15 days of this statement; "
-          "otherwise it is considered accepted.":
-      'الدفعات المقدّمة: {0} مقبوضة كدفعات من جدول الدفعات أو على الحساب '
-      'ولم تُخصم بعد من أي فاتورة. تُخصم الدفعة المقدّمة على دفعة من جدول '
-      'الدفعات من فاتورة تلك الدفعة، والمبالغ المقبوضة على الحساب من '
-      'الفواتير التالية. المستحق على الفواتير الصادرة: {1}. صافي رصيد '
-      'الحساب: {2}. في حال وجود أي فرق، يُرجى إبلاغنا خلال 15 يوماً من '
-      'تاريخ هذا الكشف، وإلا يُعتبر الكشف مقبولاً.',
+  'Credit held: {0} received and not yet set against an invoice. Every '
+          'payment received, as an advance, on account or on an invoice, '
+          'settles the issued invoices of the same project oldest first; the '
+          'rest is set against the next invoices. Due on issued invoices: {1}. '
+          'Net account balance: {2}. Please report any difference within 15 '
+          'days of this statement; otherwise it is considered accepted.':
+      'رصيد دائن: {0} مقبوض ولم يُخصم بعد من أي فاتورة. كل مبلغ مقبوض، '
+      'سواء كان دفعة مقدّمة أو على الحساب أو تسديداً لفاتورة، يسدّد الفواتير '
+      'الصادرة للمشروع نفسه بدءاً بالأقدم، ويُخصم الباقي من الفواتير التالية. '
+      'المستحق على الفواتير الصادرة: {1}. صافي رصيد الحساب: {2}. في حال وجود '
+      'أي فرق، يُرجى إبلاغنا خلال 15 يوماً من تاريخ هذا الكشف، وإلا يُعتبر '
+      'مقبولاً.',
   'Kindly settle the balance due of {0}. Please report any difference '
           'within 15 days of this statement; otherwise it is considered '
           'accepted.':
@@ -190,7 +201,7 @@ const arDocuments = <String, String>{
   'Not linked to a phase': 'غير مرتبطة بمرحلة',
   '(current)': '(الحالية)',
   'Advances not yet set off': 'دفعات مقدّمة لم تُخصم بعد',
-  'Billed': 'الفوترة',
+  'Billed': 'نسبة الفوترة',
   '1 · By phase': '1 · حسب المرحلة',
   'Tasks done': 'مهام منجزة',
   'Done': 'منجزة',
@@ -202,18 +213,17 @@ const arDocuments = <String, String>{
   '{0} · By trade and item (before VAT, fee included)':
       '{0} · حسب نوع الأعمال والبند (قبل الضريبة، شاملاً الأتعاب)',
   'Contract': 'العقد',
-  'Total before VAT': 'الإجمالي قبل الضريبة',
+  'Total before VAT': 'الإجمالي قبل الضريبة على القيمة المضافة',
   '{0} · Account movements': '{0} · حركة الحساب',
-  "Due on issued invoices: {0}. Advances of {1} are held on this project: "
-          "an advance on a payment term is set against that term's invoice, "
-          "money on account against the next invoices. Net account balance: "
-          "{2}. Please report any difference within 15 days of this "
-          "statement.":
-      'المستحق على الفواتير الصادرة: {0}. دفعات مقدّمة بقيمة {1} محفوظة '
-      'لهذا المشروع: تُخصم الدفعة المقدّمة على دفعة من جدول الدفعات من '
-      'فاتورة تلك الدفعة، والمبالغ المقبوضة على الحساب من الفواتير التالية. '
-      'صافي رصيد الحساب: {2}. في حال وجود أي فرق، يُرجى إبلاغنا خلال 15 '
-      'يوماً من تاريخ هذا الكشف.',
+  'Due on issued invoices: {0}. Credit of {1} is held on this project: '
+          'every payment received settles the issued invoices oldest first, '
+          'and the rest is set against the next invoices. Net account '
+          'balance: {2}. Please report any difference within 15 days of this '
+          'statement.':
+      'المستحق على الفواتير الصادرة: {0}. رصيد دائن بقيمة {1} محفوظ لهذا '
+      'المشروع: كل مبلغ مقبوض يسدّد الفواتير الصادرة بدءاً بالأقدم، ويُخصم '
+      'الباقي من الفواتير التالية. صافي رصيد الحساب: {2}. في حال وجود أي '
+      'فرق، يُرجى إبلاغنا خلال 15 يوماً من تاريخ هذا الكشف.',
   'Balance due: {0}. Please report any difference within 15 days of this '
           'statement.':
       'الرصيد المستحق: {0}. في حال وجود أي فرق، يُرجى إبلاغنا خلال 15 '
@@ -222,4 +232,5 @@ const arDocuments = <String, String>{
       'لحساب المشروع رصيد دائن بقيمة {0}.',
   'The project account is fully settled. Thank you.':
       'حساب المشروع مسدّد بالكامل. شكراً لكم.',
+  'Statement@@file': 'كشف-حساب',
 };

@@ -165,7 +165,9 @@ class SyncBadge extends StatelessWidget {
       ),
       SyncState.error => (
         Icons.error_outline,
-        'Sync problem: {0}'.trArgs([sync.lastError ?? 'unknown'.tr]),
+        'Sync problem: {0}'.trArgs([
+          sync.lastError == null ? 'unknown'.tr : plainError(sync.lastError!),
+        ]),
       ),
     };
     return IconButton(
@@ -257,4 +259,37 @@ class GroupedRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A sign-in, cloud or sync error in plain words. Errors the app does not
+/// know keep their own text on English screens.
+String plainError(Object e) {
+  final s = '$e'.toLowerCase();
+  bool has(List<String> words) => words.any(s.contains);
+  if (has(['invalid_credentials', 'invalid login'])) {
+    return 'Wrong email or password.'.tr;
+  }
+  if (has(['email_not_confirmed', 'not confirmed'])) {
+    return 'Confirm the login from the email first.'.tr;
+  }
+  if (has(['user_already_exists', 'already registered'])) {
+    return 'This email already has a login.'.tr;
+  }
+  if (has(['weak_password', 'password should be'])) {
+    return 'Choose a longer password, at least 6 characters.'.tr;
+  }
+  if (has([
+    'socketexception',
+    'failed host lookup',
+    'network is unreachable',
+    'connection refused',
+    'timed out',
+  ])) {
+    return 'No internet connection. Try again when online.'.tr;
+  }
+  return isArabic
+      ? 'Could not finish this. Check the details and the internet '
+                'connection, then try again.'
+            .tr
+      : '$e';
 }

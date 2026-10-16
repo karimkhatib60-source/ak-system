@@ -280,7 +280,7 @@ class _ProjectFormState extends State<ProjectForm> {
                       ),
                       decoration: InputDecoration(
                         labelText: 'Area'.tr,
-                        suffixText: 'm²',
+                        suffixText: 'm²'.tr,
                       ),
                       validator: (v) =>
                           v == null ||

@@ -5,8 +5,8 @@ const arCommon = <String, String>{
   'No date': 'بلا تاريخ',
   'Today': 'اليوم',
   'Tomorrow': 'غداً',
-  '1 day late': 'متأخر يوماً واحداً',
-  '2 days late': 'متأخر يومين',
+  '1 day late': 'تأخير يوم واحد',
+  '2 days late': 'تأخير يومين',
   '{0} days late': 'أيام التأخير: {0}',
   'In 2 days': 'بعد يومين',
   'In {0} days': 'بعد {0} أيام',
@@ -57,7 +57,7 @@ const arCommon = <String, String>{
   'Landscape': 'تنسيق الحدائق',
   'Other': 'أخرى',
   // Task categories
-  'Drawings': 'مخططات',
+  'Drawings': 'خرائط',
   'Site visit': 'زيارة موقع',
   'Meeting': 'اجتماع',
   'Coordination': 'تنسيق',
@@ -69,7 +69,7 @@ const arCommon = <String, String>{
   'MEP': 'كهروميكانيك',
   'General': 'عام',
   // Document types
-  'Drawing': 'مخطط',
+  'Drawing': 'خريطة',
   'Report': 'تقرير',
   'Presentation': 'عرض تقديمي',
   '3D model / render': 'نموذج ثلاثي الأبعاد / إظهار',
@@ -104,12 +104,12 @@ const arCommon = <String, String>{
 
   // ------------------------------------------ Preset stages (stored English) --
   // Design (defaultStages in lib/data/models.dart)
-  'Brief': 'دراسة المتطلبات',
+  'Brief': 'برنامج المتطلبات',
   'Concept design': 'التصميم المبدئي',
   'Schematic design': 'التصميم التخطيطي',
   'Design development': 'تطوير التصميم',
   'Permit': 'الترخيص',
-  'Construction drawings': 'المخططات التنفيذية',
+  'Construction drawings': 'الخرائط التنفيذية',
   'Tender': 'المناقصة',
   'Site supervision': 'الإشراف على التنفيذ',
   // Consultancy (serviceStages in lib/data/finance.dart)
@@ -170,8 +170,8 @@ const arCommon = <String, String>{
   'give each task a due date.': 'حدّد موعداً لكل مهمة.',
   'Waiting on client': 'بانتظار العميل',
   '"{0}" was sent {1} days ago with no answer. Call the client.':
-      'أُرسل «{0}» منذ {1} يوماً من دون رد. اتصل بالعميل.',
-  'start revision R{0} of "{1}".': 'ابدأ المراجعة R{0} للمستند «{1}».',
+      'أُرسل «{0}» ولم يصل رد. الأيام المنقضية: {1}. اتصل بالعميل.',
+  'start revision R{0} of "{1}".': 'ابدأ التعديل R{0} للتسليم «{1}».',
   'No quotation': 'لا يوجد عرض سعر',
   'send a fee quotation before work goes further.':
       'أرسل عرض سعر بالأتعاب قبل التقدّم في العمل.',
@@ -195,9 +195,9 @@ const arCommon = <String, String>{
   'Receipt number used twice': 'رقم إيصال مستخدم مرتين',
   '{0} is on two documents. Give one of them a new number before sending it.':
       'الرقم {0} موجود على مستندين. أعطِ أحدهما رقماً جديداً قبل إرساله.',
-  'Bank details missing': 'البيانات المصرفية ناقصة',
+  'Bank details missing': 'التفاصيل المصرفية ناقصة',
   'Add bank details in Settings so clients know how to pay.':
-      'أضف البيانات المصرفية في الإعدادات ليعرف العملاء كيفية الدفع.',
+      'أضف التفاصيل المصرفية في الإعدادات ليعرف العملاء كيفية الدفع.',
   'Lead going cold': 'مشروع محتمل بلا متابعة',
   '{0} has been a lead for {1} days. Follow up or mark it cancelled.':
       'ما زال {0} مشروعاً محتملاً منذ {1} يوماً. تابِعه أو حدّده كملغى.',
@@ -229,6 +229,8 @@ const arCommon = <String, String>{
 
   // ---------------------------------------------------------------- Lists --
   'Project': 'مشروع',
+  'Project@@button': 'مشروع',
+  'Client@@button': 'عميل',
   'Search by name, code or client': 'ابحث بالاسم أو الرمز أو العميل',
   'Current': 'الحالية',
   'Leads': 'المحتملة',
@@ -251,7 +253,7 @@ const arCommon = <String, String>{
   'All {0}': 'الكل {0}',
   'No deliverables here': 'لا توجد تسليمات هنا',
   'Track every drawing set and report you send a client.':
-      'تابِع كل مجموعة مخططات وكل تقرير ترسله إلى العميل.',
+      'تابِع كل مجموعة خرائط وكل تقرير ترسله إلى العميل.',
 
   // -------------------------------------------------- Assistant / To cover --
   'New design project: villa in Byblos for Nadim Haddad, 450 m², '
@@ -260,8 +262,8 @@ const arCommon = <String, String>{
       'آخر آذار',
   'Make a quotation for the villa: concept 3,000, permit drawings 5,000, '
           'execution drawings 7,000':
-      'أعدّ عرض سعر للفيلا: التصميم المبدئي 3,000، مخططات الترخيص 5,000، '
-      'المخططات التنفيذية 7,000',
+      'أعدّ عرض سعر للفيلا: التصميم المبدئي 3,000، خرائط الترخيص 5,000، '
+      'الخرائط التنفيذية 7,000',
   'Received 2,000 from Nadim by bank transfer':
       'تم استلام 2,000 من نديم بتحويل مصرفي',
   'What am I missing?': 'ما الذي ينقصني؟',
@@ -297,4 +299,5 @@ const arCommon = <String, String>{
   'Remove key': 'إزالة المفتاح',
   'Cancel': 'إلغاء',
   'Save': 'حفظ',
+  '{0} m²': '{0} م²',
 };

@@ -63,21 +63,56 @@ class AkApp extends StatelessWidget {
         if (updates != null) ChangeNotifierProvider.value(value: updates!),
         ChangeNotifierProvider(create: (_) => Assistant(repo)..loadKey()),
       ],
-      // A new language rebuilds every screen with its texts and direction.
+      // A new language rebuilds every screen with its texts and direction,
+      // leaving open screens where they are.
       child: Selector<Repository, AppLang>(
         selector: (_, r) => r.appLanguage,
-        builder: (context, lang, _) => MaterialApp(
-          key: ValueKey(lang),
-          title: 'AK System',
-          debugShowCheckedModeBanner: false,
-          locale: Locale(lang.name),
-          supportedLocales: const [Locale('en'), Locale('ar')],
-          localizationsDelegates: GlobalMaterialLocalizations.delegates,
-          theme: buildTheme(Brightness.light, lang),
-          darkTheme: buildTheme(Brightness.dark, lang),
-          home: const AppShell(),
+        builder: (context, lang, _) => _Relabel(
+          lang: lang,
+          child: MaterialApp(
+            title: 'AK System',
+            debugShowCheckedModeBanner: false,
+            locale: Locale(lang.name),
+            supportedLocales: const [Locale('en'), Locale('ar')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            theme: buildTheme(Brightness.light, lang),
+            darkTheme: buildTheme(Brightness.dark, lang),
+            home: const AppShell(),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Builds every screen again when the language changes, so texts read when
+/// a screen builds come out in the new language.
+class _Relabel extends StatefulWidget {
+  const _Relabel({required this.lang, required this.child});
+
+  final AppLang lang;
+  final Widget child;
+
+  @override
+  State<_Relabel> createState() => _RelabelState();
+}
+
+class _RelabelState extends State<_Relabel> {
+  @override
+  void didUpdateWidget(_Relabel old) {
+    super.didUpdateWidget(old);
+    if (old.lang == widget.lang) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      void mark(Element e) {
+        e.markNeedsBuild();
+        e.visitChildren(mark);
+      }
+
+      (context as Element).visitChildren(mark);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

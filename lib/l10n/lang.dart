@@ -31,16 +31,28 @@ final Map<String, String> arabicTexts = {
   ...arBoq,
 };
 
+/// English for each Arabic text, so a preset saved in Arabic (a payment
+/// term label, a unit, a stage) still reads in English.
+final Map<String, String> englishTexts = () {
+  final out = <String, String>{};
+  for (final e in arabicTexts.entries) {
+    if (e.value.contains('{')) continue;
+    final cut = e.key.indexOf('@@');
+    out.putIfAbsent(e.value, () => cut < 0 ? e.key : e.key.substring(0, cut));
+  }
+  return out;
+}();
+
 /// [english] in [lang], with {0}, {1}… replaced by [args]. Text with no
 /// Arabic yet stays in English. A key may end in "@@" and a note when one
 /// English word needs two Arabic ones ('Credit@@column'); the note never
-/// shows.
+/// shows. Arabic that matches a text of the app reads in English too.
 String trIn(AppLang lang, String english, [List<Object?> args = const []]) {
   final cut = english.indexOf('@@');
   final plain = cut < 0 ? english : english.substring(0, cut);
   var s = lang == AppLang.ar
       ? (arabicTexts[english] ?? arabicTexts[plain] ?? plain)
-      : plain;
+      : (englishTexts[plain] ?? plain);
   for (var i = 0; i < args.length; i++) {
     s = s.replaceAll('{$i}', '${args[i]}');
   }

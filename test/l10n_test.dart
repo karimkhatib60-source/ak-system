@@ -23,5 +23,10 @@ void main() {
     expect(trIn(AppLang.en, 'Credit@@column'), 'Credit');
     expect(trIn(AppLang.ar, 'Credit@@column'), 'دائن');
     expect(trIn(AppLang.ar, 'Credit'), 'رصيد دائن');
+    // A preset saved in Arabic still reads in English, and the other way.
+    expect(trIn(AppLang.en, 'مقطوعة'), 'lump sum');
+    expect(trIn(AppLang.ar, 'مقطوعة'), 'مقطوعة');
+    expect(trIn(AppLang.en, 'تأخير يومين'), '2 days late');
+    expect(trIn(AppLang.en, 'Not in the list'), 'Not in the list');
   });
 }

@@ -324,6 +324,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
 
   Future<void> _attach() async {
     final files = await FilePicker.pickFiles(
+      dialogTitle: 'Attach the supplier\'s bill'.tr,
       type: FileType.custom,
       allowedExtensions: const [
         'pdf',
@@ -1059,5 +1060,9 @@ Future<void> openAttachment(
   }
 }
 
-Future<void> _saveCopy(Attachment a, Uint8List bytes) =>
-    FilePicker.saveFile(fileName: a.name, bytes: bytes, mimeType: a.mime);
+Future<void> _saveCopy(Attachment a, Uint8List bytes) => FilePicker.saveFile(
+  dialogTitle: 'Save a copy'.tr,
+  fileName: a.name,
+  bytes: bytes,
+  mimeType: a.mime,
+);

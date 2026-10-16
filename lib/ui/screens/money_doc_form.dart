@@ -235,7 +235,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     _terms = TextEditingController(
       // The standard terms are written in the documents language while
       // they are still the app's default wording.
-      text: q?.terms ?? (q == null ? (repo.companyInfo['terms'] ?? '').td : ''),
+      text: q?.terms ?? (q == null ? repo.companyText('terms', docLang) : ''),
     );
     _notes = TextEditingController(text: q?.notes ?? i?.notes ?? '');
     for (final item in doc?.items ?? [_blankLine()]) {
@@ -647,7 +647,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                             ),
                             ButtonSegment(
                               value: InvoiceStatus.cancelled,
-                              label: Text('Cancelled'.tr),
+                              label: Text('Cancelled@@invoice'.tr),
                             ),
                           ],
                           selected: {_iStatus},
@@ -1058,7 +1058,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     bool used(int k) =>
         saved != null &&
         k < saved.paymentTerms.length &&
-        (repo.termStatus(saved, k).received > 0 ||
+        (repo.payments.any(
+              (p) =>
+                  !p.onInvoice && p.quotationId == saved.id && p.termIndex == k,
+            ) ||
+            repo.termStatus(saved, k).received > 0 ||
             repo.termStatus(saved, k).invoices.isNotEmpty);
     // Removing a row shifts the ones after it, so a row is locked when it
     // or any later row already has money or an invoice on it.

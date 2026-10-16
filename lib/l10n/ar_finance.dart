@@ -21,7 +21,7 @@ const arFinance = <String, String>{
   'No income or expenses in this period': 'لا دخل ولا مصاريف في هذه الفترة',
 
   // Key figures.
-  'Approved quotes': 'عروض موافق عليها',
+  'Approved quotes': 'عروض معتمدة',
   'Invoiced': 'المفوتر',
   'Received': 'المقبوض',
   'Outstanding': 'غير المسدّد',
@@ -53,13 +53,13 @@ const arFinance = <String, String>{
   // Next step on a project's account.
   'Start with a quotation. When the client approves it, mark it Approved '
           'and invoice from it.':
-      'ابدأ بعرض سعر. عند موافقة العميل عليه، علّمه «موافق عليه» وأصدر '
+      'ابدأ بعرض سعر. عند موافقة العميل عليه، علّمه «معتمد» وأصدر '
       'الفاتورة منه.',
   'No approved quotation. Prepare a new one for the client.':
-      'لا يوجد عرض سعر موافق عليه. حضّر عرضاً جديداً للعميل.',
+      'لا يوجد عرض سعر معتمد. حضّر عرضاً جديداً للعميل.',
   'Waiting for the client to approve {0}. Mark it Approved when they agree, '
           'then invoice from it.':
-      'بانتظار موافقة العميل على {0}. علّمه «موافق عليه» عند موافقته، ثم '
+      'بانتظار موافقة العميل على {0}. علّمه «معتمد» عند موافقته، ثم '
       'أصدر الفاتورة منه.',
   '{0} invoices': '{0} من الفواتير',
   '{0} is overdue on {1}. Record a receipt when the client pays.':
@@ -88,13 +88,13 @@ const arFinance = <String, String>{
       'تمّت الفوترة والدفع بالكامل. يوجد رصيد دائن بقيمة {0} لصالح العميل.',
   'Fully invoiced and paid.': 'تمّت الفوترة والدفع بالكامل.',
   'Raise the first invoice from the approved quotation.':
-      'أصدر الفاتورة الأولى من عرض السعر الموافق عليه.',
+      'أصدر الفاتورة الأولى من عرض السعر المعتمد.',
 
   // Client account card.
   'CLIENT ACCOUNT': 'حساب العميل',
   'Contract value': 'قيمة العقد',
-  'Approved quotations': 'عروض الأسعار الموافق عليها',
-  'No approved quotation yet': 'لا يوجد عرض سعر موافق عليه بعد',
+  'Approved quotations': 'عروض الأسعار المعتمدة',
+  'No approved quotation yet': 'لا يوجد عرض سعر معتمد بعد',
   '{0} of the contract': '{0} من العقد',
   '{0} extra work': 'أعمال إضافية {0}',
   '{0} of invoiced': '{0} من المفوتر',
@@ -125,7 +125,7 @@ const arFinance = <String, String>{
 
   // -------------------------------------------------------- Expenses --
   'Company': 'الشركة',
-  '{0} item': 'البنود: {0}',
+  '{0} item': '{0} بند',
   '{0} items': 'البنود: {0}',
   'Unpaid': 'غير مدفوعة',
   'COSTS BY TYPE · WITHOUT VAT': 'التكاليف حسب النوع · من دون الضريبة',
@@ -144,7 +144,7 @@ const arFinance = <String, String>{
   'Bill': 'الفاتورة',
   'Supplier': 'المورّد',
   'Company, subcontractor or person paid':
-      'شركة أو مقاول باطن أو شخص تمّ الدفع له',
+      'شركة أو مقاول فرعي أو شخص تمّ الدفع له',
   'Supplier invoice no.': 'رقم فاتورة المورّد',
   'As on their bill': 'كما في فاتورته',
   'Date': 'التاريخ',
@@ -171,7 +171,7 @@ const arFinance = <String, String>{
   'Total, VAT included': 'الإجمالي شامل الضريبة',
   'Total': 'الإجمالي',
   'Enter the amount': 'أدخل المبلغ',
-  'The supplier charged VAT': 'فرض المورّد ضريبة القيمة المضافة',
+  'The supplier charged VAT': 'فرض المورّد الضريبة على القيمة المضافة',
   'VAT you pay suppliers is deducted from the VAT on your invoices, so profit '
           'counts the cost without it.':
       'تُخصم الضريبة التي تدفعها للمورّدين من الضريبة على فواتيرك، لذا يُحتسب '
@@ -179,7 +179,7 @@ const arFinance = <String, String>{
   'VAT rate': 'نسبة الضريبة',
   'Cost without VAT': 'التكلفة من دون الضريبة',
   'Subtotal': 'المجموع الفرعي',
-  'VAT {0}%': 'الضريبة {0}%',
+  'VAT {0}%': 'الضريبة على القيمة المضافة {0}%',
   'Total of the bill': 'إجمالي الفاتورة',
   'Payment': 'الدفع',
   'Paid': 'مدفوعة',
@@ -245,7 +245,7 @@ const arFinance = <String, String>{
   'VAT: {0} on your invoices less {1} charged by suppliers, so {2} is owed '
           'to the tax office. VAT is not income or cost.':
       'الضريبة: {0} على فواتيرك ناقص {1} فرضها المورّدون، لذا يتوجّب {2} '
-      'لمصلحة الضرائب. الضريبة ليست دخلاً ولا تكلفة.',
+      'لوزارة المالية. الضريبة ليست دخلاً ولا تكلفة.',
   'VAT: {0} on your invoices less {1} charged by suppliers, so you have a '
           'VAT credit of {2} to set against VAT on future invoices. VAT is '
           'not income or cost.':
@@ -258,7 +258,7 @@ const arFinance = <String, String>{
       'متوجّبة. الضريبة ليست دخلاً ولا تكلفة.',
   'VAT of {0} on your invoices is owed to the tax office, so it is not '
           'counted as income.':
-      'الضريبة البالغة {0} على فواتيرك متوجّبة لمصلحة الضرائب، لذا لا تُحتسب '
+      'الضريبة البالغة {0} على فواتيرك متوجّبة لوزارة المالية، لذا لا تُحتسب '
       'دخلاً.',
   'VAT of {0} charged by suppliers is recoverable, so it is not counted as '
           'cost.':
@@ -288,7 +288,7 @@ const arFinance = <String, String>{
   'Advance payment': 'دفعة مقدّمة',
   'Concept and schematic design': 'التصميم المبدئي والتخطيطي',
   'Design development and permit': 'تطوير التصميم والترخيص',
-  'Construction drawings': 'المخططات التنفيذية',
+  'Construction drawings': 'الخرائط التنفيذية',
   'Final payment': 'الدفعة النهائية',
   'Progress payment 1': 'دفعة مرحلية 1',
   'Progress payment 2': 'دفعة مرحلية 2',
@@ -297,8 +297,8 @@ const arFinance = <String, String>{
   // Payment term due texts (paymentTermPresets).
   'On signing the agreement': 'عند توقيع الاتفاقية',
   'On approval of the concept design': 'عند الموافقة على التصميم المبدئي',
-  'On submission of the permit drawings': 'عند تقديم مخططات الترخيص',
-  'On delivery of the construction drawings': 'عند تسليم المخططات التنفيذية',
+  'On submission of the permit drawings': 'عند تقديم خرائط الترخيص',
+  'On delivery of the construction drawings': 'عند تسليم الخرائط التنفيذية',
   'On delivery of the final report': 'عند تسليم التقرير النهائي',
   'On signing the contract, before mobilization':
       'عند توقيع العقد، قبل تجهيز الموقع',
@@ -309,7 +309,6 @@ const arFinance = <String, String>{
 
   // Design stages (defaultStages in models.dart, the design list of
   // serviceStages). 'Construction drawings' is with the terms above.
-  'Brief': 'موجز المشروع',
   'Concept design': 'التصميم المبدئي',
   'Schematic design': 'التصميم التخطيطي',
   'Design development': 'تطوير التصميم',
@@ -336,7 +335,7 @@ const arFinance = <String, String>{
   'MEP works': 'الأعمال الكهروميكانيكية',
   'Finishing works': 'أعمال التشطيب',
   'Snagging': 'معالجة الملاحظات',
-  'Handover': 'التسليم',
+  'Handover': 'تسليم المشروع',
   'Warranty period': 'فترة الضمان',
 
   // Default unit of a new line (LineItem in finance.dart).
@@ -350,4 +349,5 @@ const arFinance = <String, String>{
   'Slate and teal': 'رمادي أردوازي وفيروزي',
   'Forest green': 'أخضر داكن',
   'Burgundy': 'خمري',
+  "Attach the supplier's bill": 'إرفاق فاتورة المورّد',
 };

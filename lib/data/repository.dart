@@ -17,6 +17,7 @@ const _uuid = Uuid();
 /// Company details printed on quotations and invoices.
 const companyInfoKeys = [
   'address',
+  'address_ar',
   'phone',
   'email',
   'website',
@@ -27,6 +28,7 @@ const companyInfoKeys = [
   'tax_number',
   'bank',
   'terms',
+  'terms_ar',
 ];
 
 const companyInfoDefaults = {
@@ -238,6 +240,15 @@ class Repository extends ChangeNotifier {
   List<Stage> stagesOf(String? projectId) =>
       stagesFor(project(projectId)?.service ?? ServiceType.design);
 
+  /// A company detail as printed in [lang]: on Arabic documents its Arabic
+  /// version when one is set, otherwise the main one (translated when it is
+  /// the app's own wording, as the default terms are).
+  String companyText(String key, AppLang lang) {
+    final ar = (companyInfo['${key}_ar'] ?? '').trim();
+    if (lang == AppLang.ar && ar.isNotEmpty) return ar;
+    return (companyInfo[key] ?? '').inLang(lang);
+  }
+
   // ---- Money --------------------------------------------------------------
 
   Quotation? quotation(String? id) =>
@@ -270,9 +281,21 @@ class Repository extends ChangeNotifier {
   /// whenever the data changes.
   final _allocations = <String, _Allocation>{};
 
-  _Allocation _allocation(String? clientId, [DateTime? until]) =>
-      _allocations['$clientId|${until == null ? '' : _day(until)}'] ??=
-          _allocate(clientId, until);
+  /// With [through], only the receipts taken up to that receipt count
+  /// (with [before], only those taken before it).
+  _Allocation _allocation(
+    String? clientId, [
+    DateTime? until,
+    Payment? through,
+    bool before = false,
+  ]) =>
+      _allocations['$clientId|${until == null ? '' : _day(until)}'
+          '|${through?.id ?? ''}|$before'] ??= _allocate(
+        clientId,
+        until,
+        through,
+        before,
+      );
 
   /// The project money held from a receipt belongs to: its invoice's
   /// project, its quotation's, or its own.
@@ -283,9 +306,18 @@ class Repository extends ChangeNotifier {
   /// Every receipt of a client is money for their invoices, whatever it
   /// was taken on: an advance on a payment term, money on account, or a
   /// payment on an invoice. Oldest receipt first.
-  List<_Credit> _creditsOf(String clientId, DateTime? until) => [
+  List<_Credit> _creditsOf(
+    String? clientId,
+    DateTime? until, [
+    Payment? through,
+    bool before = false,
+  ]) => [
     for (final p in payments)
-      if (payerOf(p) == clientId && _upTo(p.date, until) && p.amount > 0.005)
+      if (payerOf(p) == clientId &&
+          _upTo(p.date, until) &&
+          p.amount > 0.005 &&
+          (through == null ||
+              (p.id == through.id ? !before : receiptOrder(p, through) < 0)))
         _Credit(
           p,
           p.amount,
@@ -301,12 +333,18 @@ class Repository extends ChangeNotifier {
   /// as an advance, on account or as a payment on an invoice. Money for one
   /// project only settles that project's invoices; money or an invoice with
   /// no project goes with any. Whatever is left stays as credit for the
-  /// client's next invoices. A new invoice never changes how older ones
-  /// were paid.
-  _Allocation _allocate(String? clientId, DateTime? until) {
+  /// client's next invoices. When money for any project went to an older
+  /// invoice that money held for its own project could pay, the two swap,
+  /// so no invoice stays due while the client's money sits unused.
+  /// Receipts and invoices with no client form a pool of their own.
+  _Allocation _allocate(
+    String? clientId,
+    DateTime? until, [
+    Payment? through,
+    bool before = false,
+  ]) {
     final out = _Allocation();
-    if (clientId == null) return out;
-    final credits = _creditsOf(clientId, until);
+    final credits = _creditsOf(clientId, until, through, before);
     out.credits.addAll(credits);
     if (credits.isEmpty) return out;
     final left = [for (final c in credits) c.amount];
@@ -317,21 +355,55 @@ class Repository extends ChangeNotifier {
             _upTo(i.date, until))
           i,
     ]..sort(_byInvoiceDate);
-    for (final i in targets) {
+    bool fits(_Credit c, Invoice i) =>
+        c.projectId == null ||
+        i.projectId == null ||
+        c.projectId == i.projectId;
+    double least(double a, double b) => a < b ? a : b;
+    // uses[n][k]: what invoice n took from credit k.
+    final uses = [for (final _ in targets) <int, double>{}];
+    for (var n = 0; n < targets.length; n++) {
+      final i = targets[n];
+      final mine = uses[n];
       var need = _cents(i.total);
       for (var k = 0; k < credits.length && need > 0.005; k++) {
-        final c = credits[k];
-        if (left[k] <= 0.005) continue;
-        if (c.projectId != null &&
-            i.projectId != null &&
-            c.projectId != i.projectId) {
-          continue;
-        }
-        final take = left[k] < need ? left[k] : need;
+        if (left[k] <= 0.005 || !fits(credits[k], i)) continue;
+        final take = least(left[k], need);
         left[k] -= take;
         need -= take;
-        (out.toInvoice[i.id] ??= []).add((c, take));
-        out.add(c.payment.id, i, take);
+        mine[k] = (mine[k] ?? 0) + take;
+      }
+      // Still due: free money this invoice can take from an older invoice
+      // that held money (which this one cannot take) pays instead.
+      for (var m = n - 1; m >= 0 && need > 0.005; m--) {
+        final older = targets[m];
+        final theirs = uses[m];
+        for (final k in theirs.keys.toList().reversed) {
+          if (need <= 0.005) break;
+          if (!fits(credits[k], i)) continue;
+          for (var h = 0; h < credits.length && need > 0.005; h++) {
+            final moved = theirs[k] ?? 0;
+            if (moved <= 0.005) break;
+            if (h == k || left[h] <= 0.005 || !fits(credits[h], older)) {
+              continue;
+            }
+            final swap = least(least(left[h], moved), need);
+            theirs[k] = moved - swap;
+            theirs[h] = (theirs[h] ?? 0) + swap;
+            left[h] -= swap;
+            mine[k] = (mine[k] ?? 0) + swap;
+            need -= swap;
+          }
+        }
+      }
+    }
+    for (var n = 0; n < targets.length; n++) {
+      final i = targets[n];
+      for (final k in uses[n].keys.toList()..sort()) {
+        final take = uses[n][k]!;
+        if (take <= 0.000001) continue;
+        (out.toInvoice[i.id] ??= []).add((credits[k], take));
+        out.add(credits[k].payment.id, i, take);
       }
     }
     return out;
@@ -385,10 +457,14 @@ class Repository extends ChangeNotifier {
 
   /// Every receipt that went to an invoice, with the amount of each, oldest
   /// receipt first.
-  List<(Payment, double)> settledBy(Invoice i, {DateTime? until}) {
+  List<(Payment, double)> settledBy(
+    Invoice i, {
+    DateTime? until,
+    Payment? through,
+  }) {
     final out = <(Payment, double)>[];
     for (final (c, a)
-        in _allocation(i.clientId, until).toInvoice[i.id] ??
+        in _allocation(i.clientId, until, through).toInvoice[i.id] ??
             const <(_Credit, double)>[]) {
       final k = out.indexWhere((e) => e.$1.id == c.payment.id);
       if (k < 0) {
@@ -400,9 +476,13 @@ class Repository extends ChangeNotifier {
     return out;
   }
 
-  /// The invoices a receipt's credit was set against.
-  List<(Invoice, double)> appliedTo(Payment p, {DateTime? until}) =>
-      _allocation(payerOf(p), until).fromReceipt[p.id] ?? const [];
+  /// The invoices a receipt's credit was set against. With [through],
+  /// counting only receipts up to that one.
+  List<(Invoice, double)> appliedTo(
+    Payment p, {
+    DateTime? until,
+    Payment? through,
+  }) => _allocation(payerOf(p), until, through).fromReceipt[p.id] ?? const [];
 
   /// Everything that went to an invoice, from any receipt.
   double paidOn(Invoice i, {DateTime? until}) =>
@@ -416,8 +496,8 @@ class Repository extends ChangeNotifier {
 
   /// The part of a receipt not yet set against an invoice: credit held as
   /// an advance on a payment term, or on the client's account.
-  double unappliedOf(Payment p, {DateTime? until}) {
-    final a = _allocation(payerOf(p), until);
+  double unappliedOf(Payment p, {DateTime? until, Payment? through}) {
+    final a = _allocation(payerOf(p), until, through);
     var left = 0.0;
     for (final c in a.credits) {
       if (c.payment.id == p.id) left += c.amount;
@@ -477,7 +557,15 @@ class Repository extends ChangeNotifier {
   ]..sort((a, b) => b.date.compareTo(a.date));
 
   /// Where a payment term of a quotation stands.
-  TermStatus termStatus(Quotation q, int index, {DateTime? until}) {
+  /// With [through], only receipts up to that one count ([before]: only
+  /// those taken before it).
+  TermStatus termStatus(
+    Quotation q,
+    int index, {
+    DateTime? until,
+    Payment? through,
+    bool before = false,
+  }) {
     final term = q.paymentTerms[index];
     final termInvoices = invoices
         .where(
@@ -487,11 +575,13 @@ class Repository extends ChangeNotifier {
               i.status != InvoiceStatus.cancelled,
         )
         .toList();
-    final a = _allocation(q.clientId, until);
+    final a = _allocation(q.clientId, until, through, before);
     // Everything that went to the term's invoices, plus the advances taken
     // on the term (up to its amount) that are still held or went to an
-    // invoice of no term. An advance that settled another term's invoice
-    // counts on that term instead.
+    // invoice billing this contract outside its schedule (or a plain
+    // invoice of its project). An advance that settled another invoice
+    // (another term's, extra work, another contract's) counts there
+    // instead.
     final value = term.valueOf(q.total);
     var received = 0.0;
     for (final i in termInvoices) {
@@ -503,7 +593,13 @@ class Repository extends ChangeNotifier {
       held += c.amount;
       for (final (i, used)
           in a.fromReceipt[c.payment.id] ?? const <(Invoice, double)>[]) {
-        if (i.termIndex != null) held -= used;
+        final billsContract =
+            i.termIndex == null &&
+            (i.quotationId == q.id ||
+                (i.quotationId == null &&
+                    !i.extra &&
+                    i.projectId == q.projectId));
+        if (!billsContract) held -= used;
       }
     }
     final room = value - received;
@@ -546,6 +642,7 @@ class Repository extends ChangeNotifier {
           description:
               '${'{0} as per {1}'.tdArgs([label, q.number])}'
               '${q.title.isEmpty ? '' : ' · ${q.title}'}',
+          unit: 'lump sum'.td,
           rate: value / (1 + q.vatRate / 100),
         ),
       ],

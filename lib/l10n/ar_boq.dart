@@ -183,12 +183,12 @@ const arBoq = <String, String>{
   'Plain concrete blinding 10 cm thick, 250 kg/m³ cement content, under foundations':
       'باطون نظافة عادي سماكة 10 سم، بعيار 250 كغ/م³ إسمنت، تحت الأساسات',
   'Plain concrete for slopes, fillings and bases':
-      'باطون عادي للميول والردميات والقواعد',
+      'باطون عادي للميول والتعبئة والقواعد',
   'Reinforced concrete': 'الباطون المسلّح',
   'Reinforced concrete C30 for isolated and combined footings, including formwork':
       'باطون مسلّح C30 للقواعد المنفردة والمشتركة، شاملاً الطوبار',
   'Reinforced concrete C30 for raft foundation, including formwork':
-      'باطون مسلّح C30 للأساس الحصيري (اللبشة)، شاملاً الطوبار',
+      'باطون مسلّح C30 للأساس الحصيري (الحصيرة)، شاملاً الطوبار',
   'Reinforced concrete C30 for tie beams and grade beams':
       'باطون مسلّح C30 لجسور الربط والجسور الأرضية',
   'Reinforced concrete C30 for retaining walls, including waterstops':
@@ -295,7 +295,7 @@ const arBoq = <String, String>{
   'Self-levelling screed 5 mm for parquet and vinyl':
       'طبقة تسوية ذاتية 5 مم تحت الباركيه والفينيل',
   'Lightweight concrete filling under floors, average 10 cm':
-      'ردميات باطون خفيف تحت الأرضيات، بسماكة وسطية 10 سم',
+      'ردم بالباطون الخفيف تحت الأرضيات، بسماكة وسطية 10 سم',
   'Tiles': 'البلاط',
   'Porcelain floor tiles 60 x 60 cm, rectified, first grade, laid with tile adhesive and epoxy grout, 2 mm joints': 'بلاط بورسلان للأرضيات 60 x 60 سم، مقصوص الحواف (rectified)، نخب أول، يُركّب بلاصق بلاط مع ترويب إيبوكسي، فواصل 2 مم',
   'Large-format porcelain floor tiles 120 x 120 cm or 60 x 120 cm, rectified, with levelling clip system': 'بلاط بورسلان كبير الحجم للأرضيات 120 x 120 سم أو 60 x 120 سم، مقصوص الحواف (rectified)، مع نظام كليبسات للتسوية',
@@ -687,7 +687,7 @@ const arBoq = <String, String>{
 
   // 27 Cleaning and handover.
   'Cleaning and handover': 'التنظيف والتسليم',
-  'Handover': 'التسليم',
+  'Handover': 'تسليم المشروع',
   'Final deep cleaning of all areas, glass, fixtures and floors before handover': 'تنظيف نهائي شامل لجميع المساحات والزجاج والتجهيزات والأرضيات قبل التسليم',
   'Testing and commissioning of all systems':
       'فحص جميع الأنظمة وتشغيلها التجريبي',

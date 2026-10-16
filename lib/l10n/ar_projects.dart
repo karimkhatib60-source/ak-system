@@ -59,7 +59,7 @@ const arProjects = <String, String>{
   'Team': 'الفريق',
   'Open tasks': 'مهام مفتوحة',
   'Late tasks': 'مهام متأخرة',
-  'Approved': 'المعتمدة',
+  'Approved@@count': 'المعتمدة',
   '{0} stages': 'مراحل {0}',
   'Stage': 'المرحلة',
   'Current': 'الحالية',
@@ -93,7 +93,7 @@ const arProjects = <String, String>{
   'Credit': 'رصيد دائن',
   'Balance due': 'الرصيد المستحق',
   'Credit held: {0} received in advance and not yet set against an invoice.':
-      'رصيد دائن: {0} مقبوضة مقدّماً ولم تُخصَم بعد من أي فاتورة.',
+      'رصيد دائن: {0} مقبوض مقدّماً ولم يُخصَم بعد من أي فاتورة.',
   'Statement of account': 'كشف حساب',
   'Receipt': 'إيصال',
   'All time': 'كل الفترات',
@@ -124,7 +124,7 @@ const arProjects = <String, String>{
   'this deliverable': 'هذا التسليم',
   'No deliverables yet': 'لا تسليمات بعد',
   'Drawings, reports and packages you send the client.':
-      'المخططات والتقارير والملفات التي ترسلها إلى العميل.',
+      'الخرائط والتقارير والملفات التي ترسلها إلى العميل.',
   'e.g. Ground floor plan, Permit set': 'مثلاً: مسقط الطابق الأرضي، ملف الرخصة',
   'Enter the deliverable': 'أدخل اسم التسليم',
   'Discipline': 'الاختصاص',

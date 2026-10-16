@@ -34,7 +34,7 @@ class _ClientFormState extends State<ClientForm> {
   late final _phone = TextEditingController(text: widget.client?.phone ?? '');
   late final _email = TextEditingController(text: widget.client?.email ?? '');
   late final _country = TextEditingController(
-    text: widget.client?.country ?? 'Lebanon',
+    text: (widget.client?.country ?? 'Lebanon').tr,
   );
   late final _notes = TextEditingController(text: widget.client?.notes ?? '');
 

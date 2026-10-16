@@ -61,8 +61,14 @@ class SettingsScreen extends StatelessWidget {
                   title: Text(_infoLabel(k)),
                   subtitle: Text(
                     (repo.companyInfo[k] ?? '').isEmpty
-                        ? 'Not set'.tr
-                        : repo.companyInfo[k]!,
+                        ? k.endsWith('_ar')
+                              ? 'Not set: the English one is used, in '
+                                        'Arabic where it is the standard text'
+                                    .tr
+                              : 'Not set'.tr
+                        : _multiline.contains(k)
+                        ? repo.companyInfo[k]!
+                        : ltr(repo.companyInfo[k]!),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -72,7 +78,7 @@ class SettingsScreen extends StatelessWidget {
                       context,
                       _infoLabel(k),
                       repo.companyInfo[k] ?? '',
-                      multiline: k == 'bank' || k == 'terms' || k == 'address',
+                      multiline: _multiline.contains(k),
                     );
                     if (v != null) await repo.setCompanyInfo({k: v});
                   },
@@ -100,8 +106,12 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+/// Company details written over several lines, in either language.
+const _multiline = {'address', 'address_ar', 'bank', 'terms', 'terms_ar'};
+
 String _infoLabel(String k) => switch (k) {
   'address' => 'Address'.tr,
+  'address_ar' => 'Address on Arabic documents'.tr,
   'phone' => 'Phone'.tr,
   'email' => 'Email'.tr,
   'website' => 'Website'.tr,
@@ -112,11 +122,12 @@ String _infoLabel(String k) => switch (k) {
   'tax_number' => 'VAT / tax number'.tr,
   'bank' => 'Bank details (on invoices)'.tr,
   'terms' => 'Standard terms (on quotations and invoices)'.tr,
+  'terms_ar' => 'Standard terms on Arabic documents'.tr,
   _ => k,
 };
 
 IconData _infoIcon(String k) => switch (k) {
-  'address' => Icons.location_on_outlined,
+  'address' || 'address_ar' => Icons.location_on_outlined,
   'phone' => Icons.phone_outlined,
   'email' => Icons.mail_outline,
   'website' => Icons.language,
@@ -170,9 +181,11 @@ Future<void> _editStage(
   final name = await _ask(
     context,
     s == null ? 'New stage'.tr : 'Rename stage'.tr,
-    s?.name ?? '',
+    s?.name.tr ?? '',
   );
-  if (name == null || name.isEmpty) return;
+  // An untouched preset keeps its English name, which reads in both
+  // languages.
+  if (name == null || name.isEmpty || name == s?.name.tr) return;
   final now = repo.now();
   await repo.saveStage(
     s?.copyWith(name: name) ??
@@ -328,7 +341,7 @@ class _TeamSection extends StatelessWidget {
                   ? '{0} (you)'.trArgs([m.name])
                   : m.name,
             ),
-            subtitle: Text('${roleLabel(m.role)} · ${m.email}'),
+            subtitle: Text('${roleLabel(m.role)} · ${ltr(m.email)}'),
             trailing: repo.isOwner && m.id != repo.currentMemberId
                 ? DropdownButton<MemberRole>(
                     value: m.role,
@@ -391,7 +404,7 @@ class _CloudSection extends StatelessWidget {
       children: [
         ListTile(
           leading: const Icon(Icons.account_circle_outlined),
-          title: Text(cloud.user?.email ?? ''),
+          title: Text(ltr(cloud.user?.email ?? '')),
           subtitle: Text(switch (sync.state) {
             SyncState.syncing => 'Syncing…'.tr,
             SyncState.offline =>
@@ -502,7 +515,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
                   } catch (e) {
                     setState(() {
                       _busy = false;
-                      _error = '$e';
+                      _error = plainError(e);
                     });
                   }
                 },
@@ -553,7 +566,7 @@ class _LoginDialogState extends State<_LoginDialog> {
     } catch (e) {
       setState(() {
         _busy = false;
-        _message = '$e';
+        _message = plainError(e);
       });
     }
   }
@@ -636,6 +649,7 @@ class _CompanyCard extends StatelessWidget {
   Future<void> _pickLogo(BuildContext context) async {
     final repo = context.read<Repository>();
     final files = await FilePicker.pickFiles(
+      dialogTitle: 'Choose the company logo'.tr,
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg'],
     );
@@ -733,7 +747,7 @@ class _CompanyCard extends StatelessWidget {
                   for (final l in companyLinks(repo.companyInfo))
                     ActionChip(
                       avatar: Icon(linkIcon(l.kind), size: 16),
-                      label: Text(l.display),
+                      label: Text(ltr(l.display)),
                       onPressed: () => openUri(Uri.parse(l.url)),
                     ),
                 ],
@@ -941,7 +955,8 @@ class _ReportColoursState extends State<_ReportColours> {
               const SizedBox(height: 10),
               Text(
                 'Used on every quotation, invoice, receipt and statement '
-                        'from now on.'
+                        'made on this device from now on. Choose them on '
+                        'each device you print from.'
                     .tr,
                 style: TextStyle(color: ak.muted, fontSize: 12),
               ),
@@ -1178,7 +1193,8 @@ class _LanguageSection extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'Each person chooses the language of their own screens. '
-                        'Documents print in the language chosen here.'
+                        'Documents made on this device print in the language '
+                        'chosen here.'
                     .tr,
                 style: TextStyle(color: ak.muted, fontSize: 12),
               ),

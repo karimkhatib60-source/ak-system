@@ -502,7 +502,16 @@ class Assistant extends ChangeNotifier {
             updatedAt: now,
             number: repo.nextInvoiceNumber(),
             title: s('title'),
-            clientId: s('client_id').isEmpty ? q?.clientId : s('client_id'),
+            clientId: s('client_id').isNotEmpty
+                ? s('client_id')
+                : q?.clientId ??
+                      repo
+                          .project(
+                            s('project_id').isEmpty
+                                ? q?.projectId
+                                : s('project_id'),
+                          )
+                          ?.clientId,
             projectId: s('project_id').isEmpty ? q?.projectId : s('project_id'),
             quotationId: q?.id,
             date: now,

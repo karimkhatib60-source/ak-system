@@ -57,7 +57,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               heroTag: 'add-project',
               onPressed: () => openProjectForm(context),
               icon: const Icon(Icons.add),
-              label: Text('Project'.tr),
+              label: Text('Project@@button'.tr),
             )
           : null,
       body: Readable(

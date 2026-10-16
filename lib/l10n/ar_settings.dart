@@ -4,9 +4,10 @@ const arSettings = <String, String>{
   'Language': 'اللغة',
   'Screens': 'الشاشات',
   'Quotations, invoices and receipts': 'عروض الأسعار والفواتير والإيصالات',
-  'Each person chooses the language of their own screens. '
-          'Documents print in the language chosen here.':
-      'يختار كل مستخدم لغة شاشاته. تُطبع المستندات باللغة المختارة هنا.',
+  'Each person chooses the language of their own screens. Documents made '
+          'on this device print in the language chosen here.':
+      'يختار كل مستخدم لغة شاشاته. تُطبع المستندات المُنشأة على هذا الجهاز '
+      'باللغة المختارة هنا.',
 
   // Common buttons.
   'Cancel': 'إلغاء',
@@ -146,9 +147,10 @@ const arSettings = <String, String>{
       'اللون الرئيسي: العناوين ورؤوس الجداول والمجاميع',
   'Highlight colour: document number and accents':
       'لون الإبراز: رقم المستند واللمسات اللونية',
-  'Used on every quotation, invoice, receipt and statement '
-          'from now on.':
-      'تُستخدم على كل عرض سعر وفاتورة وإيصال وكشف حساب من الآن فصاعداً.',
+  'Used on every quotation, invoice, receipt and statement made on this '
+          'device from now on. Choose them on each device you print from.':
+      'تُستخدم على كل عرض سعر وفاتورة وإيصال وكشف حساب يُنشأ على هذا الجهاز '
+      'من الآن فصاعداً. اخترها على كل جهاز تطبع منه.',
   'See it on {0}': 'اعرضها على {0}',
   'INVOICE': 'فاتورة',
   'TOTAL': 'الإجمالي',
@@ -196,4 +198,21 @@ const arSettings = <String, String>{
           'install it from the download page instead.':
       'تم تنزيل الإصدار {0}، لكن Windows أو برنامج مكافحة الفيروسات منع '
       'بدء التثبيت. يمكنك تثبيته من صفحة التنزيل بدلاً من ذلك.',
+  'Address on Arabic documents': 'العنوان على المستندات العربية',
+  'Standard terms on Arabic documents': 'الشروط المعتمدة على المستندات العربية',
+  'Not set: the English one is used, in Arabic where it is the standard text':
+      'غير محدّد: يُستخدم النص الإنكليزي، وبالعربية إن كان النص المعتمد',
+  'Choose the company logo': 'اختر شعار الشركة',
+  'Wrong email or password.': 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+  'Confirm the login from the email first.':
+      'أكّد تسجيل الدخول من البريد الإلكتروني أولاً.',
+  'This email already has a login.': 'لهذا البريد الإلكتروني حساب دخول مسبقاً.',
+  'Choose a longer password, at least 6 characters.':
+      'اختر كلمة مرور أطول، 6 أحرف على الأقل.',
+  'No internet connection. Try again when online.':
+      'لا يوجد اتصال بالإنترنت. حاول مجدداً عند الاتصال.',
+  'Could not finish this. Check the details and the internet connection, '
+          'then try again.':
+      'تعذّر إتمام العملية. تحقّق من البيانات ومن الاتصال بالإنترنت، ثم حاول '
+      'مجدداً.',
 };

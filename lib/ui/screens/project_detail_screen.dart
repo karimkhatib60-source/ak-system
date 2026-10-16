@@ -217,7 +217,7 @@ class _Overview extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _Stat(
-                'Approved'.tr,
+                'Approved@@count'.tr,
                 '${dels.where((d) => d.status == DeliverableStatus.approved).length}/${dels.length}',
               ),
             ],

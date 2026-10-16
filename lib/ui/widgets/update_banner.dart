@@ -101,7 +101,7 @@ Future<void> showWhatsNew(BuildContext context, Release r) => showDialog<void>(
     title: Text('What\'s new in version {0}'.trArgs([r.version])),
     content: SingleChildScrollView(
       child: Text(
-        r.notes.isEmpty ? 'Improvements and fixes.'.tr : r.notes,
+        r.notes.isEmpty ? 'Improvements and fixes.'.tr : r.notesIn(appLang),
         style: const TextStyle(height: 1.4),
       ),
     ),

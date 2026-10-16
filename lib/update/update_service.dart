@@ -21,6 +21,9 @@ abstract class Installer {
 }
 
 /// A newer version published on GitHub Releases.
+/// The line in release-notes.md after which the notes are in Arabic.
+const arabicNotesMark = '## العربية';
+
 class Release {
   const Release({
     required this.version,
@@ -39,6 +42,17 @@ class Release {
 
   /// The installer's checksum, when GitHub gives one.
   final String? sha256;
+
+  /// The notes in [lang]. Release notes carry their Arabic after a line
+  /// [arabicNotesMark]; older notes are English only.
+  String notesIn(AppLang lang) {
+    final k = notes.indexOf(arabicNotesMark);
+    if (k < 0) return notes;
+    return (lang == AppLang.ar
+            ? notes.substring(k + arabicNotesMark.length)
+            : notes.substring(0, k))
+        .trim();
+  }
 
   /// Reads GitHub's "latest release" answer; null when it has no Windows
   /// installer (yet) or the tag is not a version.

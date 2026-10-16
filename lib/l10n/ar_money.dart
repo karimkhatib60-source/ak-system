@@ -12,7 +12,7 @@ const arMoney = <String, String>{
   'Notes': 'ملاحظات',
   'Reference': 'المرجع',
   'Invoice': 'فاتورة',
-  'Payment term': 'دفعة',
+  'Payment term': 'دفعة تعاقدية',
   'On account': 'على الحساب',
   'Choose the client': 'اختر العميل',
   'Send receipt': 'إرسال الإيصال',
@@ -33,7 +33,7 @@ const arMoney = <String, String>{
   'STATUS': 'الحالة',
   'Draft': 'مسودة',
   'Issued': 'صادرة',
-  'Cancelled': 'ملغاة',
+  'Cancelled@@invoice': 'ملغاة',
   'Accept and invoice': 'موافقة وإصدار فاتورة',
   'Progress invoice': 'فاتورة مرحلية',
   'Record payment': 'تسجيل دفعة',
@@ -56,7 +56,7 @@ const arMoney = <String, String>{
       'المقدّمة.',
   'contract': 'العقد',
   'Project work (no approved quotation yet)':
-      'أعمال المشروع (لا يوجد عرض سعر موافق عليه بعد)',
+      'أعمال المشروع (لا يوجد عرض سعر معتمد بعد)',
   'Not linked to a quotation': 'غير مرتبطة بعرض سعر',
   'Extra work, outside the contract': 'أعمال إضافية، خارج العقد',
   'Phase billed': 'المرحلة المفوترة',
@@ -88,7 +88,7 @@ const arMoney = <String, String>{
   'Subtotal': 'المجموع الفرعي',
   'Cost': 'الكلفة',
   'Cost-plus fee {0}%': 'نسبة الأتعاب فوق الكلفة {0}%',
-  'VAT {0}%': 'الضريبة {0}%',
+  'VAT {0}%': 'الضريبة على القيمة المضافة {0}%',
   'Total': 'الإجمالي',
 
   // Payments on an invoice. Receipts settle the client's invoices oldest
@@ -171,9 +171,9 @@ const arMoney = <String, String>{
   'Choose the invoice': 'اختر الفاتورة',
   'No open payment terms. Add the payment terms on the approved quotation '
           'first.':
-      'لا دفعات مفتوحة. أضف جدول الدفعات إلى عرض السعر الموافق عليه أولاً.',
+      'لا دفعات مفتوحة. أضف جدول الدفعات إلى عرض السعر المعتمد أولاً.',
   '{0} left': 'المتبقي {0}',
-  'Choose the payment term': 'اختر الدفعة',
+  'Choose the payment term': 'اختر الدفعة التعاقدية',
   'Money received without a specific invoice, for example a deposit. It is '
           "set against this client's open invoices automatically, oldest "
           'first, and the rest stays as credit on the account.':
@@ -218,7 +218,7 @@ const arMoney = <String, String>{
   'set against {0}': 'خُصم من {0}',
   '{0} credit left': '{0} رصيد دائن متبقٍ',
   'Advance': 'دفعة مقدّمة',
-  'Term': 'دفعة',
+  'Term': 'دفعة تعاقدية',
   'RECEIPT {0}': 'إيصال {0}',
   'Set against': 'خُصم من',
   'Credit left': 'الرصيد الدائن المتبقي',
