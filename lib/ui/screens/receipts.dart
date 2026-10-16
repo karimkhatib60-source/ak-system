@@ -541,11 +541,19 @@ class _Position extends StatelessWidget {
         ('Received so far', repo.paidOn(i)),
         ('Balance due', repo.balanceOf(i)),
       ];
-      if (repo.advanceOn(i) > 0) {
-        note =
-            'Includes ${fmtMoney(repo.advanceOn(i))} set off from money '
-            'received in advance.';
-      }
+      final older = [
+        for (final o in repo.openInvoices(i.clientId, projectId: i.projectId))
+          if (o.id != i.id && Repository.invoiceOrder(o, i) < 0) o.number,
+      ];
+      note = [
+        if (repo.advanceOn(i) > 0)
+          'Includes ${fmtMoney(repo.advanceOn(i))} set off from other '
+              'payments of the client.',
+        if (older.isNotEmpty)
+          'Payments settle the oldest invoices first, so ${older.join(', ')} '
+              '${older.length == 1 ? 'is' : 'are'} paid before ${i.number}.',
+      ].join(' ');
+      if (note.isEmpty) note = null;
     } else if (term != null) {
       final (q, _, st) = term!;
       rows = [
@@ -554,15 +562,13 @@ class _Position extends StatelessWidget {
         ('Received so far', st.received),
         ('Remaining', st.remaining),
       ];
-      final open = st.invoices
-          .where(
-            (i) => i.status == InvoiceStatus.sent && repo.balanceOf(i) > 0.005,
-          )
+      final open = repo
+          .openInvoices(q.clientId, projectId: q.projectId)
           .map((i) => i.number);
       if (open.isNotEmpty) {
         note =
-            'Invoiced on ${open.join(', ')}. This receipt will be set '
-            'against it.';
+            'This receipt settles the open invoices oldest first: '
+            '${open.join(', ')}.';
       } else if (st.term.due.isNotEmpty) {
         note = 'Due: ${st.term.due}.';
       }
@@ -645,7 +651,7 @@ class ReceiptTile extends StatelessWidget {
           if (showProject && project != null) project.code,
           if (part) '${fmtMoneyShort(share)} of ${fmtMoneyShort(p.amount)}',
           receiptPurpose(repo, p),
-          if (used.isNotEmpty)
+          if (used.any((e) => e.$1.id != p.invoiceId))
             'set against ${used.map((e) => e.$1.number).join(', ')}',
           if (advance && used.isNotEmpty)
             '${fmtMoneyShort(credit)} credit left',
@@ -746,7 +752,9 @@ Future<void> showReceiptSheet(
                 '${i.number} · ${fmtMoney(a)}'
                     '${i.title.isEmpty ? '' : ' · ${i.title}'}',
               ),
-            if (!p.onInvoice || advance > 0.005 || setAgainst.isNotEmpty)
+            if (!p.onInvoice ||
+                advance > 0.005 ||
+                setAgainst.any((e) => e.$1.id != p.invoiceId))
               row(
                 'Credit left',
                 advance > 0.005

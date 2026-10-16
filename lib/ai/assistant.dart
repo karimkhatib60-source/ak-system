@@ -542,7 +542,7 @@ class Assistant extends ChangeNotifier {
         if (due <= 0.005) {
           final setOff = repo.advanceOn(repo.invoice(inv.id) ?? inv);
           return 'Nothing to record: ${inv.number} is already paid'
-              '${setOff > 0.005 ? ', including ${setOff.toStringAsFixed(2)} set off from money on account' : ''}';
+              '${setOff > 0.005 ? ', including ${setOff.toStringAsFixed(2)} set off from other payments' : ''}';
         }
         if (amount <= 0 || amount > due + 0.005) {
           return 'Error: the amount must be more than 0 and at most '

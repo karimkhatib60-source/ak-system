@@ -141,17 +141,14 @@ void main() {
     expect(repo.termStatus(repo.quotation('q')!, 0).received, 3330);
   });
 
-  test('an advance on the contract is not used for extra work', () async {
+  test('an advance on the contract also settles extra work', () async {
     await approved();
     await advance(3330);
     final extra = await invoice('i1', 1000, extra: true);
-    expect(repo.balanceOf(extra), closeTo(1110, 1e-9));
+    expect(repo.balanceOf(extra), 0);
     final m = repo.money(projectId: 'p');
-    expect(m.advances, closeTo(3330, 1e-9));
-    expect(
-      projectNextStep(repo, repo.quotationsFor('p'), repo.invoicesFor('p'), m),
-      contains('kept for the contract invoices'),
-    );
+    expect(m.advances, closeTo(2220, 1e-9));
+    expect(m.outstanding, 0);
   });
 
   test('after approval the next step is the first invoice', () async {

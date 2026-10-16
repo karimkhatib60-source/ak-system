@@ -476,11 +476,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
         labelText: 'Billing for',
         helperMaxLines: 3,
         helperText: _extra
-            ? 'Not counted in the contract\'s progress. Advances paid on '
-                  'the contract stay for the contract invoices.'
+            ? 'Not counted in the contract\'s progress. Money received is '
+                  'set against invoices oldest first, extra work included.'
             : value != null
-            ? 'Advances received on this quotation are deducted from the '
-                  'invoice.'
+            ? 'Money received is set against invoices oldest first, '
+                  'advances included.'
             : null,
       ),
       items: [
@@ -910,7 +910,10 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       subtitle: Text(
                         [
                           if (a.number.isNotEmpty) a.number,
-                          a.quotationId != null && a.termIndex != null
+                          a.onInvoice
+                              ? 'from payment on '
+                                    '${repo.invoice(a.invoiceId)?.number ?? 'another invoice'}'
+                              : a.quotationId != null && a.termIndex != null
                               ? 'set off from advance on payment term'
                               : 'set off from money on account',
                           fmtDate(a.date),
@@ -947,6 +950,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                           paymentMethodLabel(payments[k].method),
                           if (payments[k].reference.isNotEmpty)
                             payments[k].reference,
+                          ?_elsewhere(repo, payments[k], inv),
                         ].join(' · '),
                       ),
                       trailing: Row(
@@ -1236,6 +1240,18 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
         ...editor,
     ];
   }
+}
+
+/// Where the rest of a payment taken on [inv] went, when part of it
+/// settled other invoices or is still held as credit.
+String? _elsewhere(Repository repo, Payment p, Invoice inv) {
+  final other = [
+    for (final (i, used) in repo.appliedTo(p))
+      if (i.id != inv.id) '${fmtMoney(used)} to ${i.number}',
+  ];
+  final credit = repo.unappliedOf(p);
+  if (credit > 0) other.add('${fmtMoney(credit)} held as credit');
+  return other.isEmpty ? null : other.join(', ');
 }
 
 class _LineEditor extends StatelessWidget {

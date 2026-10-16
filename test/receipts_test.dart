@@ -267,7 +267,8 @@ void main() {
       expect(repo.balanceOf(inv), closeTo(160, 1e-9));
       expect(repo.paymentState(inv), PaymentState.partlyPaid);
       final rest = await receive('r2', 160, invoiceId: inv.id);
-      expect(repo.receivedBefore(rest), 0); // the advance was on the term
+      // The advance went first, then the payment on the invoice.
+      expect(repo.settledBy(inv).map((e) => e.$1.id), ['a1', rest.id]);
       expect(repo.paymentState(inv), PaymentState.paid);
       final status = repo.termStatus(q, 0);
       expect(status.received, closeTo(660, 1e-9));
@@ -289,13 +290,13 @@ void main() {
       expect(st.closing, -1000);
     });
 
-    test('earlier receipts on the same term come first', () async {
-      await withTerms();
-      final a = await receive('a1', 200, quotationId: 'q', termIndex: 1);
-      final b = await receive('b2', 300, quotationId: 'q', termIndex: 1);
+    test('receipts on a term count for that term until invoiced', () async {
+      final q = await withTerms();
+      await receive('a1', 200, quotationId: 'q', termIndex: 1);
+      await receive('b2', 300, quotationId: 'q', termIndex: 1);
       await receive('c3', 50, quotationId: 'q', termIndex: 2);
-      expect(repo.receivedBefore(a), 0);
-      expect(repo.receivedBefore(b), 200);
+      expect(repo.termStatus(q, 1).received, closeTo(500, 1e-9));
+      expect(repo.termStatus(q, 2).received, closeTo(50, 1e-9));
     });
 
     test('project statement lists the payment schedule', () async {
@@ -405,6 +406,53 @@ void main() {
       final general = await issue('y', 100, projectId: null, day: 6);
       expect(repo.balanceOf(other), closeTo(400, 1e-9));
       expect(repo.balanceOf(general), 0);
+    });
+
+    test('a payment on a newer invoice settles the older one first', () async {
+      await setup();
+      final i1 = await issue('i1', 1000, day: 1);
+      final i2 = await issue('i2', 500, day: 5);
+      final r1 = await receive('r1', 800, invoiceId: 'i2', day: 6);
+      expect(repo.paidOn(i1), closeTo(800, 1e-9));
+      expect(repo.paidOn(i2), 0);
+      expect(repo.appliedTo(r1).single.$1.id, 'i1');
+      expect(repo.advancesOn(i1).single.$1.id, 'r1');
+      final r2 = await receive('r2', 700, invoiceId: 'i2', day: 8);
+      expect(repo.balanceOf(i1), 0);
+      expect(repo.balanceOf(i2), 0);
+      expect(repo.appliedTo(r2).map((e) => e.$2), [200, 500]);
+      expect(repo.unappliedOf(r2), 0);
+      expect(buildStatement(repo, 'c').closing, closeTo(0, 1e-9));
+    });
+
+    test('advances and invoice payments are one pool, by date', () async {
+      await setup();
+      await receive('a1', 300, day: 1); // on account
+      final i1 = await issue('i1', 500, day: 2);
+      final i2 = await issue('i2', 400, day: 3);
+      await receive('r1', 400, invoiceId: 'i2', day: 4);
+      expect(repo.settledBy(i1).map((e) => (e.$1.id, e.$2)), [
+        ('a1', 300),
+        ('r1', 200),
+      ]);
+      expect(repo.paidOn(i2), closeTo(200, 1e-9));
+      expect(repo.balanceOf(i2), closeTo(200, 1e-9));
+      expect(repo.paymentState(i1), PaymentState.paid);
+      expect(repo.paymentState(i2), PaymentState.partlyPaid);
+      // As of day 3 only the advance existed.
+      expect(repo.paidOn(i1, until: DateTime(2026, 10, 3)), 300);
+      expect(repo.paidOn(i2, until: DateTime(2026, 10, 3)), 0);
+    });
+
+    test('an advance on a term may settle an older term invoice', () async {
+      final q = await withTerms();
+      final t0 = await issue('t0', 660, quotationId: 'q', termIndex: 0, day: 2);
+      await receive('a1', 1320, quotationId: 'q', termIndex: 1, day: 5);
+      expect(repo.balanceOf(t0), 0);
+      expect(repo.termStatus(q, 0).settled, isTrue);
+      // What paid the first instalment no longer counts on the second.
+      expect(repo.termStatus(q, 1).received, closeTo(660, 1e-9));
+      expect(repo.money(projectId: 'p').advances, closeTo(660, 1e-9));
     });
 
     test('an advance on a term is recovered from progress invoices', () async {

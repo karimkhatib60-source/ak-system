@@ -614,16 +614,10 @@ String projectNextStep(
         ? due.map((i) => i.number).join(', ')
         : '${due.length} invoices';
     final allLate = m.overdue >= m.outstanding - 0.005;
-    // Advances only stay unused while an invoice is due when that invoice
-    // bills extra work.
-    final held = m.advances > 0.005
-        ? ' The ${fmtMoney(m.advances)} received in advance is kept for '
-              'the contract invoices.'
-        : '';
     return '${fmtMoney(m.outstanding)} is ${allLate ? 'overdue' : 'due'} on '
         '$names'
         '${m.overdue > 0.005 && !allLate ? ', ${fmtMoney(m.overdue)} of it overdue' : ''}. '
-        'Record a receipt when the client pays.$held';
+        'Record a receipt when the client pays.';
   }
   if (drafts.isNotEmpty) {
     return '${drafts.first.number} is still a draft. Send it to issue it; '
@@ -771,9 +765,8 @@ class ClientAccountCard extends StatelessWidget {
                 m.advances,
                 bold: due <= 0.005,
                 color: ak.info,
-                hint: due > 0.005
-                    ? 'Received in advance; kept for the contract invoices'
-                    : 'Received in advance; set off on the next invoices',
+                hint: 'Received ahead; set off on the next invoices, '
+                    'oldest first',
               ),
             if (m.quoted > 0 || m.invoiced > 0) ...[
               const SizedBox(height: 6),

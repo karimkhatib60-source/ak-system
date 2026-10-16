@@ -1002,7 +1002,6 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       : null;
   final client = repo.client(repo.payerOf(pay));
   final project = repo.project(repo.projectOfPayment(pay));
-  final before = repo.receivedBefore(pay);
   final pdf = pw.Document(
     theme: await _theme(),
     title: '${pay.number} Receipt',
@@ -1015,14 +1014,24 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final String after;
   var extra = 0.0; // paid above the invoice or instalment
   if (inv != null) {
-    // Advances and money on account set against the invoice by the
-    // receipt's date count as received too.
-    final advance = repo.advanceOn(inv, until: pay.date);
-    final prior = before + advance;
+    // Every receipt goes to the client's open invoices oldest first, so
+    // part of this one may have settled older invoices on its day.
+    var prior = 0.0, here = 0.0;
+    for (final (o, a) in repo.settledBy(inv, until: pay.date)) {
+      if (o.id == pay.id) {
+        here += a;
+      } else if (Repository.receiptOrder(o, pay) < 0) {
+        prior += a;
+      }
+    }
     final total = (inv.total * 100).round() / 100;
-    final rest = total - prior - pay.amount;
+    final rest = total - prior - here;
     final left = rest > 0 ? rest : 0.0;
-    extra = rest < -0.005 ? -rest : 0;
+    final elsewhere = [
+      for (final (i, a) in repo.appliedTo(pay, until: pay.date))
+        if (i.id != inv.id) (i, a),
+    ];
+    final held = repo.unappliedOf(pay, until: pay.date);
     purpose = 'Invoice ${inv.number}';
     detail = _table(
       [
@@ -1039,18 +1048,25 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
           inv.title.isNotEmpty ? inv.title : (project?.name ?? ''),
           fmtMoney(inv.total),
           fmtMoney(prior),
-          fmtMoney(pay.amount),
+          fmtMoney(here),
           fmtMoney(left.abs() < .005 ? 0 : left),
         ],
       ],
       widths: _receiptWidths,
       right: {2, 3, 4, 5},
     );
-    after = left <= 0.005
-        ? '${inv.number} is now fully paid. Thank you.'
-              '${extra > 0 ? ' The extra ${fmtMoney(extra)} is held as credit '
-                        'on the account.' : ''}'
-        : 'Remaining on ${inv.number}: ${fmtMoney(left)}.';
+    final went = elsewhere.fold(0.0, (s, e) => s + e.$2);
+    after = [
+      left <= 0.005
+          ? '${inv.number} is now fully paid. Thank you.'
+          : 'Remaining on ${inv.number}: ${fmtMoney(left)}.',
+      if (went > 0.005)
+        'Open invoices are settled oldest first, so ${fmtMoney(went)} of '
+            'this receipt went to '
+            '${elsewhere.map((e) => e.$1.number).join(', ')}.',
+      if (held > 0.005)
+        'The extra ${fmtMoney(held)} is held as credit on the account.',
+    ].join(' ');
   } else if (q != null && term != null) {
     final value = (term.valueOf(q.total) * 100).round() / 100;
     // Everything received on this term up to the day before, plus earlier
@@ -1214,12 +1230,9 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         detail,
         pw.SizedBox(height: 8),
         pw.Text(after, style: const pw.TextStyle(fontSize: 9, color: _muted)),
-        if (applied.isNotEmpty || credit > 0.005) ...[
+        if (applied.any((e) => e.$1.id != inv?.id) || credit > 0.005) ...[
           pw.SizedBox(height: 18),
-          _label(
-            '${inv == null ? 'Set against invoices' : 'Paid above ${inv.number}'}'
-            ' · as of ${fmtDate(repo.now())}',
-          ),
+          _label('How this receipt was used · as of ${fmtDate(repo.now())}'),
           pw.SizedBox(height: 5),
           _table(
             ['Invoice', 'Date', 'Subject', 'Amount set off'],
@@ -1238,9 +1251,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
                 '',
                 term == null
                     ? 'Credit remaining on account'
-                    : extra > 0
-                    ? 'Credit held: for this instalment, the rest on account'
-                    : 'Held for the invoice of this instalment',
+                    : 'Credit held for the next invoices',
                 fmtMoney(credit),
               ],
             ],
