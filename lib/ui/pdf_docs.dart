@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -1354,29 +1355,45 @@ pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
 
 String _pct(double v) => '${v.toStringAsFixed(v >= 10 || v == 0 ? 0 : 1)}%';
 
-/// Builds the receipt for one payment received: on an invoice, on a
-/// payment term of a quotation, or on account.
 /// [first], then where a receipt went as of its [day]: the part that
 /// settled older invoices (other than those [own] picks) and the part
-/// still held as credit. [kept] is the part counted on the receipt's own
-/// instalment.
+/// still held as credit. On an instalment, [counted] is what the receipt
+/// added to it: its own invoices, then money it paid on invoices
+/// [contract] picks, then credit held for it, in that order.
 String _usedText(
   Repository repo,
   Payment pay,
   DateTime day,
   String first,
   bool Function(Invoice) own, {
-  double? kept,
+  double counted = 0,
+  bool Function(Invoice)? contract,
 }) {
-  final elsewhere = [
-    for (final (i, a) in repo.appliedTo(pay, until: day, through: pay))
-      if (!own(i)) (i, a),
+  final applied = repo.appliedTo(pay, until: day, through: pay);
+  double sum(Iterable<(Invoice, double)> l) => l.fold(0.0, (s, e) => s + e.$2);
+  final toOwn = sum(applied.where((e) => own(e.$1)));
+  final onContract = [
+    for (final e in applied)
+      if (!own(e.$1) && (contract?.call(e.$1) ?? false)) e,
   ];
-  final went = elsewhere.fold(0.0, (s, e) => s + e.$2);
-  // Credit beyond what stayed on the receipt's own invoice or instalment.
-  final held = kept != null
-      ? pay.amount - kept - went
-      : repo.unappliedOf(pay, until: day, through: pay);
+  final others = [
+    for (final e in applied)
+      if (!own(e.$1) && !(contract?.call(e.$1) ?? false)) e,
+  ];
+  final unapplied = repo.unappliedOf(pay, until: day, through: pay);
+  var rest = counted - toOwn;
+  if (rest < 0) rest = 0;
+  final contractSum = sum(onContract);
+  final contractCounted = contractSum < rest ? contractSum : rest;
+  rest -= contractCounted;
+  final creditCounted = unapplied < rest ? unapplied : rest;
+  // Money on contract invoices beyond the instalment went there instead.
+  final elsewhere = [
+    ...others,
+    if (contractSum - contractCounted > 0.005) ...onContract,
+  ]..sort((a, b) => Repository.invoiceOrder(a.$1, b.$1));
+  final went = sum(others) + contractSum - contractCounted;
+  final held = unapplied - creditCounted;
   return [
     first,
     if (went > 0.005)
@@ -1393,23 +1410,35 @@ String _usedText(
   ].join(' ');
 }
 
-Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
+/// Builds the receipt for one payment received: on an invoice, on a
+/// payment term of a quotation, or on account.
+/// The payment term a receipt was taken on, if any.
+PaymentTerm? _termOf(Repository repo, Payment pay) {
+  if (pay.onInvoice) return null;
+  final q = repo.quotation(pay.quotationId);
+  final k = pay.termIndex;
+  return q != null && k != null && k < q.paymentTerms.length
+      ? q.paymentTerms[k]
+      : null;
+}
+
+/// The sentences under a receipt's "Payment for" table: where the money
+/// stands after it and where it went.
+@visibleForTesting
+String receiptNote(Repository repo, Payment pay) =>
+    _receiptParts(repo, pay).after;
+
+/// What a receipt's money was for, its table, and where that stands after
+/// this receipt.
+({String purpose, pw.Widget detail, String after}) _receiptParts(
+  Repository repo,
+  Payment pay,
+) {
   final inv = repo.invoice(pay.invoiceId);
   final q = inv == null ? repo.quotation(pay.quotationId) : null;
   final termIndex = pay.termIndex;
-  final term =
-      q != null && termIndex != null && termIndex < q.paymentTerms.length
-      ? q.paymentTerms[termIndex]
-      : null;
-  final client = repo.client(repo.payerOf(pay));
+  final term = _termOf(repo, pay);
   final project = repo.project(repo.projectOfPayment(pay));
-  final pdf = pw.Document(
-    theme: await _theme(repo),
-    title: '${pay.number} ${'Receipt'.td}',
-    author: repo.companyName,
-  );
-
-  // What the money was for, and where that stands after this receipt.
   final String purpose;
   final pw.Widget detail;
   final String after;
@@ -1548,16 +1577,11 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         left <= 0.005
             ? 'This instalment is now fully paid.'.td
             : 'Remaining on this instalment: {0}.'.tdArgs([fmtMoney(left)]),
-        // Invoices of this instalment, or billing the contract outside its
-        // schedule, count on the instalment itself (as in termStatus).
-        (i) =>
-            i.termIndex == termIndex && i.quotationId == q.id ||
-            i.termIndex == null &&
-                (i.quotationId == q.id ||
-                    i.quotationId == null &&
-                        !i.extra &&
-                        i.projectId == q.projectId),
-        kept: here,
+        // As in termStatus: the instalment's own invoices, then invoices
+        // billing the contract outside its schedule, then credit.
+        (i) => i.quotationId == q.id && i.termIndex == termIndex,
+        counted: here,
+        contract: (i) => Repository.billsContract(i, q),
       ),
     ].join(' ');
   } else {
@@ -1583,6 +1607,20 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
               project == null ? '' : ' of {0}'.tdArgs([project.code]),
             ]);
   }
+  return (purpose: purpose, detail: detail, after: after);
+}
+
+Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
+  final inv = repo.invoice(pay.invoiceId);
+  final term = _termOf(repo, pay);
+  final client = repo.client(repo.payerOf(pay));
+  final project = repo.project(repo.projectOfPayment(pay));
+  final pdf = pw.Document(
+    theme: await _theme(repo),
+    title: '${pay.number} ${'Receipt'.td}',
+    author: repo.companyName,
+  );
+  final (:purpose, :detail, :after) = _receiptParts(repo, pay);
 
   // How a receipt not taken on an invoice has been used so far.
   final applied = repo.appliedTo(pay);

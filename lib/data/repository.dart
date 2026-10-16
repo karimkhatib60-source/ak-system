@@ -333,10 +333,12 @@ class Repository extends ChangeNotifier {
   /// as an advance, on account or as a payment on an invoice. Money for one
   /// project only settles that project's invoices; money or an invoice with
   /// no project goes with any. Whatever is left stays as credit for the
-  /// client's next invoices. When money for any project went to an older
-  /// invoice that money held for its own project could pay, the two swap,
-  /// so no invoice stays due while the client's money sits unused.
-  /// Receipts and invoices with no client form a pool of their own.
+  /// client's next invoices. When an invoice is still due while money it
+  /// may not take sits free, money is passed along older invoices (each
+  /// keeps its total) until it is paid, so no invoice stays due while the
+  /// client's money could pay it. Receipts and invoices with no client
+  /// form a pool of their own, where a receipt pays only its own invoice:
+  /// who paid it is not known.
   _Allocation _allocate(
     String? clientId,
     DateTime? until, [
@@ -355,45 +357,80 @@ class Repository extends ChangeNotifier {
             _upTo(i.date, until))
           i,
     ]..sort(_byInvoiceDate);
-    bool fits(_Credit c, Invoice i) =>
-        c.projectId == null ||
-        i.projectId == null ||
-        c.projectId == i.projectId;
+    bool fits(_Credit c, Invoice i) => clientId == null
+        ? c.payment.invoiceId == i.id
+        : c.projectId == null ||
+              i.projectId == null ||
+              c.projectId == i.projectId;
     double least(double a, double b) => a < b ? a : b;
     // uses[n][k]: what invoice n took from credit k.
     final uses = [for (final _ in targets) <int, double>{}];
+    bool usedBefore(int k, int n) {
+      for (var m = 0; m < n; m++) {
+        if ((uses[m][k] ?? 0) > 0.005) return true;
+      }
+      return false;
+    }
+
     for (var n = 0; n < targets.length; n++) {
       final i = targets[n];
-      final mine = uses[n];
       var need = _cents(i.total);
       for (var k = 0; k < credits.length && need > 0.005; k++) {
         if (left[k] <= 0.005 || !fits(credits[k], i)) continue;
         final take = least(left[k], need);
         left[k] -= take;
         need -= take;
-        mine[k] = (mine[k] ?? 0) + take;
+        uses[n][k] = (uses[n][k] ?? 0) + take;
       }
-      // Still due: free money this invoice can take from an older invoice
-      // that held money (which this one cannot take) pays instead.
-      for (var m = n - 1; m >= 0 && need > 0.005; m--) {
-        final older = targets[m];
-        final theirs = uses[m];
-        for (final k in theirs.keys.toList().reversed) {
-          if (need <= 0.005) break;
-          if (!fits(credits[k], i)) continue;
-          for (var h = 0; h < credits.length && need > 0.005; h++) {
-            final moved = theirs[k] ?? 0;
-            if (moved <= 0.005) break;
-            if (h == k || left[h] <= 0.005 || !fits(credits[h], older)) {
-              continue;
-            }
-            final swap = least(least(left[h], moved), need);
-            theirs[k] = moved - swap;
-            theirs[h] = (theirs[h] ?? 0) + swap;
-            left[h] -= swap;
-            mine[k] = (mine[k] ?? 0) + swap;
-            need -= swap;
+      // Still due: look for a chain where this invoice takes money an older
+      // invoice holds, that invoice takes money another older one holds,
+      // and so on, until one takes money still free. Move the most the
+      // chain allows, and look again.
+      while (need > 0.005) {
+        // from[h]: credit h is taken by invoice from[h].$2, which gives up
+        // credit from[h].$1 (none for this invoice itself).
+        final from = <int, (int?, int)>{};
+        final queue = <int>[];
+        for (var k = 0; k < credits.length; k++) {
+          if (fits(credits[k], i) && usedBefore(k, n)) {
+            from[k] = (null, n);
+            queue.add(k);
           }
+        }
+        int? end;
+        for (var q = 0; q < queue.length && end == null; q++) {
+          final k = queue[q];
+          for (var m = 0; m < n && end == null; m++) {
+            if ((uses[m][k] ?? 0) <= 0.005) continue;
+            for (var h = 0; h < credits.length; h++) {
+              if (from.containsKey(h) || !fits(credits[h], targets[m])) {
+                continue;
+              }
+              from[h] = (k, m);
+              if (left[h] > 0.005) {
+                end = h;
+                break;
+              }
+              queue.add(h);
+            }
+          }
+        }
+        if (end == null) break;
+        var amount = least(need, left[end]);
+        for (var h = end; ;) {
+          final (k, m) = from[h]!;
+          if (k == null) break;
+          amount = least(amount, uses[m][k]!);
+          h = k;
+        }
+        left[end] -= amount;
+        need -= amount;
+        for (var h = end; ;) {
+          final (k, m) = from[h]!;
+          uses[m][h] = (uses[m][h] ?? 0) + amount;
+          if (k == null) break;
+          uses[m][k] = uses[m][k]! - amount;
+          h = k;
         }
       }
     }
@@ -556,6 +593,14 @@ class Repository extends ChangeNotifier {
         p,
   ]..sort((a, b) => b.date.compareTo(a.date));
 
+  /// Whether [i] bills contract [q] outside its payment schedule: an
+  /// invoice of the quotation for no term, or a plain invoice of its
+  /// project that is not extra work.
+  static bool billsContract(Invoice i, Quotation q) =>
+      i.termIndex == null &&
+      (i.quotationId == q.id ||
+          (i.quotationId == null && !i.extra && i.projectId == q.projectId));
+
   /// Where a payment term of a quotation stands.
   /// With [through], only receipts up to that one count ([before]: only
   /// those taken before it).
@@ -577,31 +622,33 @@ class Repository extends ChangeNotifier {
         .toList();
     final a = _allocation(q.clientId, until, through, before);
     // Everything that went to the term's invoices, plus the advances taken
-    // on the term (up to its amount) that are still held or went to an
-    // invoice billing this contract outside its schedule (or a plain
-    // invoice of its project). An advance that settled another invoice
-    // (another term's, extra work, another contract's) counts there
-    // instead.
+    // on the term (up to its amount) that are still held. An advance that
+    // paid an invoice billing this contract outside its schedule (or a
+    // plain invoice of its project) counts too, but only for the part of
+    // the term that no invoice of its own bills yet. An advance that
+    // settled any other invoice (another term's, extra work, another
+    // contract's) counts there instead.
     final value = term.valueOf(q.total);
     var received = 0.0;
+    var billed = 0.0;
     for (final i in termInvoices) {
       received += a.onInvoice(i.id);
+      if (_upTo(i.date, until)) billed += _cents(i.total);
     }
-    var held = 0.0;
+    var unapplied = 0.0, onContract = 0.0;
     for (final c in a.credits) {
       if (c.quotationId != q.id || c.termIndex != index) continue;
-      held += c.amount;
+      unapplied += c.amount;
       for (final (i, used)
           in a.fromReceipt[c.payment.id] ?? const <(Invoice, double)>[]) {
-        final billsContract =
-            i.termIndex == null &&
-            (i.quotationId == q.id ||
-                (i.quotationId == null &&
-                    !i.extra &&
-                    i.projectId == q.projectId));
-        if (!billsContract) held -= used;
+        unapplied -= used;
+        if (billsContract(i, q)) onContract += used;
       }
     }
+    final unbilled = value - billed;
+    final held =
+        (unapplied > 0 ? unapplied : 0) +
+        (unbilled <= 0 ? 0 : (onContract < unbilled ? onContract : unbilled));
     final room = value - received;
     if (held > 0 && room > 0) received += held < room ? held : room;
     return TermStatus(

@@ -1,5 +1,6 @@
 import 'package:ak_system/data/models.dart';
 import 'package:ak_system/data/repository.dart';
+import 'package:ak_system/ui/pdf_docs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers.dart';
@@ -204,5 +205,144 @@ void main() {
     expect(repo.appliedTo(one, through: one).single.$2, 600);
     expect(repo.unappliedOf(two, through: two), closeTo(200, 1e-6));
     expect(repo.settledBy(repo.invoice('a1')!, through: one).length, 1);
+  });
+
+  test('money is passed along older invoices so none stays due while credit '
+      'could pay it', () async {
+    final forC = await receive('forC', 100, day: 1, project: 'C');
+    final free = await receive('free', 100, day: 2);
+    final forB = await receive('forB', 100, day: 3, project: 'B');
+    final m2 = await invoice('m2', 100, day: 5);
+    final m1 = await invoice('m1', 100, project: 'C', day: 6);
+    final i = await invoice('i', 100, project: 'A', day: 7);
+    for (final x in [m2, m1, i]) {
+      expect(repo.balanceOf(x), 0, reason: x.id);
+    }
+    for (final p in [forC, free, forB]) {
+      expect(repo.unappliedOf(p), 0, reason: p.id);
+    }
+    expect(repo.appliedTo(free).single.$1.id, 'i');
+    expect(repo.appliedTo(forC).single.$1.id, 'm1');
+    expect(repo.appliedTo(forB).single.$1.id, 'm2');
+  });
+
+  test(
+    'receipts and invoices with no client only pay their own invoice',
+    () async {
+      final x = await invoice('x', 500, project: 'A', client: null, day: 3);
+      final y = await invoice('y', 500, project: 'A', client: null, day: 4);
+      await receive('py', 500, day: 5, invoiceId: 'y');
+      expect(repo.balanceOf(x), 500);
+      expect(repo.balanceOf(y), 0);
+    },
+  );
+
+  test('an advance that paid a contract invoice stops counting on its '
+      'instalment once the instalment has its own invoice', () async {
+    final q = await contract();
+    await receive('adv', 3000, day: 2, quotationId: 'q', termIndex: 0);
+    final plain = await invoice('plain', 3000, project: 'A', day: 3);
+    expect(repo.balanceOf(plain), 0);
+    expect(repo.termStatus(q, 0).received, closeTo(3000, 1e-6));
+    clock.now = DateTime(2026, 10, 4, 9);
+    final own = repo.invoiceForTerm(q, 0);
+    await repo.saveInvoice(own.copyWith(status: InvoiceStatus.sent));
+    clock.now = DateTime(2026, 10, 20, 9);
+    expect(repo.balanceOf(repo.invoice(own.id)!), closeTo(3000, 1e-6));
+    expect(repo.termStatus(q, 0).received, closeTo(0, 1e-6));
+    expect(repo.termStatus(q, 0).settled, isFalse);
+  });
+
+  group('receipt notes', () {
+    test(
+      'an advance that paid a contract invoice is not called credit',
+      () async {
+        final q = await contract();
+        clock.now = DateTime(2026, 10, 2, 9);
+        final first = repo.invoiceForTerm(q, 0);
+        await repo.saveInvoice(first.copyWith(status: InvoiceStatus.sent));
+        clock.now = DateTime(2026, 10, 20, 9);
+        await receive('onFirst', 3000, day: 3, invoiceId: first.id);
+        await invoice('plain', 500, project: 'A', day: 4);
+        final pay = await receive(
+          'adv',
+          500,
+          day: 6,
+          quotationId: 'q',
+          termIndex: 0,
+        );
+        expect(repo.unappliedOf(pay), 0);
+        final note = receiptNote(repo, pay);
+        expect(note, contains('This instalment is now fully paid.'));
+        expect(note, contains(r'so $500.00 of this receipt went to INV-'));
+        expect(note, isNot(contains('held as credit')));
+      },
+    );
+
+    test('part of an instalment receipt settles an older invoice, the rest '
+        'stays on the instalment', () async {
+      final q = await contract();
+      clock.now = DateTime(2026, 10, 5, 9);
+      final first = repo.invoiceForTerm(q, 0);
+      await repo.saveInvoice(first.copyWith(status: InvoiceStatus.sent));
+      clock.now = DateTime(2026, 10, 20, 9);
+      final pay = await receive(
+        'rest',
+        7000,
+        day: 10,
+        quotationId: 'q',
+        termIndex: 1,
+      );
+      final note = receiptNote(repo, pay);
+      expect(note, contains(r'Remaining on this instalment: $3,000.00.'));
+      expect(
+        note,
+        contains('so \$3,000.00 of this receipt went to ${first.number}.'),
+      );
+      expect(note, isNot(contains('held as credit')));
+    });
+
+    test('money above an instalment is held as credit', () async {
+      await contract();
+      final pay = await receive(
+        'adv',
+        3500,
+        day: 5,
+        quotationId: 'q',
+        termIndex: 0,
+      );
+      final note = receiptNote(repo, pay);
+      expect(note, contains('This instalment is now fully paid.'));
+      expect(note, contains(r'The extra $500.00 is held as credit'));
+    });
+
+    test('a receipt dated before its invoice still pays it', () async {
+      final inv = await invoice('later', 1000, project: 'A', day: 20);
+      final pay = await receive('early', 1000, day: 18, invoiceId: 'later');
+      expect(repo.balanceOf(inv), 0);
+      final note = receiptNote(repo, pay);
+      expect(note, contains('${inv.number} is now fully paid.'));
+      expect(note, isNot(contains('held as credit')));
+    });
+
+    test(
+      'a receipt on a cancelled invoice goes to the open invoices',
+      () async {
+        final open = await invoice('open', 400, project: 'A', day: 1);
+        final gone = await invoice('gone', 1000, project: 'A', day: 2);
+        await repo.saveInvoice(gone.copyWith(status: InvoiceStatus.cancelled));
+        final pay = await receive('p', 1000, day: 5, invoiceId: 'gone');
+        final note = receiptNote(repo, pay);
+        expect(note, contains('${gone.number} is cancelled'));
+        expect(
+          note,
+          contains(
+            r'so $400.00 of this receipt went to '
+            '${open.number}.',
+          ),
+        );
+        expect(note, contains(r'The extra $600.00 is held as credit'));
+      },
+    );
   });
 }
