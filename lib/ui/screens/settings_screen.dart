@@ -24,31 +24,31 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text('Settings'.tr)),
       body: Readable(
         child: ListView(
           padding: const EdgeInsets.only(bottom: 32),
           children: [
             SectionHeader('Language'.tr),
             const _LanguageSection(),
-            const SectionHeader('Cloud sync and login'),
+            SectionHeader('Cloud sync and login'.tr),
             const _CloudSection(),
-            const SectionHeader('Team'),
+            SectionHeader('Team'.tr),
             const _TeamSection(),
-            const SectionHeader('Project stages'),
+            SectionHeader('Project stages'.tr),
             const _StagesSection(),
             if (repo.isOwner) ...[
-              const SectionHeader('Company'),
+              SectionHeader('Company'.tr),
               const _CompanyCard(),
               ListTile(
                 leading: const Icon(Icons.business_outlined),
                 title: Text(repo.companyName),
-                subtitle: const Text('Shown in the app header'),
+                subtitle: Text('Shown in the app header'.tr),
                 trailing: const Icon(Icons.edit_outlined),
                 onTap: () async {
                   final v = await _ask(
                     context,
-                    'Company name',
+                    'Company name'.tr,
                     repo.companyName,
                   );
                   if (v != null && v.isNotEmpty) await repo.setCompanyName(v);
@@ -61,7 +61,7 @@ class SettingsScreen extends StatelessWidget {
                   title: Text(_infoLabel(k)),
                   subtitle: Text(
                     (repo.companyInfo[k] ?? '').isEmpty
-                        ? 'Not set'
+                        ? 'Not set'.tr
                         : repo.companyInfo[k]!,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -79,15 +79,17 @@ class SettingsScreen extends StatelessWidget {
                 ),
             ],
             if (repo.isOwner) ...[
-              const SectionHeader('Document colours'),
+              SectionHeader('Document colours'.tr),
               const _ReportColours(),
             ],
-            const SectionHeader('About'),
-            const ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('AK System · version $appVersion'),
+            SectionHeader('About'.tr),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: Text('AK System · version {0}'.trArgs([appVersion])),
               subtitle: Text(
-                'Projects, tasks, deliverables and finance. Works offline; syncs when online.',
+                'Projects, tasks, deliverables and finance. Works offline; '
+                        'syncs when online.'
+                    .tr,
               ),
             ),
             const _UpdatesTile(),
@@ -99,17 +101,17 @@ class SettingsScreen extends StatelessWidget {
 }
 
 String _infoLabel(String k) => switch (k) {
-  'address' => 'Address',
-  'phone' => 'Phone',
-  'email' => 'Email',
-  'website' => 'Website',
-  'whatsapp' => 'WhatsApp',
-  'instagram' => 'Instagram',
-  'facebook' => 'Facebook page link',
-  'linkedin' => 'LinkedIn page link',
-  'tax_number' => 'VAT / tax number',
-  'bank' => 'Bank details (on invoices)',
-  'terms' => 'Standard terms (on quotations and invoices)',
+  'address' => 'Address'.tr,
+  'phone' => 'Phone'.tr,
+  'email' => 'Email'.tr,
+  'website' => 'Website'.tr,
+  'whatsapp' => 'WhatsApp'.tr,
+  'instagram' => 'Instagram'.tr,
+  'facebook' => 'Facebook page link'.tr,
+  'linkedin' => 'LinkedIn page link'.tr,
+  'tax_number' => 'VAT / tax number'.tr,
+  'bank' => 'Bank details (on invoices)'.tr,
+  'terms' => 'Standard terms (on quotations and invoices)'.tr,
   _ => k,
 };
 
@@ -148,11 +150,11 @@ Future<String?> _ask(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
+          child: Text('Cancel'.tr),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-          child: const Text('Save'),
+          child: Text('Save'.tr),
         ),
       ],
     ),
@@ -167,7 +169,7 @@ Future<void> _editStage(
   final repo = context.read<Repository>();
   final name = await _ask(
     context,
-    s == null ? 'New stage' : 'Rename stage',
+    s == null ? 'New stage'.tr : 'Rename stage'.tr,
     s?.name ?? '',
   );
   if (name == null || name.isEmpty) return;
@@ -223,7 +225,7 @@ class _StagesSectionState extends State<_StagesSection> {
               radius: 12,
               child: Text('${i + 1}', style: const TextStyle(fontSize: 11)),
             ),
-            title: Text(stages[i].name),
+            title: Text(stages[i].name.tr),
             onTap: repo.isOwner
                 ? () => _editStage(context, stages[i], _service)
                 : null,
@@ -233,21 +235,21 @@ class _StagesSectionState extends State<_StagesSection> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        tooltip: 'Move up',
+                        tooltip: 'Move up'.tr,
                         icon: const Icon(Icons.arrow_upward, size: 18),
                         onPressed: i == 0
                             ? null
                             : () => repo.moveStage(stages[i], -1),
                       ),
                       IconButton(
-                        tooltip: 'Move down',
+                        tooltip: 'Move down'.tr,
                         icon: const Icon(Icons.arrow_downward, size: 18),
                         onPressed: i == stages.length - 1
                             ? null
                             : () => repo.moveStage(stages[i], 1),
                       ),
                       IconButton(
-                        tooltip: 'Delete stage',
+                        tooltip: 'Delete stage'.tr,
                         icon: const Icon(Icons.delete_outline, size: 18),
                         onPressed: () async {
                           final used = repo.projects.any(
@@ -255,9 +257,10 @@ class _StagesSectionState extends State<_StagesSection> {
                           );
                           if (used) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                 content: Text(
-                                  'A project is at this stage. Move it first.',
+                                  'A project is at this stage. Move it first.'
+                                      .tr,
                                 ),
                               ),
                             );
@@ -265,7 +268,7 @@ class _StagesSectionState extends State<_StagesSection> {
                           }
                           if (await confirmDelete(
                             context,
-                            'the stage "${stages[i].name}"',
+                            'the stage "{0}"'.trArgs([stages[i].name.tr]),
                           )) {
                             await repo.deleteStage(stages[i]);
                           }
@@ -276,14 +279,16 @@ class _StagesSectionState extends State<_StagesSection> {
           ),
         if (repo.isOwner)
           Align(
-            alignment: Alignment.centerLeft,
+            alignment: AlignmentDirectional.centerStart,
             child: Padding(
-              padding: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsetsDirectional.only(start: 8),
               child: TextButton.icon(
                 onPressed: () => _editStage(context, null, _service),
                 icon: const Icon(Icons.add),
                 label: Text(
-                  'Add ${serviceLabel(_service).toLowerCase()} stage',
+                  'Add {0} stage'.trArgs([
+                    serviceLabel(_service).toLowerCase(),
+                  ]),
                 ),
               ),
             ),
@@ -300,13 +305,14 @@ class _TeamSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
     if (repo.members.isEmpty) {
-      return const ListTile(
-        leading: Icon(Icons.group_outlined),
-        title: Text('No team logins yet'),
+      return ListTile(
+        leading: const Icon(Icons.group_outlined),
+        title: Text('No team logins yet'.tr),
         subtitle: Text(
           'Once cloud sync is set up, each person creates a login from this '
-          'screen. The first login becomes the owner; the next ones join as '
-          'architects.',
+                  'screen. The first login becomes the owner; the next ones '
+                  'join as architects.'
+              .tr,
         ),
       );
     }
@@ -318,7 +324,9 @@ class _TeamSection extends StatelessWidget {
               child: Text(m.name.isEmpty ? '?' : m.name[0].toUpperCase()),
             ),
             title: Text(
-              m.id == repo.currentMemberId ? '${m.name} (you)' : m.name,
+              m.id == repo.currentMemberId
+                  ? '{0} (you)'.trArgs([m.name])
+                  : m.name,
             ),
             subtitle: Text('${roleLabel(m.role)} · ${m.email}'),
             trailing: repo.isOwner && m.id != repo.currentMemberId
@@ -348,31 +356,33 @@ class _CloudSection extends StatelessWidget {
     if (!cloud.configured) {
       return ListTile(
         leading: const Icon(Icons.cloud_outlined),
-        title: const Text('Not connected'),
-        subtitle: const Text(
+        title: Text('Not connected'.tr),
+        subtitle: Text(
           'Everything is saved on this device. Connect the company cloud '
-          'database to sync between phone and laptop and add your team.',
+                  'database to sync between phone and laptop and add your '
+                  'team.'
+              .tr,
         ),
         trailing: FilledButton.tonal(
           onPressed: () => showDialog(
             context: context,
             builder: (_) => const _ConnectDialog(),
           ),
-          child: const Text('Connect'),
+          child: Text('Connect'.tr),
         ),
       );
     }
     if (!cloud.signedIn) {
       return ListTile(
         leading: const Icon(Icons.login),
-        title: const Text('Connected, not signed in'),
+        title: Text('Connected, not signed in'.tr),
         subtitle: Text(cloud.url ?? ''),
         trailing: FilledButton(
           onPressed: () => showDialog(
             context: context,
             builder: (_) => const _LoginDialog(),
           ),
-          child: const Text('Sign in'),
+          child: Text('Sign in'.tr),
         ),
       );
     }
@@ -383,28 +393,31 @@ class _CloudSection extends StatelessWidget {
           leading: const Icon(Icons.account_circle_outlined),
           title: Text(cloud.user?.email ?? ''),
           subtitle: Text(switch (sync.state) {
-            SyncState.syncing => 'Syncing…',
+            SyncState.syncing => 'Syncing…'.tr,
             SyncState.offline =>
-              'Offline. Changes are kept on this device until you reconnect.',
-            SyncState.error => 'Sync problem: ${sync.lastError}',
+              'Offline. Changes are kept on this device until you reconnect.'
+                  .tr,
+            SyncState.error => 'Sync problem: {0}'.trArgs([sync.lastError]),
             _ =>
               last == null
-                  ? 'Signed in'
-                  : 'Last synced ${TimeOfDay.fromDateTime(last).format(context)}',
+                  ? 'Signed in'.tr
+                  : 'Last synced {0}'.trArgs([
+                      TimeOfDay.fromDateTime(last).format(context),
+                    ]),
           }),
           trailing: IconButton(
-            tooltip: 'Sync now',
+            tooltip: 'Sync now'.tr,
             icon: const Icon(Icons.sync),
             onPressed: sync.syncNow,
           ),
         ),
         Align(
-          alignment: Alignment.centerRight,
+          alignment: AlignmentDirectional.centerEnd,
           child: Padding(
-            padding: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsetsDirectional.only(end: 16),
             child: TextButton(
               onPressed: cloud.signOut,
-              child: const Text('Sign out'),
+              child: Text('Sign out'.tr),
             ),
           ),
         ),
@@ -429,28 +442,29 @@ class _ConnectDialogState extends State<_ConnectDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Connect cloud database'),
+      title: Text('Connect cloud database'.tr),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Paste the Project URL and the anon public key from your '
-              'Supabase project (Project Settings > API).',
+                      'Supabase project (Project Settings > API).'
+                  .tr,
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _url,
-              decoration: const InputDecoration(
-                labelText: 'Project URL',
+              decoration: InputDecoration(
+                labelText: 'Project URL'.tr,
                 hintText: 'https://xxxx.supabase.co',
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _key,
-              decoration: const InputDecoration(labelText: 'Anon public key'),
+              decoration: InputDecoration(labelText: 'Anon public key'.tr),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -465,7 +479,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel'.tr),
         ),
         FilledButton(
           onPressed: _busy
@@ -473,7 +487,9 @@ class _ConnectDialogState extends State<_ConnectDialog> {
               : () async {
                   final url = _url.text.trim();
                   if (!url.startsWith('https://') || _key.text.trim().isEmpty) {
-                    setState(() => _error = 'Enter both the URL and the key.');
+                    setState(
+                      () => _error = 'Enter both the URL and the key.'.tr,
+                    );
                     return;
                   }
                   setState(() => _busy = true);
@@ -490,7 +506,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
                     });
                   }
                 },
-          child: const Text('Connect'),
+          child: Text('Connect'.tr),
         ),
       ],
     );
@@ -526,7 +542,7 @@ class _LoginDialogState extends State<_LoginDialog> {
             _busy = false;
             _create = false;
             _message =
-                'Login created. Confirm it from the email, then sign in.';
+                'Login created. Confirm it from the email, then sign in.'.tr;
           });
           return;
         }
@@ -545,7 +561,7 @@ class _LoginDialogState extends State<_LoginDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_create ? 'Create login' : 'Sign in'),
+      title: Text(_create ? 'Create login'.tr : 'Sign in'.tr),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -554,21 +570,21 @@ class _LoginDialogState extends State<_LoginDialog> {
             if (_create) ...[
               TextField(
                 controller: _name,
-                decoration: const InputDecoration(labelText: 'Your name'),
+                decoration: InputDecoration(labelText: 'Your name'.tr),
               ),
               const SizedBox(height: 12),
             ],
             TextField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: InputDecoration(labelText: 'Email'.tr),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _password,
               obscureText: true,
               onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration: InputDecoration(labelText: 'Password'.tr),
             ),
             if (_message != null) ...[
               const SizedBox(height: 8),
@@ -576,13 +592,13 @@ class _LoginDialogState extends State<_LoginDialog> {
             ],
             const SizedBox(height: 8),
             Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: TextButton(
                 onPressed: () => setState(() => _create = !_create),
                 child: Text(
                   _create
-                      ? 'I already have a login'
-                      : 'New here? Create a login',
+                      ? 'I already have a login'.tr
+                      : 'New here? Create a login'.tr,
                 ),
               ),
             ),
@@ -592,11 +608,11 @@ class _LoginDialogState extends State<_LoginDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel'.tr),
         ),
         FilledButton(
           onPressed: _busy ? null : _submit,
-          child: Text(_create ? 'Create' : 'Sign in'),
+          child: Text(_create ? 'Create'.tr : 'Sign in'.tr),
         ),
       ],
     );
@@ -628,9 +644,9 @@ class _CompanyCard extends StatelessWidget {
     if (bytes.length > 1500000) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Please choose a logo under 1.5 MB (PNG works best).',
+              'Please choose a logo under 1.5 MB (PNG works best).'.tr,
             ),
           ),
         );
@@ -681,7 +697,7 @@ class _CompanyCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Design · Consultancy · Contracting',
+                          'Design · Consultancy · Contracting'.tr,
                           style: TextStyle(color: ak.muted, fontSize: 12),
                         ),
                         const SizedBox(height: 6),
@@ -692,13 +708,15 @@ class _CompanyCard extends StatelessWidget {
                               onPressed: () => _pickLogo(context),
                               icon: const Icon(Icons.upload_outlined, size: 18),
                               label: Text(
-                                logo == null ? 'Upload logo' : 'Change logo',
+                                logo == null
+                                    ? 'Upload logo'.tr
+                                    : 'Change logo'.tr,
                               ),
                             ),
                             if (logo != null)
                               TextButton(
                                 onPressed: () => repo.setCompanyLogo(null),
-                                child: const Text('Remove'),
+                                child: Text('Remove'.tr),
                               ),
                           ],
                         ),
@@ -723,7 +741,8 @@ class _CompanyCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'The logo and these details print on every quotation, '
-                'invoice and statement.',
+                        'invoice and statement.'
+                    .tr,
                 style: TextStyle(color: ak.muted, fontSize: 12),
               ),
             ],
@@ -745,25 +764,26 @@ class _UpdatesTile extends StatelessWidget {
     if (u == null || !u.supported) return const SizedBox();
     final r = u.available;
     final (title, subtitle) = switch (u.state) {
-      UpdateState.checking => ('Checking for updates…', null),
+      UpdateState.checking => ('Checking for updates…'.tr, null),
       UpdateState.downloading => (
-        'Downloading version ${r?.version}…',
+        'Downloading version {0}…'.trArgs([r?.version]),
         '${(u.progress * 100).round()}%',
       ),
       UpdateState.installing => (
-        'Installing version ${r?.version}…',
-        'AK System will open again in a moment.',
+        'Installing version {0}…'.trArgs([r?.version]),
+        'AK System will open again in a moment.'.tr,
       ),
       UpdateState.ready => (
-        'Version ${r?.version} is ready to install',
-        u.problem ?? 'Your data stays as it is.',
+        'Version {0} is ready to install'.trArgs([r?.version]),
+        u.problem ?? 'Your data stays as it is.'.tr,
       ),
-      UpdateState.upToDate => ('You have the latest version', null),
-      UpdateState.failed => ('Updates', u.problem),
+      UpdateState.upToDate => ('You have the latest version'.tr, null),
+      UpdateState.failed => ('Updates'.tr, u.problem),
       UpdateState.idle => (
-        'Updates',
+        'Updates'.tr,
         'When a new version is ready you will see it here and at the top '
-            'of the app.',
+                'of the app.'
+            .tr,
       ),
     };
     return ListTile(
@@ -777,14 +797,14 @@ class _UpdatesTile extends StatelessWidget {
             if (r != null)
               TextButton(
                 onPressed: () => showWhatsNew(context, r),
-                child: const Text('What\'s new'),
+                child: Text('What\'s new'.tr),
               ),
             if (u.blocked)
               TextButton(
                 onPressed: () => openDownloadPage(u),
-                child: const Text('Download page'),
+                child: Text('Download page'.tr),
               ),
-            FilledButton(onPressed: u.install, child: const Text('Update now')),
+            FilledButton(onPressed: u.install, child: Text('Update now'.tr)),
           ],
         ),
         UpdateState.checking ||
@@ -794,7 +814,7 @@ class _UpdatesTile extends StatelessWidget {
           height: 20,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
-        _ => TextButton(onPressed: u.check, child: const Text('Check now')),
+        _ => TextButton(onPressed: u.check, child: Text('Check now'.tr)),
       },
     );
   }
@@ -882,7 +902,7 @@ class _ReportColoursState extends State<_ReportColours> {
                       selected: t.id == current.id,
                       showCheckmark: false,
                       avatar: _Pair(t),
-                      label: Text(t.name),
+                      label: Text(t.name.tr),
                       onSelected: (_) {
                         setState(() => _own = false);
                         repo.setReportTheme(t);
@@ -892,7 +912,7 @@ class _ReportColoursState extends State<_ReportColours> {
                     selected: own,
                     showCheckmark: false,
                     avatar: const Icon(Icons.palette_outlined, size: 18),
-                    label: const Text('Own colours'),
+                    label: Text('Own colours'.tr),
                     onSelected: (_) {
                       setState(() => _own = true);
                       if (!current.custom) {
@@ -906,13 +926,13 @@ class _ReportColoursState extends State<_ReportColours> {
               ),
               if (own) ...[
                 pickRow(
-                  'Main colour: headings, table headers and totals',
+                  'Main colour: headings, table headers and totals'.tr,
                   reportInks,
                   current.ink,
                   (c) => ReportTheme.customOf(c, current.accent),
                 ),
                 pickRow(
-                  'Highlight colour: document number and accents',
+                  'Highlight colour: document number and accents'.tr,
                   reportAccents,
                   current.accent,
                   (c) => ReportTheme.customOf(current.ink, c),
@@ -921,7 +941,8 @@ class _ReportColoursState extends State<_ReportColours> {
               const SizedBox(height: 10),
               Text(
                 'Used on every quotation, invoice, receipt and statement '
-                'from now on.',
+                        'from now on.'
+                    .tr,
                 style: TextStyle(color: ak.muted, fontSize: 12),
               ),
               if (repo.invoices.isNotEmpty || repo.quotations.isNotEmpty)
@@ -936,9 +957,11 @@ class _ReportColoursState extends State<_ReportColours> {
                     ),
                     icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                     label: Text(
-                      repo.invoices.isNotEmpty
-                          ? 'See it on ${repo.invoices.first.number}'
-                          : 'See it on ${repo.quotations.first.number}',
+                      'See it on {0}'.trArgs([
+                        repo.invoices.isNotEmpty
+                            ? repo.invoices.first.number
+                            : repo.quotations.first.number,
+                      ]),
                     ),
                   ),
                 ),
@@ -971,103 +994,110 @@ class ReportPreview extends StatelessWidget {
         borderRadius: BorderRadius.circular(2),
       ),
     );
-    return Container(
-      height: 170,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AkPalette.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
+    final arabicDoc = docLang == AppLang.ar;
+    return Directionality(
+      textDirection: arabicDoc ? TextDirection.rtl : TextDirection.ltr,
+      child: Container(
+        height: 170,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AkPalette.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: ink,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    bar(70, ink),
+                    const SizedBox(height: 4),
+                    bar(46, muted, h: 3),
+                  ],
+                ),
+                const Spacer(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'INVOICE'.td,
+                      style: TextStyle(
+                        color: ink,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        letterSpacing: arabicDoc ? 0 : 1,
+                      ),
+                    ),
+                    Text(
+                      'INV-0012',
+                      style: TextStyle(color: accent, fontSize: 9.5),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(height: 1.5, color: ink),
+            const SizedBox(height: 8),
+            Container(
+              height: 14,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              color: ink,
+              alignment: AlignmentDirectional.centerStart,
+              child: bar(60, Colors.white54, h: 3),
+            ),
+            for (var k = 0; k < 3; k++)
               Container(
-                width: 22,
-                height: 22,
+                height: 13,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: k == 1 ? soft : null,
+                  border: Border(bottom: BorderSide(color: line)),
+                ),
+                child: Row(
+                  children: [
+                    bar(80.0 - k * 14, muted.withValues(alpha: .5), h: 3),
+                    const Spacer(),
+                    bar(26, muted.withValues(alpha: .5), h: 3),
+                  ],
+                ),
+              ),
+            const Spacer(),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: ink,
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  bar(70, ink),
-                  const SizedBox(height: 4),
-                  bar(46, muted, h: 3),
-                ],
-              ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'INVOICE',
-                    style: TextStyle(
-                      color: ink,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                      letterSpacing: 1,
-                    ),
+                child: Text(
+                  '${'TOTAL'.td}  \$4,440.00',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
                   ),
-                  Text(
-                    'INV-0012',
-                    style: TextStyle(color: accent, fontSize: 9.5),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(height: 1.5, color: ink),
-          const SizedBox(height: 8),
-          Container(
-            height: 14,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            color: ink,
-            alignment: AlignmentDirectional.centerStart,
-            child: bar(60, Colors.white54, h: 3),
-          ),
-          for (var k = 0; k < 3; k++)
-            Container(
-              height: 13,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: k == 1 ? soft : null,
-                border: Border(bottom: BorderSide(color: line)),
-              ),
-              child: Row(
-                children: [
-                  bar(80.0 - k * 14, muted.withValues(alpha: .5), h: 3),
-                  const Spacer(),
-                  bar(26, muted.withValues(alpha: .5), h: 3),
-                ],
-              ),
-            ),
-          const Spacer(),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: ink,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'TOTAL  \$4,440.00',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

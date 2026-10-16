@@ -683,6 +683,9 @@ class Member implements Record {
   );
 }
 
+/// Standard design stages. They are stored in English; screens show them
+/// with `.tr` (Arabic in lib/l10n/ar_common.dart), so a renamed stage shows
+/// as typed.
 const defaultStages = [
   'Brief',
   'Concept design',

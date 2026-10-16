@@ -42,7 +42,7 @@ class _ClientsScreenState extends State<ClientsScreen> {
               heroTag: 'add-client',
               onPressed: () => openClientForm(context),
               icon: const Icon(Icons.person_add_alt),
-              label: const Text('Client'),
+              label: Text('Client'.tr),
             )
           : null,
       body: Readable(
@@ -51,19 +51,19 @@ class _ClientsScreenState extends State<ClientsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: TextField(
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search clients',
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Search clients'.tr,
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
             Expanded(
               child: clients.isEmpty
-                  ? const EmptyState(
+                  ? EmptyState(
                       icon: Icons.people_outline,
-                      title: 'No clients yet',
-                      message: 'Add a client, then open projects for them.',
+                      title: 'No clients yet'.tr,
+                      message: 'Add a client, then open projects for them.'.tr,
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: 88),
@@ -86,7 +86,9 @@ class _ClientsScreenState extends State<ClientsScreen> {
                               [
                                 if (c.company.isNotEmpty) c.company,
                                 if (c.country.isNotEmpty) c.country,
-                                '$count project${count == 1 ? '' : 's'}',
+                                count == 1
+                                    ? '1 project'.tr
+                                    : '{0} projects'.trArgs([count]),
                               ].join(' · '),
                             ),
                             onTap: () => Navigator.push(
@@ -121,9 +123,9 @@ class ClientDetailScreen extends StatelessWidget {
     if (c == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const EmptyState(
+        body: EmptyState(
           icon: Icons.person_off_outlined,
-          title: 'Client not found',
+          title: 'Client not found'.tr,
         ),
       );
     }
@@ -133,12 +135,12 @@ class ClientDetailScreen extends StatelessWidget {
       leading: Icon(icon),
       title: Text(value),
       trailing: IconButton(
-        tooltip: 'Copy',
+        tooltip: 'Copy'.tr,
         icon: const Icon(Icons.copy, size: 18),
         onPressed: () {
           Clipboard.setData(ClipboardData(text: value));
           ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('Copied')));
+              .showSnackBar(SnackBar(content: Text('Copied'.tr)));
         },
       ),
     );
@@ -149,7 +151,7 @@ class ClientDetailScreen extends StatelessWidget {
         actions: [
           if (repo.isOwner) ...[
             IconButton(
-              tooltip: 'Edit client',
+              tooltip: 'Edit client'.tr,
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => openClientForm(context, client: c),
             ),
@@ -158,9 +160,10 @@ class ClientDetailScreen extends StatelessWidget {
                 if (v != 'delete') return;
                 if (projects.isNotEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text(
-                        'This client has projects. Delete or move them first.',
+                        'This client has projects. Delete or move them first.'
+                            .tr,
                       ),
                     ),
                   );
@@ -171,8 +174,8 @@ class ClientDetailScreen extends StatelessWidget {
                   if (context.mounted) Navigator.pop(context);
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Text('Delete client')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'delete', child: Text('Delete client'.tr)),
               ],
             ),
           ],
@@ -182,7 +185,7 @@ class ClientDetailScreen extends StatelessWidget {
           ? FloatingActionButton.extended(
               onPressed: () => openProjectForm(context, clientId: c.id),
               icon: const Icon(Icons.add),
-              label: const Text('Project'),
+              label: Text('Project'.tr),
             )
           : null,
       body: Readable(
@@ -207,11 +210,11 @@ class ClientDetailScreen extends StatelessWidget {
                 ),
               ),
             if (repo.isOwner) _AccountCard(clientId: c.id),
-            SectionHeader('Projects (${projects.length})'),
+            SectionHeader('Projects ({0})'.trArgs([projects.length])),
             if (projects.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text('No projects for this client yet.'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('No projects for this client yet.'.tr),
               ),
             for (final p in projects)
               Padding(
@@ -264,19 +267,19 @@ class _AccountCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  figure('Invoiced', st.invoiced),
-                  figure('Received', st.received, color: ak.good),
+                  figure('Invoiced'.tr, st.invoiced),
+                  figure('Received'.tr, st.received, color: ak.good),
                   if (st.advances > 0.005)
                     figure(
-                      'Due on invoices',
+                      'Due on invoices'.tr,
                       st.dueOnInvoices,
                       color: st.overdue > 0 ? ak.bad : null,
                     )
                   else if (st.closing < -0.005)
-                    figure('Credit', -st.closing, color: ak.good)
+                    figure('Credit'.tr, -st.closing, color: ak.good)
                   else
                     figure(
-                      'Balance due',
+                      'Balance due'.tr,
                       st.closing,
                       color: st.overdue > 0 ? ak.bad : null,
                     ),
@@ -285,8 +288,9 @@ class _AccountCard extends StatelessWidget {
               if (st.advances > 0.005) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Credit held: ${fmtMoney(st.advances)} received in '
-                  'advance and not yet set against an invoice.',
+                  'Credit held: {0} received in '
+                          'advance and not yet set against an invoice.'
+                      .trArgs([fmtMoney(st.advances)]),
                   style: TextStyle(color: ak.muted, fontSize: 12.5),
                 ),
               ],
@@ -298,13 +302,13 @@ class _AccountCard extends StatelessWidget {
                   FilledButton.tonalIcon(
                     onPressed: () => showStatementSheet(context, clientId),
                     icon: const Icon(Icons.request_quote_outlined),
-                    label: const Text('Statement of account'),
+                    label: Text('Statement of account'.tr),
                   ),
                   OutlinedButton.icon(
                     onPressed: () =>
                         openReceiptForm(context, clientId: clientId),
                     icon: const Icon(Icons.payments_outlined),
-                    label: const Text('Receipt'),
+                    label: Text('Receipt'.tr),
                   ),
                 ],
               ),
@@ -348,17 +352,20 @@ Future<void> showStatementSheet(BuildContext context, String clientId) {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Statement of account',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                Text(
+                  'Statement of account'.tr,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 SegmentedButton<String>(
                   showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 'all', label: Text('All time')),
-                    ButtonSegment(value: 'year', label: Text('This year')),
-                    ButtonSegment(value: 'custom', label: Text('From date')),
+                  segments: [
+                    ButtonSegment(value: 'all', label: Text('All time'.tr)),
+                    ButtonSegment(value: 'year', label: Text('This year'.tr)),
+                    ButtonSegment(value: 'custom', label: Text('From date'.tr)),
                   ],
                   selected: {period},
                   onSelectionChanged: (v) => set(() {
@@ -371,7 +378,7 @@ Future<void> showStatementSheet(BuildContext context, String clientId) {
                 if (period == 'custom') ...[
                   const SizedBox(height: 12),
                   DateField(
-                    label: 'From',
+                    label: 'From'.tr,
                     value: from,
                     onChanged: (d) => set(() => from = d),
                   ),
@@ -380,11 +387,11 @@ Future<void> showStatementSheet(BuildContext context, String clientId) {
                 DropdownButtonFormField<String?>(
                   initialValue: projectId,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Project'),
+                  decoration: InputDecoration(labelText: 'Project'.tr),
                   items: [
-                    const DropdownMenuItem(
+                    DropdownMenuItem(
                       value: null,
-                      child: Text('All projects'),
+                      child: Text('All projects'.tr),
                     ),
                     for (final p in projects)
                       DropdownMenuItem(
@@ -396,13 +403,15 @@ Future<void> showStatementSheet(BuildContext context, String clientId) {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  '${st.lines.length} movements · invoiced '
-                  '${fmtMoney(st.invoiced)} · received '
-                  '${fmtMoney(st.received)}',
+                  '{0} movements · invoiced {1} · received {2}'.trArgs([
+                    st.lines.length,
+                    fmtMoney(st.invoiced),
+                    fmtMoney(st.received),
+                  ]),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Balance due ${fmtMoney(st.closing)}',
+                  'Balance due {0}'.trArgs([fmtMoney(st.closing)]),
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
@@ -415,7 +424,7 @@ Future<void> showStatementSheet(BuildContext context, String clientId) {
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
                   icon: const Icon(Icons.ios_share),
-                  label: const Text('Send PDF'),
+                  label: Text('Send PDF'.tr),
                 ),
               ],
             ),

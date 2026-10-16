@@ -94,10 +94,10 @@ const _dark = AkColors(
   info: Color(0xFF3FB3CF),
 );
 
-/// Manrope is the brand font; Arabic screens use IBM Plex Sans Arabic,
-/// which also has Latin letters and digits.
+/// Manrope, the brand font, sets Latin letters and digits in both
+/// languages; Arabic letters come from IBM Plex Sans Arabic.
 ThemeData buildTheme(Brightness brightness, [AppLang lang = AppLang.en]) {
-  final font = lang == AppLang.ar ? 'IBMPlexSansArabic' : 'Manrope';
+  const font = 'Manrope';
   const fallback = ['IBMPlexSansArabic', 'Manrope'];
   final dark = brightness == Brightness.dark;
   final ak = dark ? _dark : _light;

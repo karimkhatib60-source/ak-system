@@ -33,14 +33,19 @@ class LayerProgress {
 
 /// One project phase: its tasks and the invoices raised for it.
 class PhaseProgress {
-  PhaseProgress(this.stage);
+  PhaseProgress(this.stage, [this.lang]);
 
   /// Null for invoices and tasks not linked to a phase.
   final Stage? stage;
+
+  /// The language of [name], or the screens language.
+  final AppLang? lang;
   final tasks = <Task>[];
   final invoices = <OpenInvoice>[];
 
-  String get name => stage?.name ?? 'Not linked to a phase';
+  String get name =>
+      stage?.name.inLang(lang ?? appLang) ??
+      'Not linked to a phase'.inLang(lang ?? appLang);
   int get tasksDone => tasks.where((t) => t.status == TaskStatus.done).length;
   double get invoiced => invoices.fold(0, (s, i) => s + i.invoice.total);
   double get received => invoices.fold(0, (s, i) => s + i.paid);
@@ -49,14 +54,18 @@ class PhaseProgress {
 
 /// One instalment of an accepted quotation's payment schedule.
 class ScheduleLine {
-  const ScheduleLine(this.quotation, this.index, this.status);
+  const ScheduleLine(this.quotation, this.index, this.status, [this.lang]);
 
   final Quotation quotation;
   final int index;
   final TermStatus status;
 
-  String get label =>
-      status.term.label.isEmpty ? 'Payment ${index + 1}' : status.term.label;
+  /// The language of [label], or the screens language.
+  final AppLang? lang;
+
+  String get label => status.term.label.isEmpty
+      ? 'Payment {0}'.inLang(lang ?? appLang, [index + 1])
+      : status.term.label.inLang(lang ?? appLang);
 }
 
 /// Detailed statement for one project: by phase, by trade and item, and
@@ -92,14 +101,25 @@ class ProjectStatement {
   double get billedPercent => contractValue == 0
       ? 0
       : (account.invoiced - extras) / contractValue * 100;
+
+  /// The language of the descriptions, phase names and instalments.
+  AppLang get lang => account.lang;
 }
 
-ProjectStatement buildProjectStatement(Repository repo, String projectId) {
+/// Descriptions, phase names and instalments are in [lang], or in the
+/// screens language.
+ProjectStatement buildProjectStatement(
+  Repository repo,
+  String projectId, {
+  AppLang? lang,
+}) {
+  final l = lang ?? appLang;
   final project = repo.project(projectId)!;
   final account = buildStatement(
     repo,
     project.clientId ?? '',
     projectId: projectId,
+    lang: l,
   );
   final issued = repo
       .invoicesFor(projectId)
@@ -108,10 +128,10 @@ ProjectStatement buildProjectStatement(Repository repo, String projectId) {
 
   // Phases, in stage order, with tasks and invoices.
   final phases = <String?, PhaseProgress>{
-    for (final s in repo.stagesOf(projectId)) s.id: PhaseProgress(s),
+    for (final s in repo.stagesOf(projectId)) s.id: PhaseProgress(s, l),
   };
   PhaseProgress phaseOf(String? id) =>
-      phases[id] ?? (phases[null] ??= PhaseProgress(null));
+      phases[id] ?? (phases[null] ??= PhaseProgress(null, l));
   for (final t in repo.tasksFor(projectId)) {
     phaseOf(t.stageId).tasks.add(t);
   }
@@ -177,7 +197,7 @@ ProjectStatement buildProjectStatement(Repository repo, String projectId) {
     schedule: [
       for (final q in accepted)
         for (var k = 0; k < q.paymentTerms.length; k++)
-          ScheduleLine(q, k, repo.termStatus(q, k)),
+          ScheduleLine(q, k, repo.termStatus(q, k), l),
     ],
   );
 }

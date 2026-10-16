@@ -90,6 +90,19 @@ class _Line {
 
 double? _parse(String s) => double.tryParse(s.replaceAll(',', '').trim());
 
+/// A new empty line, with the default unit in the documents language.
+LineItem _blankLine({String section = ''}) =>
+    LineItem(section: section, unit: 'lump sum'.td);
+
+/// A preset payment term as it is written into a new quotation: label and
+/// due text in the documents language.
+PaymentTerm _presetTerm(PaymentTerm t) => PaymentTerm(
+  label: t.label.td,
+  percent: t.percent,
+  amount: t.amount,
+  due: t.due.td,
+);
+
 /// One editable row of a quotation's payment schedule.
 class _TermRow {
   _TermRow(PaymentTerm t)
@@ -220,10 +233,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     );
     _showMarkup = doc?.showMarkup ?? true;
     _terms = TextEditingController(
-      text: q?.terms ?? (q == null ? repo.companyInfo['terms'] ?? '' : ''),
+      // The standard terms are written in the documents language while
+      // they are still the app's default wording.
+      text: q?.terms ?? (q == null ? (repo.companyInfo['terms'] ?? '').td : ''),
     );
     _notes = TextEditingController(text: q?.notes ?? i?.notes ?? '');
-    for (final item in doc?.items ?? const [LineItem()]) {
+    for (final item in doc?.items ?? [_blankLine()]) {
       _lines.add(_Line(item));
     }
     _qStatus = q?.status ?? QuotationStatus.draft;
@@ -241,7 +256,9 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       // A new quotation starts with the usual schedule for its service.
       final terms =
           q?.paymentTerms ??
-          paymentTermPresets[project?.service ?? ServiceType.design]!;
+          paymentTermPresets[project?.service ?? ServiceType.design]!.map(
+            _presetTerm,
+          );
       _termRows.addAll(terms.map(_TermRow.new));
     }
   }
@@ -339,7 +356,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
 
   Future<void> _delete() async {
     final repo = context.read<Repository>();
-    final what = widget.isInvoice ? 'this invoice' : 'this quotation';
+    final what = widget.isInvoice ? 'this invoice'.tr : 'this quotation'.tr;
     if (!await confirmDelete(context, what)) return;
     final now = repo.now();
     if (widget.isInvoice) {
@@ -411,7 +428,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
 
   void _addBlank() {
     final last = _lines.isEmpty ? '' : _lines.last.section.text;
-    setState(() => _lines.add(_Line(LineItem(section: last))));
+    setState(() => _lines.add(_Line(_blankLine(section: last))));
   }
 
   Future<void> _fromLibrary() async {
@@ -473,14 +490,17 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       initialValue: value,
       isExpanded: true,
       decoration: InputDecoration(
-        labelText: 'Billing for',
+        labelText: 'Billing for'.tr,
         helperMaxLines: 3,
         helperText: _extra
             ? 'Not counted in the contract\'s progress. Money received is '
-                  'set against invoices oldest first, extra work included.'
+                      'set against invoices oldest first, extra work '
+                      'included.'
+                  .tr
             : value != null
             ? 'Money received is set against invoices oldest first, '
-                  'advances included.'
+                      'advances included.'
+                  .tr
             : null,
       ),
       items: [
@@ -488,7 +508,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
           DropdownMenuItem(
             value: q.id,
             child: Text(
-              '${q.number} · ${q.title.isEmpty ? 'contract' : q.title}',
+              '${q.number} · ${q.title.isEmpty ? 'contract'.tr : q.title}',
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -497,13 +517,13 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
             value: null,
             child: Text(
               choices.isEmpty
-                  ? 'Project work (no approved quotation yet)'
-                  : 'Not linked to a quotation',
+                  ? 'Project work (no approved quotation yet)'.tr
+                  : 'Not linked to a quotation'.tr,
             ),
           ),
-        const DropdownMenuItem(
+        DropdownMenuItem(
           value: _extraWork,
-          child: Text('Extra work, outside the contract'),
+          child: Text('Extra work, outside the contract'.tr),
         ),
       ],
       onChanged: (v) => setState(() {
@@ -543,7 +563,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     }
     _termRows
       ..clear()
-      ..addAll(paymentTermPresets[service]!.map(_TermRow.new));
+      ..addAll(paymentTermPresets[service]!.map(_presetTerm).map(_TermRow.new));
   });
 
   @override
@@ -552,7 +572,6 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     final c = Theme.of(context).colorScheme;
     final ak = AkColors.of(context);
     const gap = SizedBox(height: 14);
-    final kind = widget.isInvoice ? 'invoice' : 'quotation';
     final doc = _preview;
     final inv = widget.isInvoice ? repo.invoice(_id) : null;
     final payments = inv == null ? <Payment>[] : repo.paymentsFor(inv.id);
@@ -562,24 +581,30 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'New $kind' : _number.text),
+        title: Text(
+          !_isNew
+              ? _number.text
+              : widget.isInvoice
+              ? 'New invoice'.tr
+              : 'New quotation'.tr,
+        ),
         actions: [
           if (!_isNew)
             IconButton(
-              tooltip: 'Delete',
+              tooltip: 'Delete'.tr,
               icon: const Icon(Icons.delete_outline),
               onPressed: _delete,
             ),
           IconButton(
-            tooltip: 'PDF to send or print',
+            tooltip: 'PDF to send or print'.tr,
             icon: const Icon(Icons.picture_as_pdf_outlined),
             onPressed: _pdf,
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsetsDirectional.only(end: 12),
             child: FilledButton(
               onPressed: () => _store(),
-              child: const Text('Save'),
+              child: Text('Save'.tr),
             ),
           ),
         ],
@@ -599,7 +624,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'STATUS',
+                        'STATUS'.tr,
                         style: TextStyle(
                           fontSize: 11,
                           letterSpacing: 1.2,
@@ -611,18 +636,18 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       if (widget.isInvoice)
                         SegmentedButton<InvoiceStatus>(
                           showSelectedIcon: false,
-                          segments: const [
+                          segments: [
                             ButtonSegment(
                               value: InvoiceStatus.draft,
-                              label: Text('Draft'),
+                              label: Text('Draft'.tr),
                             ),
                             ButtonSegment(
                               value: InvoiceStatus.sent,
-                              label: Text('Issued'),
+                              label: Text('Issued'.tr),
                             ),
                             ButtonSegment(
                               value: InvoiceStatus.cancelled,
-                              label: Text('Cancelled'),
+                              label: Text('Cancelled'.tr),
                             ),
                           ],
                           selected: {_iStatus},
@@ -655,25 +680,25 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                             FilledButton.icon(
                               onPressed: _toInvoice,
                               icon: const Icon(Icons.receipt_long_outlined),
-                              label: const Text('Accept and invoice'),
+                              label: Text('Accept and invoice'.tr),
                             ),
                           if (!widget.isInvoice)
                             OutlinedButton.icon(
                               onPressed: _progressInvoice,
                               icon: const Icon(Icons.percent),
-                              label: const Text('Progress invoice'),
+                              label: Text('Progress invoice'.tr),
                             ),
                           if (widget.isInvoice &&
                               _iStatus != InvoiceStatus.cancelled)
                             FilledButton.icon(
                               onPressed: _addPayment,
                               icon: const Icon(Icons.payments_outlined),
-                              label: const Text('Record payment'),
+                              label: Text('Record payment'.tr),
                             ),
                           OutlinedButton.icon(
                             onPressed: _pdf,
                             icon: const Icon(Icons.ios_share),
-                            label: const Text('Send PDF'),
+                            label: Text('Send PDF'.tr),
                           ),
                         ],
                       ),
@@ -689,17 +714,17 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       controller: _number,
                       decoration: InputDecoration(
                         labelText: widget.isInvoice
-                            ? 'Invoice number'
-                            : 'Quotation number',
+                            ? 'Invoice number'.tr
+                            : 'Quotation number'.tr,
                       ),
                       validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
+                          v == null || v.trim().isEmpty ? 'Required'.tr : null,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: DateField(
-                      label: 'Date',
+                      label: 'Date'.tr,
                       value: _date,
                       onChanged: (d) => setState(() => _date = d ?? _date),
                     ),
@@ -709,16 +734,17 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
               gap,
               TextFormField(
                 controller: _title,
-                decoration: const InputDecoration(
-                  labelText: 'Subject',
-                  hintText: 'e.g. Architectural design services, Villa Byblos',
+                decoration: InputDecoration(
+                  labelText: 'Subject'.tr,
+                  hintText:
+                      'e.g. Architectural design services, Villa Byblos'.tr,
                 ),
               ),
               gap,
               DropdownButtonFormField<String?>(
                 initialValue: repo.client(_clientId) == null ? null : _clientId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Client'),
+                decoration: InputDecoration(labelText: 'Client'.tr),
                 items: [
                   for (final cl in repo.clients)
                     DropdownMenuItem(value: cl.id, child: Text(cl.name)),
@@ -729,7 +755,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                     _projectId = null;
                   }
                 }),
-                validator: (v) => v == null ? 'Choose the client' : null,
+                validator: (v) => v == null ? 'Choose the client'.tr : null,
               ),
               gap,
               DropdownButtonFormField<String?>(
@@ -738,11 +764,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                     ? _projectId
                     : null,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Project'),
+                decoration: InputDecoration(labelText: 'Project'.tr),
                 items: [
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: null,
-                    child: Text('No project yet'),
+                    child: Text('No project yet'.tr),
                   ),
                   for (final p in clientProjects)
                     DropdownMenuItem(
@@ -754,7 +780,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
               ),
               gap,
               DateField(
-                label: widget.isInvoice ? 'Payment due' : 'Valid until',
+                label: widget.isInvoice ? 'Payment due'.tr : 'Valid until'.tr,
                 value: _until,
                 onChanged: (d) => setState(() => _until = d),
               ),
@@ -769,14 +795,14 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       ? _stageId
                       : null,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Phase billed'),
+                  decoration: InputDecoration(labelText: 'Phase billed'.tr),
                   items: [
-                    const DropdownMenuItem(
+                    DropdownMenuItem(
                       value: null,
-                      child: Text('Not linked to a phase'),
+                      child: Text('Not linked to a phase'.tr),
                     ),
                     for (final st in repo.stagesOf(_projectId))
-                      DropdownMenuItem(value: st.id, child: Text(st.name)),
+                      DropdownMenuItem(value: st.id, child: Text(st.name.tr)),
                   ],
                   onChanged: (v) => setState(() => _stageId = v),
                 ),
@@ -790,14 +816,16 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
-                    'Bills payment term ${_termIndex! + 1} of '
-                    '${repo.quotation(_quotationId)!.number}: '
-                    '${termLabel(repo.quotation(_quotationId)!, _termIndex!)}',
+                    'Bills payment term {0} of {1}: {2}'.trArgs([
+                      _termIndex! + 1,
+                      repo.quotation(_quotationId)!.number,
+                      termLabel(repo.quotation(_quotationId)!, _termIndex!),
+                    ]),
                     style: TextStyle(color: ak.muted, fontSize: 13),
                   ),
                 ),
               ],
-              const SectionHeader('Items'),
+              SectionHeader('Items'.tr),
               for (var i = 0; i < _lines.length; i++)
                 _LineEditor(
                   key: ObjectKey(_lines[i]),
@@ -815,17 +843,17 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   TextButton.icon(
                     onPressed: _addBlank,
                     icon: const Icon(Icons.add),
-                    label: const Text('Add item'),
+                    label: Text('Add item'.tr),
                   ),
                   TextButton.icon(
                     onPressed: _fromLibrary,
                     icon: const Icon(Icons.menu_book_outlined),
-                    label: const Text('From BOQ library'),
+                    label: Text('From BOQ library'.tr),
                   ),
                   TextButton.icon(
                     onPressed: _paste,
                     icon: const Icon(Icons.content_paste),
-                    label: const Text('Paste items'),
+                    label: Text('Paste items'.tr),
                   ),
                 ],
               ),
@@ -839,10 +867,10 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Cost-plus fee',
+                      decoration: InputDecoration(
+                        labelText: 'Cost-plus fee'.tr,
                         suffixText: '%',
-                        hintText: 'e.g. 15',
+                        hintText: 'e.g. 15'.tr,
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -850,15 +878,17 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: SwitchListTile(
-                      contentPadding: const EdgeInsets.only(left: 4),
+                      contentPadding: const EdgeInsetsDirectional.only(
+                        start: 4,
+                      ),
                       dense: true,
                       value: _showMarkup,
                       onChanged: (v) => setState(() => _showMarkup = v),
-                      title: const Text('Show fee on PDF'),
+                      title: Text('Show fee on PDF'.tr),
                       subtitle: Text(
                         _showMarkup
-                            ? 'As its own line'
-                            : 'Included in the rates',
+                            ? 'As its own line'.tr
+                            : 'Included in the rates'.tr,
                       ),
                     ),
                   ),
@@ -873,8 +903,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Discount',
+                      decoration: InputDecoration(
+                        labelText: 'Discount'.tr,
                         prefixText: '\$ ',
                       ),
                       onChanged: (_) => setState(() {}),
@@ -887,8 +917,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'VAT',
+                      decoration: InputDecoration(
+                        labelText: 'VAT'.tr,
                         suffixText: '%',
                       ),
                       onChanged: (_) => setState(() {}),
@@ -899,7 +929,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
               gap,
               _Totals(doc: doc),
               if (inv != null) ...[
-                const SectionHeader('Payments received'),
+                SectionHeader('Payments received'.tr),
                 for (final (k, (a, applied)) in repo.advancesOn(inv).indexed)
                   GroupedRow(
                     index: k,
@@ -911,16 +941,18 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                         [
                           if (a.number.isNotEmpty) a.number,
                           a.onInvoice
-                              ? 'from payment on '
-                                    '${repo.invoice(a.invoiceId)?.number ?? 'another invoice'}'
+                              ? 'from payment on {0}'.trArgs([
+                                  repo.invoice(a.invoiceId)?.number ??
+                                      'another invoice'.tr,
+                                ])
                               : a.quotationId != null && a.termIndex != null
-                              ? 'set off from advance on payment term'
-                              : 'set off from money on account',
+                              ? 'set off from advance on payment term'.tr
+                              : 'set off from money on account'.tr,
                           fmtDate(a.date),
                         ].join(' · '),
                       ),
                       trailing: IconButton(
-                        tooltip: 'Send receipt',
+                        tooltip: 'Send receipt'.tr,
                         icon: const Icon(Icons.receipt_outlined, size: 20),
                         onPressed: () => shareReceiptPdf(repo, a),
                       ),
@@ -932,7 +964,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Text(
-                      'No payments yet.',
+                      'No payments yet.'.tr,
                       style: TextStyle(color: c.onSurfaceVariant),
                     ),
                   ),
@@ -957,17 +989,17 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Send receipt',
+                            tooltip: 'Send receipt'.tr,
                             icon: const Icon(Icons.receipt_outlined, size: 20),
                             onPressed: () => shareReceiptPdf(repo, payments[k]),
                           ),
                           IconButton(
-                            tooltip: 'Remove payment',
+                            tooltip: 'Remove payment'.tr,
                             icon: const Icon(Icons.close, size: 18),
                             onPressed: () async {
                               if (await confirmDelete(
                                 context,
-                                'this payment',
+                                'this payment'.tr,
                               )) {
                                 await repo.deletePayment(payments[k]);
                               }
@@ -979,7 +1011,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   ),
                 const SizedBox(height: 8),
                 Text(
-                  'Balance due: ${fmtMoney(repo.balanceOf(inv))}',
+                  'Balance due: {0}'.trArgs([fmtMoney(repo.balanceOf(inv))]),
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
@@ -993,8 +1025,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   controller: _terms,
                   minLines: 2,
                   maxLines: 8,
-                  decoration: const InputDecoration(
-                    labelText: 'Terms and conditions',
+                  decoration: InputDecoration(
+                    labelText: 'Terms and conditions'.tr,
                   ),
                 ),
               ],
@@ -1003,8 +1035,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 controller: _notes,
                 minLines: 2,
                 maxLines: 6,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (printed on the PDF)',
+                decoration: InputDecoration(
+                  labelText: 'Notes (printed on the PDF)'.tr,
                 ),
               ),
             ],
@@ -1050,7 +1082,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
           key: ObjectKey(_termRows[k]),
           margin: const EdgeInsets.only(bottom: 10),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 4, 10),
             child: Column(
               children: [
                 Row(
@@ -1059,16 +1091,16 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                       child: TextFormField(
                         controller: _termRows[k].label,
                         decoration: InputDecoration(
-                          labelText: 'Instalment ${k + 1}',
-                          hintText: 'e.g. Advance payment',
+                          labelText: 'Instalment {0}'.trArgs([k + 1]),
+                          hintText: 'e.g. Advance payment'.tr,
                         ),
                         onChanged: (_) => setState(() {}),
                       ),
                     ),
                     IconButton(
                       tooltip: locked(k)
-                          ? 'Has receipts or invoices'
-                          : 'Remove instalment',
+                          ? 'Has receipts or invoices'.tr
+                          : 'Remove instalment'.tr,
                       icon: Icon(
                         locked(k) ? Icons.lock_outline : Icons.close,
                         size: 18,
@@ -1082,7 +1114,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 ),
                 const SizedBox(height: 10),
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsetsDirectional.only(end: 8),
                   child: Row(
                     children: [
                       Expanded(
@@ -1090,8 +1122,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                         child: TextFormField(
                           controller: _termRows[k].percent,
                           keyboardType: num,
-                          decoration: const InputDecoration(
-                            labelText: 'Share',
+                          decoration: InputDecoration(
+                            labelText: 'Share'.tr,
                             suffixText: '%',
                           ),
                           onChanged: (v) => setState(() {
@@ -1107,8 +1139,8 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                         child: TextFormField(
                           controller: _termRows[k].amount,
                           keyboardType: num,
-                          decoration: const InputDecoration(
-                            labelText: 'or fixed amount',
+                          decoration: InputDecoration(
+                            labelText: 'or fixed amount'.tr,
                             prefixText: '\$',
                           ),
                           onChanged: (v) => setState(() {
@@ -1123,21 +1155,21 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 ),
                 const SizedBox(height: 10),
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsetsDirectional.only(end: 8),
                   child: TextFormField(
                     controller: _termRows[k].due,
                     minLines: 1,
                     maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'When due',
-                      hintText: 'e.g. On signing the agreement',
+                    decoration: InputDecoration(
+                      labelText: 'When due'.tr,
+                      hintText: 'e.g. On signing the agreement'.tr,
                     ),
                   ),
                 ),
                 Align(
-                  alignment: Alignment.centerRight,
+                  alignment: AlignmentDirectional.centerEnd,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 8, right: 8),
+                    padding: const EdgeInsetsDirectional.only(top: 8, end: 8),
                     child: Text(
                       fmtMoney(_termRows[k].term.valueOf(doc.total)),
                       style: const TextStyle(fontWeight: FontWeight.w700),
@@ -1154,11 +1186,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
             onPressed: () =>
                 setState(() => _termRows.add(_TermRow(const PaymentTerm()))),
             icon: const Icon(Icons.add),
-            label: const Text('Add instalment'),
+            label: Text('Add instalment'.tr),
           ),
           PopupMenuButton<ServiceType>(
             enabled: !anyLocked,
-            tooltip: 'Standard payment terms',
+            tooltip: 'Standard payment terms'.tr,
             onSelected: _usePreset,
             itemBuilder: (_) => [
               for (final sv in ServiceType.values)
@@ -1182,7 +1214,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Standard',
+                    'Standard'.tr,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: anyLocked
@@ -1201,11 +1233,16 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Text(
             off
-                ? 'The instalments add up to ${fmtMoney(sum)}'
-                      '${pct == 0 ? '' : ' (${_Line._plain(pct)}%)'}, not the '
-                      'quotation total of ${fmtMoney(doc.total)}.'
-                : 'Instalments add up to the quotation total'
-                      '${pct == 0 ? '' : ' (${_Line._plain(pct)}%)'}.',
+                ? 'The instalments add up to {0}, not the quotation total '
+                          'of {1}.'
+                      .trArgs([
+                        '${fmtMoney(sum)}'
+                            '${pct == 0 ? '' : ' (${_Line._plain(pct)}%)'}',
+                        fmtMoney(doc.total),
+                      ])
+                : 'Instalments add up to the quotation total{0}.'.trArgs([
+                    pct == 0 ? '' : ' (${_Line._plain(pct)}%)',
+                  ]),
             style: TextStyle(
               fontSize: 13,
               color: off ? ak.bad : ak.muted,
@@ -1216,7 +1253,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     ];
 
     return [
-      const SectionHeader('Payment terms'),
+      SectionHeader('Payment terms'.tr),
       if (accepted) ...[
         for (var k = 0; k < saved.paymentTerms.length; k++)
           GroupedRow(
@@ -1233,7 +1270,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
           tilePadding: const EdgeInsets.symmetric(horizontal: 4),
           childrenPadding: EdgeInsets.zero,
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          title: const Text('Edit the instalments'),
+          title: Text('Edit the instalments'.tr),
           children: editor,
         ),
       ] else
@@ -1247,10 +1284,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
 String? _elsewhere(Repository repo, Payment p, Invoice inv) {
   final other = [
     for (final (i, used) in repo.appliedTo(p))
-      if (i.id != inv.id) '${fmtMoney(used)} to ${i.number}',
+      if (i.id != inv.id) '{0} to {1}'.trArgs([fmtMoney(used), i.number]),
   ];
   final credit = repo.unappliedOf(p);
-  if (credit > 0) other.add('${fmtMoney(credit)} held as credit');
+  if (credit > 0) {
+    other.add('{0} held as credit'.trArgs([fmtMoney(credit)]));
+  }
   return other.isEmpty ? null : other.join(', ');
 }
 
@@ -1274,26 +1313,26 @@ class _LineEditor extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 12, 4, 12),
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 10),
+              padding: const EdgeInsetsDirectional.only(end: 8, bottom: 10),
               child: DropdownButtonFormField<String>(
                 initialValue: line.section.text,
                 isExpanded: true,
                 isDense: true,
-                decoration: const InputDecoration(
-                  labelText: 'Section',
+                decoration: InputDecoration(
+                  labelText: 'Section'.tr,
                   isDense: true,
                 ),
                 items: [
-                  const DropdownMenuItem(value: '', child: Text('No section')),
+                  DropdownMenuItem(value: '', child: Text('No section'.tr)),
                   for (final name in {
                     ...boqSections,
                     if (line.section.text.isNotEmpty) line.section.text,
                   })
-                    DropdownMenuItem(value: name, child: Text(name)),
+                    DropdownMenuItem(value: name, child: Text(name.tr)),
                 ],
                 onChanged: (v) {
                   line.section.text = v ?? '';
@@ -1309,14 +1348,14 @@ class _LineEditor extends StatelessWidget {
                     minLines: 1,
                     maxLines: 3,
                     decoration: InputDecoration(
-                      labelText: 'Item ${index + 1}',
-                      hintText: 'e.g. Concept design',
+                      labelText: 'Item {0}'.trArgs([index + 1]),
+                      hintText: 'e.g. Concept design'.tr,
                     ),
                     onChanged: (_) => onChanged(),
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Remove item',
+                  tooltip: 'Remove item'.tr,
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: onRemove,
                 ),
@@ -1324,7 +1363,7 @@ class _LineEditor extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsetsDirectional.only(end: 8),
               child: Row(
                 children: [
                   Expanded(
@@ -1332,7 +1371,7 @@ class _LineEditor extends StatelessWidget {
                     child: TextFormField(
                       controller: line.quantity,
                       keyboardType: num,
-                      decoration: const InputDecoration(labelText: 'Qty'),
+                      decoration: InputDecoration(labelText: 'Qty'.tr),
                       onChanged: (_) => onChanged(),
                     ),
                   ),
@@ -1341,7 +1380,7 @@ class _LineEditor extends StatelessWidget {
                     flex: 3,
                     child: TextFormField(
                       controller: line.unit,
-                      decoration: const InputDecoration(labelText: 'Unit'),
+                      decoration: InputDecoration(labelText: 'Unit'.tr),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1350,8 +1389,8 @@ class _LineEditor extends StatelessWidget {
                     child: TextFormField(
                       controller: line.rate,
                       keyboardType: num,
-                      decoration: const InputDecoration(
-                        labelText: 'Rate',
+                      decoration: InputDecoration(
+                        labelText: 'Rate'.tr,
                         prefixText: '\$',
                       ),
                       onChanged: (_) => onChanged(),
@@ -1361,9 +1400,9 @@ class _LineEditor extends StatelessWidget {
               ),
             ),
             Align(
-              alignment: Alignment.centerRight,
+              alignment: AlignmentDirectional.centerEnd,
               child: Padding(
-                padding: const EdgeInsets.only(top: 8, right: 8),
+                padding: const EdgeInsetsDirectional.only(top: 8, end: 8),
                 child: Text(
                   fmtMoney(line.item.amount),
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -1409,13 +1448,16 @@ class _Totals extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
-            row(doc.markupRate == 0 ? 'Subtotal' : 'Cost', doc.subtotal),
+            row(doc.markupRate == 0 ? 'Subtotal'.tr : 'Cost'.tr, doc.subtotal),
             if (doc.markupRate != 0)
-              row('Cost-plus fee ${_Line._plain(doc.markupRate)}%', doc.markup),
-            if (doc.discount != 0) row('Discount', -doc.discount),
-            row('VAT ${_Line._plain(doc.vatRate)}%', doc.vat),
+              row(
+                'Cost-plus fee {0}%'.trArgs([_Line._plain(doc.markupRate)]),
+                doc.markup,
+              ),
+            if (doc.discount != 0) row('Discount'.tr, -doc.discount),
+            row('VAT {0}%'.trArgs([_Line._plain(doc.vatRate)]), doc.vat),
             const Divider(height: 18),
-            row('Total', doc.total, bold: true),
+            row('Total'.tr, doc.total, bold: true),
           ],
         ),
       ),
@@ -1428,22 +1470,23 @@ Future<double?> _askPercent(BuildContext context) async {
   final v = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Progress invoice'),
+      title: Text('Progress invoice'.tr),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Bill a share of every item in this quotation. You can adjust '
-            'each line on the invoice afterwards.',
+                    'each line on the invoice afterwards.'
+                .tr,
           ),
           const SizedBox(height: 12),
           TextField(
             controller: ctrl,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Percent to bill',
+            decoration: InputDecoration(
+              labelText: 'Percent to bill'.tr,
               suffixText: '%',
             ),
           ),
@@ -1452,11 +1495,11 @@ Future<double?> _askPercent(BuildContext context) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
+          child: Text('Cancel'.tr),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, ctrl.text),
-          child: const Text('Create invoice'),
+          child: Text('Create invoice'.tr),
         ),
       ],
     ),
@@ -1488,12 +1531,15 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
       builder: (ctx, set) {
         final ak = AkColors.of(ctx);
         final q = query.trim().toLowerCase();
+        // Matches the English wording and the wording on screen.
         bool match(BoqTrade t, BoqItem i) =>
             q.isEmpty ||
             i.description.toLowerCase().contains(q) ||
-            t.name.toLowerCase().contains(q);
+            t.name.toLowerCase().contains(q) ||
+            i.description.tr.toLowerCase().contains(q) ||
+            t.name.tr.toLowerCase().contains(q);
         Widget tile(BoqTrade t, BoqItem item) {
-          final rate = lastRate[item.description];
+          final rate = _lastRateOf(lastRate, item);
           return CheckboxListTile(
             dense: true,
             value: picked.containsKey(item),
@@ -1504,11 +1550,12 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
                 picked.remove(item);
               }
             }),
-            title: Text(item.description),
+            title: Text(item.description.tr),
             subtitle: Text(
               rate == null
-                  ? item.unit
-                  : '${item.unit} · last rate ${fmtMoney(rate)}',
+                  ? item.unit.tr
+                  : '${item.unit.tr} · '
+                        '${'last rate {0}'.trArgs([fmtMoney(rate)])}',
             ),
           );
         }
@@ -1516,7 +1563,7 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
         Widget groupHead(String name) => Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
           child: Text(
-            name.toUpperCase(),
+            name.tr.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
               letterSpacing: 1.1,
@@ -1531,13 +1578,13 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 12, 8),
                 child: Row(
                   children: [
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'AK BOQ library',
-                        style: TextStyle(
+                        'AK BOQ library'.tr,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1547,16 +1594,21 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
                       onPressed: picked.isEmpty
                           ? null
                           : () => Navigator.pop(ctx, [
+                              // Lines are written in the documents
+                              // language; the section stays the trade's
+                              // English name, which sets the BOQ order.
                               for (final e in picked.entries)
                                 LineItem(
-                                  description: e.key.description,
-                                  unit: e.key.unit,
+                                  description: e.key.description.td,
+                                  unit: e.key.unit.td,
                                   section: e.value,
-                                  rate: lastRate[e.key.description] ?? 0,
+                                  rate: _lastRateOf(lastRate, e.key) ?? 0,
                                 ),
                             ]),
                       child: Text(
-                        picked.isEmpty ? 'Add' : 'Add ${picked.length}',
+                        picked.isEmpty
+                            ? 'Add'.tr
+                            : 'Add {0}'.trArgs([picked.length]),
                       ),
                     ),
                   ],
@@ -1565,9 +1617,9 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: TextField(
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search, e.g. porcelain, block, AC',
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search, e.g. porcelain, block, AC'.tr,
                     isDense: true,
                   ),
                   onChanged: (v) => set(() => query = v),
@@ -1591,10 +1643,12 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          title: Text(t.name),
+                          title: Text(t.name.tr),
                           subtitle: Text(
-                            '${t.items.where(picked.containsKey).length} of '
-                            '${t.items.length} chosen',
+                            '{0} of {1} chosen'.trArgs([
+                              t.items.where(picked.containsKey).length,
+                              t.items.length,
+                            ]),
                           ),
                           children: [
                             for (final g in t.groups) ...[
@@ -1617,18 +1671,29 @@ Future<List<LineItem>?> showBoqLibrary(BuildContext context) {
 DateTime _docDate(PricedDocument d) =>
     d is Invoice ? d.date : (d as Quotation).date;
 
+/// The rate a library item was last priced at, under the wording it is
+/// inserted with now or its English wording.
+double? _lastRateOf(Map<String, double> lastRate, BoqItem item) =>
+    lastRate[item.description.td] ?? lastRate[item.description];
+
 /// Takes BOQ lines pasted from Excel or a message and turns them into items.
 Future<List<LineItem>?> showPasteItems(
   BuildContext context, {
-  String intro =
-      'Paste rows from Excel, or a BOQ written for you in the '
-      'chat. One item per line: description, unit, quantity, '
-      'rate. A line with only a name starts a new section.',
-  String example =
-      'Masonry\n'
-      'Block wall 20 cm | m² | 120 | 18\n'
-      'Block wall 10 cm | m² | 85 | 14',
+  String? intro,
+  String? example,
 }) async {
+  final introText =
+      intro ??
+      'Paste rows from Excel, or a BOQ written for you in the '
+              'chat. One item per line: description, unit, quantity, '
+              'rate. A line with only a name starts a new section.'
+          .tr;
+  final exampleText =
+      example ??
+      'Masonry\n'
+              'Block wall 20 cm | m² | 120 | 18\n'
+              'Block wall 10 cm | m² | 85 | 14'
+          .tr;
   final ctrl = TextEditingController();
   final items = await showDialog<List<LineItem>>(
     context: context,
@@ -1636,14 +1701,14 @@ Future<List<LineItem>?> showPasteItems(
       builder: (ctx, set) {
         final found = parseBoq(ctrl.text);
         return AlertDialog(
-          title: const Text('Paste items'),
+          title: Text('Paste items'.tr),
           content: SizedBox(
             width: 520,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(intro),
+                Text(introText),
                 const SizedBox(height: 12),
                 TextField(
                   controller: ctrl,
@@ -1651,15 +1716,16 @@ Future<List<LineItem>?> showPasteItems(
                   minLines: 6,
                   maxLines: 12,
                   style: const TextStyle(fontSize: 13),
-                  decoration: InputDecoration(hintText: example),
+                  decoration: InputDecoration(hintText: exampleText),
                   onChanged: (_) => set(() {}),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   found.isEmpty
-                      ? 'No items found yet.'
-                      : '${found.length} item${found.length == 1 ? '' : 's'} '
-                            'found',
+                      ? 'No items found yet.'.tr
+                      : found.length == 1
+                      ? '1 item found'.tr
+                      : '{0} items found'.trArgs([found.length]),
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ],
@@ -1668,11 +1734,11 @@ Future<List<LineItem>?> showPasteItems(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
+              child: Text('Cancel'.tr),
             ),
             FilledButton(
               onPressed: found.isEmpty ? null : () => Navigator.pop(ctx, found),
-              child: const Text('Add items'),
+              child: Text('Add items'.tr),
             ),
           ],
         );

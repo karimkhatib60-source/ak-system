@@ -73,11 +73,11 @@ class _ClientFormState extends State<ClientForm> {
     const gap = SizedBox(height: 14);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.client == null ? 'New client' : 'Edit client'),
+        title: Text(widget.client == null ? 'New client'.tr : 'Edit client'.tr),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: FilledButton(onPressed: _save, child: Text('Save'.tr)),
           ),
         ],
       ),
@@ -91,16 +91,14 @@ class _ClientFormState extends State<ClientForm> {
               TextFormField(
                 controller: _name,
                 autofocus: widget.client == null,
-                decoration: const InputDecoration(labelText: 'Client name'),
+                decoration: InputDecoration(labelText: 'Client name'.tr),
                 validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Enter a name' : null,
+                    v == null || v.trim().isEmpty ? 'Enter a name'.tr : null,
               ),
               gap,
               TextFormField(
                 controller: _company,
-                decoration: const InputDecoration(
-                  labelText: 'Company (if any)',
-                ),
+                decoration: InputDecoration(labelText: 'Company (if any)'.tr),
               ),
               gap,
               Row(
@@ -109,8 +107,8 @@ class _ClientFormState extends State<ClientForm> {
                     child: TextFormField(
                       controller: _phone,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone / WhatsApp',
+                      decoration: InputDecoration(
+                        labelText: 'Phone / WhatsApp'.tr,
                       ),
                     ),
                   ),
@@ -118,7 +116,7 @@ class _ClientFormState extends State<ClientForm> {
                   Expanded(
                     child: TextFormField(
                       controller: _country,
-                      decoration: const InputDecoration(labelText: 'Country'),
+                      decoration: InputDecoration(labelText: 'Country'.tr),
                     ),
                   ),
                 ],
@@ -127,14 +125,14 @@ class _ClientFormState extends State<ClientForm> {
               TextFormField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(labelText: 'Email'.tr),
               ),
               gap,
               TextFormField(
                 controller: _notes,
                 minLines: 3,
                 maxLines: 8,
-                decoration: const InputDecoration(labelText: 'Notes'),
+                decoration: InputDecoration(labelText: 'Notes'.tr),
               ),
             ],
           ),

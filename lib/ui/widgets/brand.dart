@@ -78,11 +78,12 @@ class AkWordmark extends StatelessWidget {
               ),
             ),
             Text(
-              'DESIGN · CONSULTANCY · CONTRACTING',
+              'DESIGN · CONSULTANCY · CONTRACTING'.tr,
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 8.5,
-                letterSpacing: 1.4,
+                // Spacing would break the joined letters of Arabic.
+                letterSpacing: isArabic ? 0 : 1.4,
                 color: ak.onChromeMuted,
               ),
             ),
@@ -111,7 +112,7 @@ class StageBar extends StatelessWidget {
           if (i > 0) const SizedBox(width: 3),
           Expanded(
             child: Tooltip(
-              message: stages[i].name,
+              message: stages[i].name.tr,
               child: Container(
                 height: 6,
                 decoration: BoxDecoration(

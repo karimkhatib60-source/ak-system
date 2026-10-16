@@ -9,7 +9,7 @@ import re
 import sys
 
 LIT = re.compile(r"""(r?)'((?:\\.|[^'\\\n])*)'|(r?)"((?:\\.|[^"\\\n])*)\"""")
-CALL = re.compile(r"\s*\.(tr|td|trArgs|tdArgs)\b")
+CALL = re.compile(r"\s*\.(tr|td|trArgs|tdArgs|inLang)\b")
 SKIP_LINE = re.compile(r"^\s*(import|export|part|//|///|@)")
 WORDS = re.compile(r"[A-Za-z]{2,}")
 

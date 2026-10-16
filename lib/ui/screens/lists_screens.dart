@@ -57,7 +57,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               heroTag: 'add-project',
               onPressed: () => openProjectForm(context),
               icon: const Icon(Icons.add),
-              label: const Text('Project'),
+              label: Text('Project'.tr),
             )
           : null,
       body: Readable(
@@ -67,9 +67,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: TextField(
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search by name, code or client',
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Search by name, code or client'.tr,
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
@@ -81,13 +81,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 children: [
                   for (final f in _ProjectFilter.values)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsetsDirectional.only(end: 8),
                       child: ChoiceChip(
                         label: Text(switch (f) {
-                          _ProjectFilter.current => 'Current',
-                          _ProjectFilter.leads => 'Leads',
-                          _ProjectFilter.finished => 'Finished',
-                          _ProjectFilter.all => 'All',
+                          _ProjectFilter.current => 'Current'.tr,
+                          _ProjectFilter.leads => 'Leads'.tr,
+                          _ProjectFilter.finished => 'Finished'.tr,
+                          _ProjectFilter.all => 'All'.tr,
                         }),
                         selected: _filter == f,
                         onSelected: (_) => setState(() => _filter = f),
@@ -100,10 +100,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               child: list.isEmpty
                   ? EmptyState(
                       icon: Icons.folder_open_outlined,
-                      title: 'No projects here',
+                      title: 'No projects here'.tr,
                       message: repo.isOwner
-                          ? 'Tap "Project" to add your first one.'
-                          : 'Projects you are added to appear here.',
+                          ? 'Tap "Project" to add your first one.'.tr
+                          : 'Projects you are added to appear here.'.tr,
                     )
                   : LayoutBuilder(
                       builder: (context, box) {
@@ -156,16 +156,16 @@ class _WorkScreenState extends State<WorkScreen> {
               width: double.infinity,
               child: SegmentedButton<bool>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: false,
-                    icon: Icon(Icons.checklist, size: 18),
-                    label: Text('Tasks'),
+                    icon: const Icon(Icons.checklist, size: 18),
+                    label: Text('Tasks'.tr),
                   ),
                   ButtonSegment(
                     value: true,
-                    icon: Icon(Icons.description_outlined, size: 18),
-                    label: Text('Deliverables'),
+                    icon: const Icon(Icons.description_outlined, size: 18),
+                    label: Text('Deliverables'.tr),
                   ),
                 ],
                 selected: {_deliverables},
@@ -225,7 +225,7 @@ class _TasksScreenState extends State<TasksScreen> {
               heroTag: 'add-task-all',
               onPressed: () => openTaskForm(context),
               icon: const Icon(Icons.add),
-              label: const Text('Task'),
+              label: Text('Task'.tr),
             ),
       body: Readable(
         child: Column(
@@ -238,13 +238,13 @@ class _TasksScreenState extends State<TasksScreen> {
                   for (final f in _TaskFilter.values)
                     if (f != _TaskFilter.mine || hasMe)
                       Padding(
-                        padding: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsetsDirectional.only(end: 8),
                         child: ChoiceChip(
                           label: Text(switch (f) {
-                            _TaskFilter.mine => 'Mine',
-                            _TaskFilter.open => 'All open',
-                            _TaskFilter.late => 'Late',
-                            _TaskFilter.done => 'Done',
+                            _TaskFilter.mine => 'Mine'.tr,
+                            _TaskFilter.open => 'All open'.tr,
+                            _TaskFilter.late => 'Late'.tr,
+                            _TaskFilter.done => 'Done'.tr,
                           }),
                           selected: filter == f,
                           onSelected: (_) => setState(() => _filter = f),
@@ -260,12 +260,12 @@ class _TasksScreenState extends State<TasksScreen> {
                           ? Icons.celebration_outlined
                           : Icons.checklist,
                       title: switch (filter) {
-                        _TaskFilter.late => 'Nothing is late',
-                        _TaskFilter.done => 'No finished tasks yet',
-                        _ => 'No open tasks',
+                        _TaskFilter.late => 'Nothing is late'.tr,
+                        _TaskFilter.done => 'No finished tasks yet'.tr,
+                        _ => 'No open tasks'.tr,
                       },
                       message: repo.visibleProjects.isEmpty
-                          ? 'Create a project first, then add its tasks.'
+                          ? 'Create a project first, then add its tasks.'.tr
                           : null,
                     )
                   : ListView.separated(
@@ -321,7 +321,7 @@ class _DeliverablesScreenState extends State<DeliverablesScreen> {
               heroTag: 'add-deliverable-all',
               onPressed: () => openDeliverableForm(context),
               icon: const Icon(Icons.add),
-              label: const Text('Deliverable'),
+              label: Text('Deliverable'.tr),
             ),
       body: Readable(
         child: Column(
@@ -332,16 +332,16 @@ class _DeliverablesScreenState extends State<DeliverablesScreen> {
               child: Row(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsetsDirectional.only(end: 8),
                     child: ChoiceChip(
-                      label: Text('All ${all.length}'),
+                      label: Text('All {0}'.trArgs([all.length])),
                       selected: _status == null,
                       onSelected: (_) => setState(() => _status = null),
                     ),
                   ),
                   for (final s in DeliverableStatus.values)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsetsDirectional.only(end: 8),
                       child: ChoiceChip(
                         label: Text('${deliverableStatusLabel(s)} ${count(s)}'),
                         selected: _status == s,
@@ -353,10 +353,11 @@ class _DeliverablesScreenState extends State<DeliverablesScreen> {
             ),
             Expanded(
               child: list.isEmpty
-                  ? const EmptyState(
+                  ? EmptyState(
                       icon: Icons.description_outlined,
-                      title: 'No deliverables here',
-                      message: 'Track every drawing set and report you send a client.',
+                      title: 'No deliverables here'.tr,
+                      message: 'Track every drawing set and report you send a client.'
+                          .tr,
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: 88),

@@ -245,7 +245,7 @@ void main() {
   });
 
   test('this build is version 11, released from the AK repository', () {
-    expect(appVersion, 11);
+    expect(appVersion, 12);
     expect(releaseRepo, 'karimkhatib60-source/ak-system');
   });
 }

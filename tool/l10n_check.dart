@@ -11,7 +11,7 @@ import 'package:ak_system/l10n/lang.dart';
 /// where it is, read straight from the source.
 List<(String key, String where)> translatedTexts([List<String>? files]) {
   final out = <(String, String)>[];
-  final call = RegExp(r'\.(tr|td|trArgs|tdArgs)\b');
+  final call = RegExp(r'\.(tr|td|trArgs|tdArgs|inLang)\b');
   final all = files == null
       ? Directory('lib').listSync(recursive: true)
       : [for (final p in files) File(p)];

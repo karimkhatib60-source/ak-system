@@ -45,6 +45,8 @@ class Statement {
     required this.open,
     required this.contractValue,
     this.advances = 0,
+    this.projectId,
+    this.lang = AppLang.en,
   });
 
   final Client client;
@@ -61,6 +63,12 @@ class Statement {
   /// Money received on payment terms or on account and not yet set
   /// against an invoice, as of [to].
   final double advances;
+
+  /// The project asked for, or null for the whole account.
+  final String? projectId;
+
+  /// The language of the line descriptions.
+  final AppLang lang;
 
   double get invoiced => lines.fold(0, (s, l) => s + l.debit);
   double get received => lines.fold(0, (s, l) => s + l.credit);
@@ -91,13 +99,16 @@ class Statement {
   }
 }
 
+/// Line descriptions are in [lang], or in the screens language.
 Statement buildStatement(
   Repository repo,
   String clientId, {
   DateTime? from,
   DateTime? to,
   String? projectId,
+  AppLang? lang,
 }) {
+  final l = lang ?? appLang;
   final client = repo.client(clientId)!;
   final now = repo.now();
   final today = DateTime(now.year, now.month, now.day);
@@ -136,7 +147,7 @@ Statement buildStatement(
       order: 0,
       ref: i.number,
       text: [
-        'Invoice',
+        'Invoice'.inLang(l),
         if (i.title.isNotEmpty) i.title,
         if (projectId == null && code.isNotEmpty) code,
       ].join(' · '),
@@ -160,7 +171,11 @@ Statement buildStatement(
         date: p.date,
         order: 1,
         ref: ref,
-        text: 'Receipt · ${_method(p.method)} · ${receiptPurpose(repo, p)}',
+        text: [
+          'Receipt'.inLang(l),
+          _method(p.method, l),
+          receiptPurpose(repo, p, l),
+        ].join(' · '),
         debit: 0,
         credit: p.amount,
       ));
@@ -176,9 +191,16 @@ Statement buildStatement(
         order: 2,
         ref: inside ? ref : i.number,
         text: inside
-            ? 'Set off from $ref · ${receiptPurpose(repo, p)}'
-            : 'Credit set against ${i.number} · '
-                  '${where == null ? 'not on a project' : 'project $where'}',
+            ? 'Set off from {0} · {1}'.inLang(l, [
+                ref,
+                receiptPurpose(repo, p, l),
+              ])
+            : 'Credit set against {0} · {1}'.inLang(l, [
+                i.number,
+                where == null
+                    ? 'not on a project'.inLang(l)
+                    : 'project {0}'.inLang(l, [where]),
+              ]),
         // Credit leaving the project is shown as a negative receipt, so
         // the invoiced total stays the project's own invoices.
         debit: 0,
@@ -245,34 +267,43 @@ Statement buildStatement(
     open: open,
     contractValue: contract,
     advances: advances,
+    projectId: projectId,
+    lang: l,
   );
 }
 
-String _method(PaymentMethod m) => switch (m) {
-  PaymentMethod.bankTransfer => 'bank transfer',
-  PaymentMethod.cash => 'cash',
-  PaymentMethod.cheque => 'cheque',
-  PaymentMethod.card => 'card',
-  PaymentMethod.other => 'other',
+String _method(PaymentMethod m, AppLang l) => switch (m) {
+  PaymentMethod.bankTransfer => 'bank transfer'.inLang(l),
+  PaymentMethod.cash => 'cash'.inLang(l),
+  PaymentMethod.cheque => 'cheque'.inLang(l),
+  PaymentMethod.card => 'card'.inLang(l),
+  PaymentMethod.other => 'other'.inLang(l),
 };
 
 /// What a receipt pays for, in words: "on INV-26-003", "Advance 30% of
-/// QT-26-002" or "on account".
+/// QT-26-002" or "on account", in [lang] or the screens language.
 String receiptPurpose(Repository repo, Payment p, [AppLang? lang]) {
+  final l = lang ?? appLang;
   if (p.onInvoice) {
     final i = repo.invoice(p.invoiceId);
-    if (i == null) return 'on account';
-    if (i.status == InvoiceStatus.sent) return 'on ${i.number}';
-    final why = i.status == InvoiceStatus.cancelled ? 'cancelled' : 'draft';
-    return 'on ${i.number} ($why), held as credit';
+    if (i == null) return 'on account'.inLang(l);
+    if (i.status == InvoiceStatus.sent) return 'on {0}'.inLang(l, [i.number]);
+    final why = i.status == InvoiceStatus.cancelled
+        ? 'cancelled'.inLang(l)
+        : 'draft'.inLang(l);
+    return 'on {0} ({1}), held as credit'.inLang(l, [i.number, why]);
   }
   final q = repo.quotation(p.quotationId);
   if (q != null &&
       p.termIndex != null &&
       p.termIndex! < q.paymentTerms.length) {
     final t = q.paymentTerms[p.termIndex!];
-    final label = t.label.isEmpty ? 'Payment ${p.termIndex! + 1}' : t.label;
-    return '$label of ${q.number}';
+    final label = t.label.isEmpty
+        ? 'Payment {0}'.inLang(l, [p.termIndex! + 1])
+        : t.label.inLang(l);
+    return '{0} of {1}'.inLang(l, [label, q.number]);
   }
-  return p.notes.isNotEmpty ? 'on account · ${p.notes}' : 'on account';
+  return p.notes.isNotEmpty
+      ? 'on account · {0}'.inLang(l, [p.notes])
+      : 'on account'.inLang(l);
 }

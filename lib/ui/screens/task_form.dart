@@ -90,7 +90,7 @@ class _TaskFormState extends State<TaskForm> {
   }
 
   Future<void> _delete() async {
-    if (!await confirmDelete(context, 'this task')) return;
+    if (!await confirmDelete(context, 'this task'.tr)) return;
     if (!mounted) return;
     await context.read<Repository>().deleteTask(widget.task!);
     if (mounted) Navigator.pop(context);
@@ -102,17 +102,17 @@ class _TaskFormState extends State<TaskForm> {
     const gap = SizedBox(height: 14);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.task == null ? 'New task' : 'Edit task'),
+        title: Text(widget.task == null ? 'New task'.tr : 'Edit task'.tr),
         actions: [
           if (widget.task != null)
             IconButton(
-              tooltip: 'Delete',
+              tooltip: 'Delete'.tr,
               icon: const Icon(Icons.delete_outline),
               onPressed: _delete,
             ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: FilledButton(onPressed: _save, child: Text('Save'.tr)),
           ),
         ],
       ),
@@ -126,9 +126,9 @@ class _TaskFormState extends State<TaskForm> {
               TextFormField(
                 controller: _title,
                 autofocus: widget.task == null,
-                decoration: const InputDecoration(labelText: 'Task'),
+                decoration: InputDecoration(labelText: 'Task'.tr),
                 validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Enter the task' : null,
+                    v == null || v.trim().isEmpty ? 'Enter the task'.tr : null,
               ),
               gap,
               Wrap(
@@ -148,7 +148,7 @@ class _TaskFormState extends State<TaskForm> {
               DropdownButtonFormField<String>(
                 initialValue: _projectId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Project'),
+                decoration: InputDecoration(labelText: 'Project'.tr),
                 items: [
                   for (final p in repo.visibleProjects)
                     DropdownMenuItem(value: p.id, child: Text(p.name)),
@@ -157,14 +157,14 @@ class _TaskFormState extends State<TaskForm> {
                   _projectId = v;
                   _stageId = repo.project(v)?.stageId;
                 }),
-                validator: (v) => v == null ? 'Choose a project' : null,
+                validator: (v) => v == null ? 'Choose a project'.tr : null,
               ),
               gap,
               Row(
                 children: [
                   Expanded(
                     child: DateField(
-                      label: 'Due date',
+                      label: 'Due date'.tr,
                       value: _due,
                       onChanged: (d) => setState(() => _due = d),
                     ),
@@ -173,7 +173,7 @@ class _TaskFormState extends State<TaskForm> {
                   Expanded(
                     child: DropdownButtonFormField<TaskPriority>(
                       initialValue: _priority,
-                      decoration: const InputDecoration(labelText: 'Priority'),
+                      decoration: InputDecoration(labelText: 'Priority'.tr),
                       items: [
                         for (final p in TaskPriority.values)
                           DropdownMenuItem(
@@ -192,12 +192,9 @@ class _TaskFormState extends State<TaskForm> {
                   initialValue: repo.member(_assigneeId) == null
                       ? null
                       : _assigneeId,
-                  decoration: const InputDecoration(labelText: 'Assigned to'),
+                  decoration: InputDecoration(labelText: 'Assigned to'.tr),
                   items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('Nobody yet'),
-                    ),
+                    DropdownMenuItem(value: null, child: Text('Nobody yet'.tr)),
                     for (final m in repo.members)
                       DropdownMenuItem(value: m.id, child: Text(m.name)),
                   ],
@@ -212,11 +209,11 @@ class _TaskFormState extends State<TaskForm> {
                     ? _stageId
                     : null,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Stage'),
+                decoration: InputDecoration(labelText: 'Stage'.tr),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('None')),
+                  DropdownMenuItem(value: null, child: Text('None'.tr)),
                   for (final s in repo.stagesOf(_projectId))
-                    DropdownMenuItem(value: s.id, child: Text(s.name)),
+                    DropdownMenuItem(value: s.id, child: Text(s.name.tr)),
                 ],
                 onChanged: (v) => setState(() => _stageId = v),
               ),
@@ -234,7 +231,7 @@ class _TaskFormState extends State<TaskForm> {
                 controller: _notes,
                 minLines: 3,
                 maxLines: 8,
-                decoration: const InputDecoration(labelText: 'Notes'),
+                decoration: InputDecoration(labelText: 'Notes'.tr),
               ),
             ],
           ),

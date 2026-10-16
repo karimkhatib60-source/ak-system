@@ -30,7 +30,8 @@ class TaskTile extends StatelessWidget {
       taskCategoryLabel(task.category),
       if (showProject && project != null) project.name,
       ?who,
-      if (task.status == TaskStatus.inProgress) 'In progress',
+      if (task.status == TaskStatus.inProgress)
+        taskStatusLabel(TaskStatus.inProgress),
     ];
     return ListTile(
       leading: Checkbox(
@@ -58,7 +59,10 @@ class TaskTile extends StatelessWidget {
             ),
           ),
           if (task.priority == TaskPriority.high && !done)
-            Text('High', style: TextStyle(color: c.error, fontSize: 12)),
+            Text(
+              priorityLabel(TaskPriority.high),
+              style: TextStyle(color: c.error, fontSize: 12),
+            ),
         ],
       ),
       onTap: () => openTaskForm(context, task: task),
@@ -78,7 +82,7 @@ class DeliverableTile extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     final now = repo.now();
     final project = repo.project(d.projectId);
-    final stage = repo.stage(d.stageId)?.name;
+    final stage = repo.stage(d.stageId)?.name.tr;
     final late = d.isOverdue(now);
     final sub = [
       if (showProject && project != null) project.name,
@@ -86,7 +90,7 @@ class DeliverableTile extends StatelessWidget {
       if (d.dueDate != null && d.status != DeliverableStatus.approved)
         dueLine(d.dueDate!, now),
       if (d.status == DeliverableStatus.submitted && d.submittedAt != null)
-        'Sent ${fmtDate(d.submittedAt)}',
+        'Sent {0}'.trArgs([fmtDate(d.submittedAt)]),
     ];
     return ListTile(
       leading: CircleAvatar(
@@ -143,7 +147,7 @@ class ProjectCard extends StatelessWidget {
     final open = tasks.where((t) => t.status != TaskStatus.done).length;
     final late = tasks.where((t) => t.isOverdue(now)).length;
     final client = repo.client(p.clientId)?.name;
-    final stage = repo.stage(p.stageId)?.name;
+    final stage = repo.stage(p.stageId)?.name.tr;
     final stages = repo.stagesFor(p.service);
     final stageIndex = stages.indexWhere((s) => s.id == p.stageId);
     return Card(
@@ -200,8 +204,12 @@ class ProjectCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 stage == null
-                    ? 'No stage set'
-                    : 'Stage ${stageIndex + 1} of ${stages.length} · $stage',
+                    ? 'No stage set'.tr
+                    : 'Stage {0} of {1} · {2}'.trArgs([
+                        stageIndex + 1,
+                        stages.length,
+                        stage,
+                      ]),
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -211,17 +219,20 @@ class ProjectCard extends StatelessWidget {
               Text.rich(
                 TextSpan(
                   children: [
-                    TextSpan(text: '$open open'),
+                    TextSpan(text: '{0} open'.trArgs([open])),
                     if (late > 0)
                       TextSpan(
-                        text: '  ·  $late late',
+                        text: '  ·  ${'{0} late'.trArgs([late])}',
                         style: TextStyle(
                           color: c.error,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     if (p.dueDate != null)
-                      TextSpan(text: '  ·  Deadline ${fmtDate(p.dueDate)}'),
+                      TextSpan(
+                        text:
+                            '  ·  ${'Deadline {0}'.trArgs([fmtDate(p.dueDate)])}',
+                      ),
                   ],
                 ),
                 style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),

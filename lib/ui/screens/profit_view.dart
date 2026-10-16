@@ -71,7 +71,7 @@ class ProfitCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'PROFIT · INTERNAL',
+                    'PROFIT · INTERNAL'.tr,
                     style: TextStyle(
                       fontSize: 11,
                       letterSpacing: 1.2,
@@ -82,111 +82,134 @@ class ProfitCard extends StatelessWidget {
                 ),
                 if (f.margin != null)
                   Pill(
-                    '${_margin(f.margin)} margin',
+                    '{0} margin'.trArgs([_margin(f.margin)]),
                     color: f.profit < 0 ? AkPalette.bad : AkPalette.good,
                   ),
               ],
             ),
             const SizedBox(height: 8),
-            row('Invoiced, without VAT', fmtMoney(f.revenue)),
+            row('Invoiced, without VAT'.tr, fmtMoney(f.revenue)),
             row(
-              f.expenseVat > 0.005 ? 'Expenses, without VAT' : 'Expenses',
+              f.expenseVat > 0.005 ? 'Expenses, without VAT'.tr : 'Expenses'.tr,
               fmtMoney(f.expenses == 0 ? 0 : -f.expenses),
             ),
             const Divider(height: 14),
             row(
-              'Profit on invoiced work',
+              'Profit on invoiced work'.tr,
               fmtMoney(f.profit),
               bold: true,
               color: tone(f.profit),
               hint: f.costsMayBeMissing
                   ? 'Above the expected profit: some costs of the invoiced '
-                        'work may not be recorded yet'
+                            'work may not be recorded yet'
+                        .tr
                   : null,
             ),
             if (f.contractNet > 0.005) ...[
               const SizedBox(height: 10),
               row(
-                'Contract, without VAT',
+                'Contract, without VAT'.tr,
                 fmtMoney(f.contractNet),
                 hint: [
                   if (f.leftToInvoice > 0)
-                    '${fmtMoney(f.leftToInvoice)} still to invoice'
+                    '{0} still to invoice'.trArgs([fmtMoney(f.leftToInvoice)])
                   else if (f.onContract > f.contractNet + 0.005)
-                    '${fmtMoney(f.onContract - f.contractNet)} invoiced above '
-                        'the contract'
+                    '{0} invoiced above the contract'.trArgs([
+                      fmtMoney(f.onContract - f.contractNet),
+                    ])
                   else
-                    'Fully invoiced',
+                    'Fully invoiced'.tr,
                   if (f.extrasNet > 0.005)
-                    '${fmtMoney(f.extrasNet)} extra work invoiced',
+                    '{0} extra work invoiced'.trArgs([fmtMoney(f.extrasNet)]),
                 ].join(' · '),
               ),
               if (left != null)
                 row(
-                  'Budgeted cost (BOQ)',
+                  'Budgeted cost (BOQ)'.tr,
                   fmtMoney(f.budgetCost),
                   hint: left < -0.005
-                      ? 'Over budget by ${fmtMoney(-left)}'
-                      : '${fmtMoney(left)} of the budget left',
+                      ? 'Over budget by {0}'.trArgs([fmtMoney(-left)])
+                      : '{0} of the budget left'.trArgs([fmtMoney(left)]),
                 ),
               if (f.expectedProfit case final e?)
                 row(
-                  'Expected profit at completion',
+                  'Expected profit at completion'.tr,
                   fmtMoney(e),
                   color: tone(e),
-                  hint: 'If costs stay within the budget',
+                  hint: 'If costs stay within the budget'.tr,
                 )
               else
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     'No cost budget on this contract, so the final profit '
-                    'is not forecast.',
+                            'is not forecast.'
+                        .tr,
                     style: TextStyle(color: ak.muted, fontSize: 12),
                   ),
                 ),
             ],
             const SizedBox(height: 10),
             row(
-              'Cash in hand',
+              'Cash in hand'.tr,
               fmtMoney(f.cash),
               color: tone(f.cash),
-              hint: 'Received ${fmtMoney(f.received)} less expenses paid',
+              hint: 'Received {0} less expenses paid'.trArgs([
+                fmtMoney(f.received),
+              ]),
             ),
             if (f.paidOut > 0.005)
               row(
-                'Paid to suppliers',
+                'Paid to suppliers'.tr,
                 fmtMoney(f.paidOut),
-                hint: 'Bills paid, VAT included',
+                hint: 'Bills paid, VAT included'.tr,
               ),
             if (f.unpaidBills > 0.005)
               row(
-                'Unpaid supplier bills',
+                'Unpaid supplier bills'.tr,
                 fmtMoney(f.unpaidBills),
                 color: ak.warn,
                 hint:
                     'Still to pay, VAT included; the cost without VAT is '
-                    'already in expenses',
+                            'already in expenses'
+                        .tr,
               ),
             const SizedBox(height: 8),
             Text(
               [
                 if (f.vat > 0.005 && f.expenseVat > 0.005)
-                  'VAT: ${fmtMoney(f.vat)} on your invoices less '
-                      '${fmtMoney(f.expenseVat)} charged by suppliers, '
-                      '${f.netVat > 0.005
-                          ? 'so ${fmtMoney(f.netVat)} is owed to the tax office.'
-                          : f.netVat < -0.005
-                          ? 'so you have a VAT credit of ${fmtMoney(-f.netVat)} to set against VAT on future invoices.'
-                          : 'so no VAT is owed.'} '
-                      'VAT is not income or cost.'
+                  f.netVat > 0.005
+                      ? 'VAT: {0} on your invoices less {1} charged by '
+                                'suppliers, so {2} is owed to the tax office. '
+                                'VAT is not income or cost.'
+                            .trArgs([
+                              fmtMoney(f.vat),
+                              fmtMoney(f.expenseVat),
+                              fmtMoney(f.netVat),
+                            ])
+                      : f.netVat < -0.005
+                      ? 'VAT: {0} on your invoices less {1} charged by '
+                                'suppliers, so you have a VAT credit of {2} '
+                                'to set against VAT on future invoices. VAT is '
+                                'not income or cost.'
+                            .trArgs([
+                              fmtMoney(f.vat),
+                              fmtMoney(f.expenseVat),
+                              fmtMoney(-f.netVat),
+                            ])
+                      : 'VAT: {0} on your invoices less {1} charged by '
+                                'suppliers, so no VAT is owed. VAT is not '
+                                'income or cost.'
+                            .trArgs([fmtMoney(f.vat), fmtMoney(f.expenseVat)])
                 else if (f.vat > 0.005)
-                  'VAT of ${fmtMoney(f.vat)} on your invoices is owed to the '
-                      'tax office, so it is not counted as income.'
+                  'VAT of {0} on your invoices is owed to the tax office, so '
+                          'it is not counted as income.'
+                      .trArgs([fmtMoney(f.vat)])
                 else if (f.expenseVat > 0.005)
-                  'VAT of ${fmtMoney(f.expenseVat)} charged by suppliers is '
-                      'recoverable, so it is not counted as cost.',
-                'Expenses and profit never appear on client documents.',
+                  'VAT of {0} charged by suppliers is recoverable, so it is '
+                          'not counted as cost.'
+                      .trArgs([fmtMoney(f.expenseVat)]),
+                'Expenses and profit never appear on client documents.'.tr,
               ].join(' '),
               style: TextStyle(color: ak.muted, fontSize: 12),
             ),
@@ -220,8 +243,9 @@ List<Widget> profitTiles(BuildContext context, {DateTime? since}) {
       Text(note, style: TextStyle(fontSize: 12, color: ak.muted)),
     ],
   );
-  String margin(Profit f) =>
-      f.margin == null ? 'no income yet' : '${_margin(f.margin)} margin';
+  String margin(Profit f) => f.margin == null
+      ? 'no income yet'.tr
+      : '{0} margin'.trArgs([_margin(f.margin)]);
   return [
     for (final (p, f) in rows)
       ListTile(
@@ -231,8 +255,10 @@ List<Widget> profitTiles(BuildContext context, {DateTime? since}) {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          'Invoiced ${fmtMoneyShort(f.revenue)} without VAT · '
-          'expenses ${fmtMoneyShort(f.expenses)}',
+          'Invoiced {0} without VAT · expenses {1}'.trArgs([
+            fmtMoneyShort(f.revenue),
+            fmtMoneyShort(f.expenses),
+          ]),
         ),
         trailing: amount(f.profit, margin(f)),
         onTap: () => Navigator.push(
@@ -245,19 +271,26 @@ List<Widget> profitTiles(BuildContext context, {DateTime? since}) {
     if (!outside.isEmpty)
       ListTile(
         leading: const Icon(Icons.receipt_long_outlined),
-        title: const Text('Not on a project'),
+        title: Text('Not on a project'.tr),
         subtitle: Text(
-          'Invoiced ${fmtMoneyShort(outside.revenue)} without VAT'
-          '${outside.expenses > 0.005 ? ' · expenses ${fmtMoneyShort(outside.expenses)}' : ''}'
-          ' · invoices with no project or of a deleted one',
+          outside.expenses > 0.005
+              ? 'Invoiced {0} without VAT · expenses {1} · invoices with no '
+                        'project or of a deleted one'
+                    .trArgs([
+                      fmtMoneyShort(outside.revenue),
+                      fmtMoneyShort(outside.expenses),
+                    ])
+              : 'Invoiced {0} without VAT · invoices with no project or of a '
+                        'deleted one'
+                    .trArgs([fmtMoneyShort(outside.revenue)]),
         ),
         trailing: amount(outside.profit, margin(outside)),
       ),
     if (all.overheads > 0.005)
       ListTile(
         leading: const Icon(Icons.apartment_outlined),
-        title: const Text('Company overheads'),
-        subtitle: const Text('Expenses not booked on a project'),
+        title: Text('Company overheads'.tr),
+        subtitle: Text('Expenses not booked on a project'.tr),
         trailing: Text(
           fmtMoneyShort(-all.overheads),
           style: TextStyle(fontWeight: FontWeight.w800, color: ak.bad),
@@ -265,13 +298,15 @@ List<Widget> profitTiles(BuildContext context, {DateTime? since}) {
       ),
     if (rows.isNotEmpty || !outside.isEmpty || all.overheads > 0.005)
       ListTile(
-        title: const Text(
-          'Total profit',
-          style: TextStyle(fontWeight: FontWeight.w800),
+        title: Text(
+          'Total profit'.tr,
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         subtitle: Text(
-          'Invoiced ${fmtMoneyShort(all.revenue)} without VAT · '
-          'expenses ${fmtMoneyShort(all.expenses)}',
+          'Invoiced {0} without VAT · expenses {1}'.trArgs([
+            fmtMoneyShort(all.revenue),
+            fmtMoneyShort(all.expenses),
+          ]),
         ),
         trailing: amount(all.profit, margin(all)),
       ),

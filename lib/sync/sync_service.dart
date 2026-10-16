@@ -136,8 +136,9 @@ class SyncService extends ChangeNotifier {
       } on Exception catch (e) {
         if (_looksOffline('$e')) rethrow;
         problems.add(
-          'The file "${row['name']}" could not be uploaded yet; it will be '
-          'tried again. ($e)',
+          'The file "{0}" could not be uploaded yet; it will be '
+                  'tried again. ({1})'
+              .trArgs([row['name'], e]),
         );
       }
     }

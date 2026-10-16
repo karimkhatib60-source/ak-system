@@ -56,9 +56,11 @@ class ExpenseTile extends StatelessWidget {
           if (e.number.isNotEmpty) e.number,
           if (e.title.isNotEmpty && e.vendor.isNotEmpty) e.vendor,
           expenseCategoryLabel(e.category),
-          if (showProject) project?.code ?? 'Company',
+          if (showProject) project?.code ?? 'Company'.tr,
           if (e.items.isNotEmpty)
-            '${e.items.length} item${e.items.length == 1 ? '' : 's'}',
+            e.items.length == 1
+                ? '{0} item'.trArgs([e.items.length])
+                : '{0} items'.trArgs([e.items.length]),
           fmtDate(e.date),
         ].join(' · '),
       ),
@@ -81,7 +83,7 @@ class ExpenseTile extends StatelessWidget {
           ),
           if (!e.paid) ...[
             const SizedBox(height: 4),
-            const Pill('Unpaid', color: AkPalette.warn),
+            Pill('Unpaid'.tr, color: AkPalette.warn),
           ],
         ],
       ),
@@ -114,7 +116,7 @@ class CostBreakdown extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'COSTS BY TYPE · WITHOUT VAT',
+              'COSTS BY TYPE · WITHOUT VAT'.tr,
               style: TextStyle(
                 fontSize: 11,
                 letterSpacing: 1.2,
@@ -366,9 +368,10 @@ class _ExpenseFormState extends State<ExpenseForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${tooBig.join(', ')} is over ${fmtSize(maxAttachmentBytes)}. '
-            'Please attach a smaller copy, for example a photo instead of a '
-            'scan.',
+            '{0} is over {1}. '
+                    'Please attach a smaller copy, for example a photo instead '
+                    'of a scan.'
+                .trArgs([tooBig.join(', '), fmtSize(maxAttachmentBytes)]),
           ),
         ),
       );
@@ -381,9 +384,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
     final items = _itemized ? _items : const <LineItem>[];
     if (_itemized && (items.isEmpty || total <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Add at least one item with a rate, or switch to Total only.',
+            'Add at least one item with a rate, or switch to Total only.'.tr,
           ),
         ),
       );
@@ -471,25 +474,25 @@ class _ExpenseFormState extends State<ExpenseForm> {
       appBar: AppBar(
         title: Text(
           widget.expense == null
-              ? 'New expense'
+              ? 'New expense'.tr
               : widget.expense!.number.isEmpty
-              ? 'Expense'
+              ? 'Expense'.tr
               : widget.expense!.number,
         ),
         actions: [
           if (widget.expense != null)
             IconButton(
-              tooltip: 'Delete',
+              tooltip: 'Delete'.tr,
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {
-                if (!await confirmDelete(context, 'this expense')) return;
+                if (!await confirmDelete(context, 'this expense'.tr)) return;
                 await repo.deleteExpense(widget.expense!);
                 if (context.mounted) Navigator.pop(context);
               },
             ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: FilledButton(onPressed: _save, child: Text('Save'.tr)),
           ),
         ],
       ),
@@ -507,13 +510,14 @@ class _ExpenseFormState extends State<ExpenseForm> {
                   Expanded(
                     child: Text(
                       'Internal to AK. Expenses never appear on client '
-                      'documents.',
+                              'documents.'
+                          .tr,
                       style: TextStyle(color: ak.muted, fontSize: 12.5),
                     ),
                   ),
                 ],
               ),
-              const SectionHeader('Bill'),
+              SectionHeader('Bill'.tr),
               RawAutocomplete<String>(
                 textEditingController: _vendor,
                 focusNode: _vendorFocus,
@@ -530,13 +534,13 @@ class _ExpenseFormState extends State<ExpenseForm> {
                       controller: ctrl,
                       focusNode: focus,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Supplier',
-                        hintText: 'Company, subcontractor or person paid',
+                      decoration: InputDecoration(
+                        labelText: 'Supplier'.tr,
+                        hintText: 'Company, subcontractor or person paid'.tr,
                       ),
                     ),
                 optionsViewBuilder: (context, onSelected, options) => Align(
-                  alignment: Alignment.topLeft,
+                  alignment: AlignmentDirectional.topStart,
                   child: Material(
                     elevation: 4,
                     borderRadius: BorderRadius.circular(10),
@@ -568,16 +572,16 @@ class _ExpenseFormState extends State<ExpenseForm> {
                   Expanded(
                     child: TextFormField(
                       controller: _reference,
-                      decoration: const InputDecoration(
-                        labelText: 'Supplier invoice no.',
-                        hintText: 'As on their bill',
+                      decoration: InputDecoration(
+                        labelText: 'Supplier invoice no.'.tr,
+                        hintText: 'As on their bill'.tr,
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: DateField(
-                      label: 'Date',
+                      label: 'Date'.tr,
                       value: _date,
                       onChanged: (d) => setState(() => _date = d ?? _date),
                     ),
@@ -588,9 +592,9 @@ class _ExpenseFormState extends State<ExpenseForm> {
               TextFormField(
                 controller: _title,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'e.g. Porcelain tiles, kitchen and bathrooms',
+                decoration: InputDecoration(
+                  labelText: 'Description'.tr,
+                  hintText: 'e.g. Porcelain tiles, kitchen and bathrooms'.tr,
                 ),
               ),
               gap,
@@ -600,15 +604,15 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     : _projectId,
                 isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: 'For',
+                  labelText: 'For'.tr,
                   helperText: _projectId == null
-                      ? 'Company running cost (overheads), not on a project'
-                      : "It lowers this project's profit",
+                      ? 'Company running cost (overheads), not on a project'.tr
+                      : "It lowers this project's profit".tr,
                 ),
                 items: [
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: null,
-                    child: Text('Company (overheads)'),
+                    child: Text('Company (overheads)'.tr),
                   ),
                   for (final p in repo.projects)
                     DropdownMenuItem(
@@ -626,7 +630,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                 key: ValueKey(_category),
                 initialValue: _category,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Type of cost'),
+                decoration: InputDecoration(labelText: 'Type of cost'.tr),
                 items: [
                   for (final c in ExpenseCategory.values)
                     DropdownMenuItem(
@@ -643,15 +647,15 @@ class _ExpenseFormState extends State<ExpenseForm> {
                 onChanged: (v) => setState(() => _category = v!),
               ),
               SectionHeader(
-                'Amount',
+                'Amount'.tr,
                 trailing: SegmentedButton<bool>(
                   showSelectedIcon: false,
                   style: const ButtonStyle(
                     visualDensity: VisualDensity.compact,
                   ),
-                  segments: const [
-                    ButtonSegment(value: true, label: Text('Items')),
-                    ButtonSegment(value: false, label: Text('Total only')),
+                  segments: [
+                    ButtonSegment(value: true, label: Text('Items'.tr)),
+                    ButtonSegment(value: false, label: Text('Total only'.tr)),
                   ],
                   selected: {_itemized},
                   onSelectionChanged: (v) {
@@ -676,7 +680,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     TextButton.icon(
                       onPressed: () => setState(() => _rows.add(_Row())),
                       icon: const Icon(Icons.add),
-                      label: const Text('Item'),
+                      label: Text('Item'.tr),
                     ),
                     TextButton.icon(
                       onPressed: () async {
@@ -684,16 +688,19 @@ class _ExpenseFormState extends State<ExpenseForm> {
                           context,
                           intro:
                               'Paste the lines of the supplier\'s bill, from '
-                              'Excel or written for you in the chat. One item '
-                              'per line: description, unit, quantity, rate.',
+                                      'Excel or written for you in the chat. '
+                                      'One item per line: description, unit, '
+                                      'quantity, rate.'
+                                  .tr,
                           example:
                               'Porcelain tiles 60x60 | m² | 85 | 22\n'
-                              'Tile adhesive | bag | 40 | 6.5',
+                                      'Tile adhesive | bag | 40 | 6.5'
+                                  .tr,
                         );
                         if (items != null) _addRows(items);
                       },
                       icon: const Icon(Icons.content_paste),
-                      label: const Text('Paste items'),
+                      label: Text('Paste items'.tr),
                     ),
                   ],
                 ),
@@ -704,27 +711,29 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     decimal: true,
                   ),
                   decoration: InputDecoration(
-                    labelText: _hasVat ? 'Total, VAT included' : 'Total',
+                    labelText: _hasVat ? 'Total, VAT included'.tr : 'Total'.tr,
                     prefixText: '\$ ',
                   ),
                   onChanged: (_) => setState(() {}),
-                  validator: (v) =>
-                      (_parse(v ?? '') ?? 0) <= 0 ? 'Enter the amount' : null,
+                  validator: (v) => (_parse(v ?? '') ?? 0) <= 0
+                      ? 'Enter the amount'.tr
+                      : null,
                 ),
               const SizedBox(height: 6),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _hasVat,
                 onChanged: (v) => setState(() => _hasVat = v),
-                title: const Text('The supplier charged VAT'),
-                subtitle: const Text(
+                title: Text('The supplier charged VAT'.tr),
+                subtitle: Text(
                   'VAT you pay suppliers is deducted from the VAT on your '
-                  'invoices, so profit counts the cost without it.',
+                          'invoices, so profit counts the cost without it.'
+                      .tr,
                 ),
               ),
               if (_hasVat)
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: SizedBox(
@@ -734,8 +743,8 @@ class _ExpenseFormState extends State<ExpenseForm> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'VAT rate',
+                        decoration: InputDecoration(
+                          labelText: 'VAT rate'.tr,
                           suffixText: '%',
                         ),
                         onChanged: (_) => setState(() {}),
@@ -748,27 +757,31 @@ class _ExpenseFormState extends State<ExpenseForm> {
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                   child: Column(
                     children: [
-                      totalRow(_hasVat ? 'Cost without VAT' : 'Subtotal', sub),
-                      if (_hasVat) totalRow('VAT ${_plain(_vatRate)}%', vat),
+                      totalRow(
+                        _hasVat ? 'Cost without VAT'.tr : 'Subtotal'.tr,
+                        sub,
+                      ),
+                      if (_hasVat)
+                        totalRow('VAT {0}%'.trArgs([_plain(_vatRate)]), vat),
                       const Divider(height: 12),
-                      totalRow('Total of the bill', total, bold: true),
+                      totalRow('Total of the bill'.tr, total, bold: true),
                     ],
                   ),
                 ),
               ),
-              const SectionHeader('Payment'),
+              SectionHeader('Payment'.tr),
               SegmentedButton<bool>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: true,
-                    icon: Icon(Icons.check_circle_outline),
-                    label: Text('Paid'),
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: Text('Paid'.tr),
                   ),
                   ButtonSegment(
                     value: false,
-                    icon: Icon(Icons.schedule),
-                    label: Text('Not paid yet'),
+                    icon: const Icon(Icons.schedule),
+                    label: Text('Not paid yet'.tr),
                   ),
                 ],
                 selected: {_paid},
@@ -781,7 +794,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
               if (_paid)
                 DropdownButtonFormField<PaymentMethod?>(
                   initialValue: _method,
-                  decoration: const InputDecoration(labelText: 'Paid by'),
+                  decoration: InputDecoration(labelText: 'Paid by'.tr),
                   items: [
                     for (final m in PaymentMethod.values)
                       DropdownMenuItem(
@@ -794,22 +807,25 @@ class _ExpenseFormState extends State<ExpenseForm> {
               else
                 Text(
                   'Shown as a bill still to pay to the supplier. Open it and '
-                  'mark it paid when you pay.',
+                          'mark it paid when you pay.'
+                      .tr,
                   style: TextStyle(color: ak.muted),
                 ),
               SectionHeader(
-                'Supplier invoice',
+                'Supplier invoice'.tr,
                 trailing: TextButton.icon(
                   onPressed: _attach,
                   icon: const Icon(Icons.attach_file),
-                  label: const Text('Attach'),
+                  label: Text('Attach'.tr),
                 ),
               ),
               if (saved.isEmpty && _added.isEmpty)
                 Text(
                   'Attach the supplier\'s invoice or receipt (PDF or photo) '
-                  'to keep it with this expense. The amounts are not read '
-                  'from the file: enter the items or the total above.',
+                          'to keep it with this expense. The amounts are not '
+                          'read from the file: enter the items or the total '
+                          'above.'
+                      .tr,
                   style: TextStyle(color: ak.muted),
                 ),
               for (final a in saved)
@@ -823,14 +839,16 @@ class _ExpenseFormState extends State<ExpenseForm> {
                       if (bytes == null) {
                         problem =
                             'This file is not on this device yet. It opens '
-                            'once the device that added it has synced.';
+                                    'once the device that added it has synced.'
+                                .tr;
                       } else if (context.mounted) {
                         await openAttachment(context, a, bytes);
                       }
                     } on Exception catch (_) {
                       problem =
                           'The file could not be opened. Check the internet '
-                          'connection and try again.';
+                                  'connection and try again.'
+                              .tr;
                     }
                     if (problem != null) {
                       messenger.showSnackBar(SnackBar(content: Text(problem)));
@@ -846,13 +864,13 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     () => _added.removeWhere((x) => x.$1.id == a.id),
                   ),
                 ),
-              const SectionHeader('Notes'),
+              SectionHeader('Notes'.tr),
               TextFormField(
                 controller: _notes,
                 minLines: 2,
                 maxLines: 6,
-                decoration: const InputDecoration(
-                  hintText: 'Anything to remember about this bill',
+                decoration: InputDecoration(
+                  hintText: 'Anything to remember about this bill'.tr,
                 ),
               ),
             ],
@@ -871,7 +889,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 4, 10),
         child: Column(
           children: [
             Row(
@@ -890,12 +908,12 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     minLines: 1,
                     maxLines: 3,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: small('Item'),
+                    decoration: small('Item'.tr),
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Remove item',
+                  tooltip: 'Remove item'.tr,
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () => setState(() {
                     _rows.removeAt(k).dispose();
@@ -906,7 +924,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
             ),
             const SizedBox(height: 6),
             Padding(
-              padding: const EdgeInsets.only(left: 20, right: 8),
+              padding: const EdgeInsetsDirectional.only(start: 20, end: 8),
               child: Row(
                 children: [
                   Expanded(
@@ -917,7 +935,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: small('Qty'),
+                      decoration: small('Qty'.tr),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
@@ -927,7 +945,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     child: TextFormField(
                       controller: r.unit,
                       style: figures,
-                      decoration: small('Unit'),
+                      decoration: small('Unit'.tr),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -939,7 +957,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: small('Rate').copyWith(prefixText: '\$'),
+                      decoration: small('Rate'.tr).copyWith(prefixText: '\$'),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
@@ -948,11 +966,11 @@ class _ExpenseFormState extends State<ExpenseForm> {
                     width: 80,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
+                      alignment: AlignmentDirectional.centerEnd,
                       child: Text(
                         fmtMoney(item.amount),
                         maxLines: 1,
-                        textAlign: TextAlign.right,
+                        textAlign: TextAlign.end,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontFeatures: [FontFeature.tabularFigures()],
@@ -987,7 +1005,7 @@ class _ExpenseFormState extends State<ExpenseForm> {
       subtitle: Text(fmtSize(a.size)),
       onTap: open,
       trailing: IconButton(
-        tooltip: 'Remove file',
+        tooltip: 'Remove file'.tr,
         icon: const Icon(Icons.close),
         onPressed: remove,
       ),
@@ -1016,7 +1034,7 @@ Future<void> openAttachment(
             title: Text(a.name, overflow: TextOverflow.ellipsis),
             actions: [
               IconButton(
-                tooltip: 'Save a copy',
+                tooltip: 'Save a copy'.tr,
                 icon: const Icon(Icons.download_outlined),
                 onPressed: () => _saveCopy(a, bytes),
               ),

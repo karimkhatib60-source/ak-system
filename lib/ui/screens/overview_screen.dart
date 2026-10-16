@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/advisor.dart';
@@ -68,24 +67,27 @@ class OverviewScreen extends StatelessWidget {
     final name = repo.currentMember?.name.split(' ').first ?? 'Karim';
     final hour = now.hour;
     final greeting = hour < 12
-        ? 'Good morning'
+        ? 'Good morning, {0}'.trArgs([name])
         : hour < 18
-        ? 'Good afternoon'
-        : 'Good evening';
+        ? 'Good afternoon, {0}'.trArgs([name])
+        : 'Good evening, {0}'.trArgs([name]);
 
     if (projects.isEmpty) {
       return EmptyState(
         icon: Icons.architecture,
-        title: '$greeting, $name',
+        title: greeting,
         message: repo.isOwner
             ? 'Start by adding a client and a project. Everything else, tasks, '
-                  'deliverables and deadlines, hangs off the project.'
-            : 'You will see your projects here once you are added to one.',
+                      'deliverables and deadlines, hangs off the project.'
+                  .tr
+            : 'You will see your projects here once you are added to one.'.tr,
       );
     }
 
     final ak = AkColors.of(context);
-    final dateLine = DateFormat('EEEE d MMMM yyyy').format(now).toUpperCase();
+    final dateLine = isArabic
+        ? longDayIn(appLang, now)
+        : longDayIn(appLang, now).toUpperCase();
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
@@ -102,25 +104,32 @@ class OverviewScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.4,
+                    // Spacing would break up joined Arabic letters.
+                    letterSpacing: isArabic ? 0 : 1.4,
                     color: const Color(0xFF8FB0F7),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '$greeting, $name',
+                  greeting,
                   style: TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
+                    letterSpacing: isArabic ? 0 : -0.5,
                     color: ak.onChrome,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   lateTasks.isEmpty && lateDels.isEmpty
-                      ? 'Nothing is late. ${dueSoon.length} due this week.'
-                      : '${lateTasks.length + lateDels.length} late item${lateTasks.length + lateDels.length == 1 ? ' needs' : 's need'} attention.',
+                      ? 'Nothing is late. {0} due this week.'.trArgs([
+                          dueSoon.length,
+                        ])
+                      : lateTasks.length + lateDels.length == 1
+                      ? '1 late item needs attention.'.tr
+                      : '{0} late items need attention.'.trArgs([
+                          lateTasks.length + lateDels.length,
+                        ]),
                   style: TextStyle(fontSize: 14, color: ak.onChromeMuted),
                 ),
                 const SizedBox(height: 18),
@@ -133,26 +142,26 @@ class OverviewScreen extends StatelessWidget {
                       runSpacing: 10,
                       children: [
                         _Tile(
-                          'Active projects',
+                          'Active projects'.tr,
                           '$active',
                           Icons.folder_outlined,
                           w,
                         ),
                         _Tile(
-                          'Open tasks',
+                          'Open tasks'.tr,
                           '${open.length}',
                           Icons.checklist,
                           w,
                         ),
                         _Tile(
-                          'Late',
+                          'Late'.tr,
                           '${lateTasks.length + lateDels.length}',
                           Icons.warning_amber_rounded,
                           w,
                           alert: lateTasks.isNotEmpty || lateDels.isNotEmpty,
                         ),
                         _Tile(
-                          'With clients',
+                          'With clients'.tr,
                           '${waiting.length}',
                           Icons.hourglass_top_rounded,
                           w,
@@ -171,7 +180,7 @@ class OverviewScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (lateTasks.isNotEmpty || lateDels.isNotEmpty) ...[
-                const SectionHeader('Late'),
+                SectionHeader('Late'.tr),
                 _Group([
                   for (final d in lateDels) DeliverableTile(d),
                   for (final t in lateTasks) TaskTile(t),
@@ -179,31 +188,35 @@ class OverviewScreen extends StatelessWidget {
               ],
               if (unpaid.isNotEmpty) ...[
                 SectionHeader(
-                  'To collect · ${fmtMoneyShort(unpaid.fold(0.0, (s, i) => s + repo.balanceOf(i)))}',
+                  'To collect · {0}'.trArgs([
+                    fmtMoneyShort(
+                      unpaid.fold(0.0, (s, i) => s + repo.balanceOf(i)),
+                    ),
+                  ]),
                 ),
                 _Group([
                   for (final i in unpaid) InvoiceTile(i, showProject: true),
                 ]),
               ],
               if (revise.isNotEmpty) ...[
-                const SectionHeader('Client asked for changes'),
+                SectionHeader('Client asked for changes'.tr),
                 _Group([for (final d in revise) DeliverableTile(d)]),
               ],
-              const SectionHeader('Due in the next 7 days'),
+              SectionHeader('Due in the next 7 days'.tr),
               if (dueSoon.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text('Nothing due this week.'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text('Nothing due this week.'.tr),
                 ),
               if (dueSoon.isNotEmpty)
                 _Group([for (final t in dueSoon) TaskTile(t)]),
               if (waiting.isNotEmpty) ...[
-                const SectionHeader('Waiting for client approval'),
+                SectionHeader('Waiting for client approval'.tr),
                 _Group([for (final d in waiting) DeliverableTile(d)]),
               ],
               if (advice.isNotEmpty) ...[
                 SectionHeader(
-                  'To cover',
+                  'To cover'.tr,
                   trailing: TextButton(
                     onPressed: () => Navigator.push(
                       context,
@@ -211,7 +224,7 @@ class OverviewScreen extends StatelessWidget {
                         builder: (_) => const AssistantScreen(),
                       ),
                     ),
-                    child: Text('See all ${advice.length}'),
+                    child: Text('See all {0}'.trArgs([advice.length])),
                   ),
                 ),
                 _Group([for (final a in advice.take(5)) AdviceTile(a)]),

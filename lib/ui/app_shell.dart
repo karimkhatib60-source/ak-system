@@ -24,15 +24,15 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  static const _all = [
-    (Icons.dashboard_outlined, Icons.dashboard, 'Overview'),
-    (Icons.folder_outlined, Icons.folder, 'Projects'),
-    (Icons.task_alt_outlined, Icons.task_alt, 'Work'),
-    (Icons.people_outline, Icons.people, 'Clients'),
+  static List<(IconData, IconData, String)> get _all => [
+    (Icons.dashboard_outlined, Icons.dashboard, 'Overview'.tr),
+    (Icons.folder_outlined, Icons.folder, 'Projects'.tr),
+    (Icons.task_alt_outlined, Icons.task_alt, 'Work'.tr),
+    (Icons.people_outline, Icons.people, 'Clients'.tr),
     (
       Icons.account_balance_wallet_outlined,
       Icons.account_balance_wallet,
-      'Finance',
+      'Finance'.tr,
     ),
   ];
 
@@ -74,13 +74,13 @@ class _AppShellState extends State<AppShell> {
     if (_index >= _pages.length) _index = 0;
     final actions = [
       IconButton(
-        tooltip: 'To cover',
+        tooltip: 'To cover'.tr,
         icon: const Icon(Icons.fact_check_outlined),
         onPressed: _openAssistant,
       ),
       const SyncBadge(),
       IconButton(
-        tooltip: 'Settings',
+        tooltip: 'Settings'.tr,
         icon: const Icon(Icons.settings_outlined),
         onPressed: _openSettings,
       ),

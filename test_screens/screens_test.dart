@@ -51,6 +51,17 @@ Future<void> _loadFonts() async {
     );
   }
   await manrope.load();
+  final arabic = FontLoader('IBMPlexSansArabic');
+  for (final w in [400, 500, 600, 700]) {
+    arabic.addFont(
+      Future.value(
+        ByteData.sublistView(
+          File('assets/fonts/IBMPlexSansArabic-$w.ttf').readAsBytesSync(),
+        ),
+      ),
+    );
+  }
+  await arabic.load();
 }
 
 void main() {
@@ -747,6 +758,25 @@ void main() {
         ),
       );
       await repo.setReportTheme(reportThemes.first);
+      // The same documents in Arabic, right to left.
+      await repo.setDocLanguage(AppLang.ar);
+      File('test_screens/out/sample_invoice_ar.pdf')
+          .writeAsBytesSync(await buildPdf(repo, repo.invoice('i1')!));
+      File('test_screens/out/sample_quotation_ar.pdf')
+          .writeAsBytesSync(await buildPdf(repo, repo.quotation('q1')!));
+      File('test_screens/out/sample_receipt_ar.pdf').writeAsBytesSync(
+        await buildReceiptPdf(
+          repo,
+          repo.payments.firstWhere((p) => p.id == 'pay2'),
+        ),
+      );
+      File('test_screens/out/sample_statement_ar.pdf').writeAsBytesSync(
+        await buildStatementPdf(repo, buildStatement(repo, 'c3')),
+      );
+      File('test_screens/out/sample_project_statement_ar.pdf').writeAsBytesSync(
+        await buildProjectStatementPdf(repo, buildProjectStatement(repo, 'p3')),
+      );
+      await repo.setDocLanguage(AppLang.en);
     });
   });
 
@@ -1056,6 +1086,82 @@ void main() {
     await expectLater(
       find.byType(AkApp),
       matchesGoldenFile('out/laptop_deliverable.png'),
+    );
+  });
+
+  // The same app in Arabic, right to left.
+  Future<void> arabic(WidgetTester tester) async {
+    final repo = tester.element(find.byType(AppShell)).read<Repository>();
+    await tester.runAsync(() => repo.setAppLanguage(AppLang.ar));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('arabic phone', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await arabic(tester);
+    expect(
+      Directionality.of(tester.element(find.byType(AppShell))),
+      TextDirection.rtl,
+    );
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_overview.png'),
+    );
+    await tester.tap(find.byType(NavigationDestination).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Villa Byblos'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_project_detail.png'),
+    );
+  });
+
+  testWidgets('arabic phone lists', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await arabic(tester);
+    await tester.tap(find.byType(NavigationDestination).at(2));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_tasks.png'),
+    );
+  });
+
+  testWidgets('arabic phone finance', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await arabic(tester);
+    await tester.tap(find.byType(NavigationDestination).at(4));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_finance.png'),
+    );
+    await tester.tap(find.text('Advance payment 30%'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_invoice.png'),
+    );
+  });
+
+  testWidgets('arabic phone settings', (tester) async {
+    await pump(tester, const Size(400, 1400));
+    await arabic(tester);
+    await tester.tap(find.byTooltip('الإعدادات').first);
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_settings.png'),
+    );
+  });
+
+  testWidgets('arabic laptop', (tester) async {
+    await pump(tester, const Size(1366, 768));
+    await arabic(tester);
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_laptop_overview.png'),
     );
   });
 }

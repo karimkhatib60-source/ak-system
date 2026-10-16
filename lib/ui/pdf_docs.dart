@@ -20,12 +20,305 @@ PdfColor get _muted => PdfColor.fromInt(_colours.muted);
 PdfColor get _line => PdfColor.fromInt(_colours.line);
 PdfColor get _soft => PdfColor.fromInt(_colours.soft);
 
+/// Whether the document being built reads right to left (Arabic).
+bool get _rtl => docLang == AppLang.ar;
+
+/// Page direction of the document being built.
+pw.TextDirection get _dir => _rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
+
+/// Figures sit at the outer end of their column: on the right in English,
+/// on the left in Arabic.
+pw.TextAlign get _endAlign => _rtl ? pw.TextAlign.left : pw.TextAlign.right;
+
+/// Letter spacing for small capital labels; Arabic letters join, so none.
+double _spacing(double v) => _rtl ? 0 : v;
+
+/// Date column width: Arabic month names (تشرين الثاني) need more room.
+double get _dateWidth => _rtl ? 88 : 66;
+
+/// Arabic has no capitals, so its small labels are set a point larger.
+double _labelSize(double v) => _rtl ? v + 1 : v;
+
+/// The Arabic font, for Arabic typed by the user in an English document.
+pw.Font? _arabic;
+pw.Font? _arabicBold;
+
 Future<pw.ThemeData> _theme(Repository repo) async {
   _colours = repo.reportTheme;
-  Future<pw.Font> f(String w) async =>
-      pw.Font.ttf(await rootBundle.load('assets/fonts/Manrope-$w.ttf'));
-  return pw.ThemeData.withFont(base: await f('400'), bold: await f('700'));
+  Future<ByteData> f(String name) => rootBundle.load('assets/fonts/$name.ttf');
+  _arabic = _AdvanceFont(await f('IBMPlexSansArabic-400'));
+  _arabicBold = _AdvanceFont(await f('IBMPlexSansArabic-700'));
+  // IBM Plex Sans Arabic also has Latin letters and digits.
+  if (_rtl) return pw.ThemeData.withFont(base: _arabic, bold: _arabicBold);
+  return pw.ThemeData.withFont(
+    base: pw.Font.ttf(await f('Manrope-400')),
+    bold: pw.Font.ttf(await f('Manrope-700')),
+    fontFallback: [_arabic!],
+  );
 }
+
+/// A font measured by its advance widths. The pdf package places the words
+/// of right-to-left lines by their ink width, without side bearings, which
+/// leaves uneven gaps in Arabic (a word ending in ر almost touches the next
+/// one); measured by advances, words are spaced as the font sets them.
+class _AdvanceFont extends pw.TtfFont {
+  _AdvanceFont(super.data);
+
+  @override
+  PdfFont buildFont(PdfDocument pdfDocument) =>
+      _AdvancePdfFont(pdfDocument, data);
+}
+
+class _AdvancePdfFont extends PdfTtfFont {
+  _AdvancePdfFont(super.pdfDocument, super.bytes);
+
+  @override
+  PdfFontMetrics stringMetrics(String s, {double letterSpacing = 0}) {
+    final m = super.stringMetrics(s, letterSpacing: letterSpacing);
+    return PdfFontMetrics(
+      left: 0,
+      top: m.top,
+      right: m.advanceWidth,
+      bottom: m.bottom,
+      ascent: m.ascent,
+      descent: m.descent,
+      advanceWidth: m.advanceWidth,
+      leftBearing: 0,
+    );
+  }
+}
+
+final _arabicLetters = RegExp(
+  r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]',
+);
+
+/// Latin letters, which read left to right inside Arabic text.
+final _latinLetters = RegExp(r'[A-Za-z\u00C0-\u024F]');
+
+/// Text in the document's direction. Text that reads the other way (Latin
+/// in an Arabic document, Arabic typed by the user in an English one) keeps
+/// its own direction, so its words and lines stay in order, and Arabic is
+/// set in the Arabic font. Its lines start on the document's side unless
+/// [align] says otherwise.
+pw.Widget _text(String s, {pw.TextStyle? style, pw.TextAlign? align}) {
+  final arabic = _arabicLetters.hasMatch(s);
+  final own = arabic == _rtl;
+  if (!own && arabic) {
+    style = (style ?? const pw.TextStyle()).copyWith(
+      fontNormal: _arabic,
+      fontBold: _arabicBold,
+    );
+  }
+  if (!own) align ??= _rtl ? pw.TextAlign.right : pw.TextAlign.left;
+  // A short line of Arabic with Latin words in it, such as a statement line
+  // naming an invoice; long texts may run over pages, which [_MixedLines]
+  // cannot, and keep the pdf package's own line breaking.
+  if (arabic &&
+      _latinLetters.hasMatch(s) &&
+      !s.contains('\n') &&
+      s.length <= 240) {
+    return _MixedLines(s, style, align ?? pw.TextAlign.start);
+  }
+  if (own) return pw.Text(s, style: style, textAlign: align);
+  return pw.Text(
+    s,
+    style: style,
+    textDirection: arabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+    textAlign: align,
+  );
+}
+
+/// Arabic letters proper, which set the direction of the text around them
+/// (Arabic punctuation, digits and vowel marks do not).
+final _arabicStrong = RegExp(
+  r'[\u0620-\u064A\u066E-\u06D3\u06FA-\u06FF\u0750-\u077F\uFB50-\uFDFF'
+  r'\uFE70-\uFEFF]',
+);
+
+/// Text with both Arabic and Latin words in it, set right to left (the pdf
+/// package shapes Arabic only so). The package puts the words of a paragraph
+/// in display order before breaking it into lines, so a phrase in the other
+/// direction cut by a line break has its words on the wrong lines (the end
+/// of the phrase on the first line, its start on the next), and it has no
+/// rule pairing brackets, so "(Villa Byblos)" before Arabic loses its
+/// closing bracket to the far side. Here the text is broken into lines in
+/// reading order first, and each line is set as spans, one for each run of
+/// words in one direction, which the package lays out from right to left.
+class _MixedLines extends pw.Widget {
+  _MixedLines(this.text, this.style, this.align);
+
+  final String text;
+  final pw.TextStyle? style;
+  final pw.TextAlign align;
+  pw.Widget? _child;
+
+  pw.Text _line(String s) => pw.Text(
+    s,
+    style: style,
+    textAlign: align,
+    textDirection: pw.TextDirection.rtl,
+  );
+
+  double _width(pw.Context context, String s) =>
+      (_line(s)..layout(context, const pw.BoxConstraints())).box!.width;
+
+  /// Whether the first letter that sets a direction in [s] is Latin.
+  static bool _latinFirst(String s) {
+    final a = s.indexOf(_arabicStrong), l = s.indexOf(_latinLetters);
+    return l >= 0 && (a < 0 || l < a);
+  }
+
+  /// Punctuation ending a run of words in the other direction: it belongs
+  /// to the text around the run, so it is set after the run, not inside it.
+  static final _tail = RegExp(r'[\u060C\u061B\u061F.,:;!?]+$');
+
+  /// One line of the text, its words given with the run each belongs to
+  /// (null outside a run) and where the punctuation ending a run starts.
+  pw.Widget _setLine(
+    List<String> words,
+    List<int?> runs,
+    Map<int, int> tails,
+    int from,
+    int to,
+    bool rtl,
+  ) {
+    final spans = <pw.InlineSpan>[];
+    void add(String s) => spans.add(pw.TextSpan(text: s));
+    var i = from;
+    while (i < to) {
+      var end = i;
+      while (end + 1 < to && runs[end + 1] == runs[i]) {
+        end++;
+      }
+      if (spans.isNotEmpty) add(' ');
+      final part = words.sublist(i, end + 1);
+      final cut = runs[i] == null ? null : tails[end];
+      if (cut != null) {
+        part.last = part.last.substring(0, cut);
+        add(part.join(' '));
+        final rest = words[end].substring(cut);
+        add(rtl ? _rtlSigns(rest) : rest);
+      } else if (rtl && runs[i] == null && !part.any(_arabicStrong.hasMatch)) {
+        // Figures and signs alone would be read left to right: put them in
+        // right-to-left order by hand.
+        add(part.reversed.map(_rtlSigns).join(' '));
+      } else {
+        add(part.join(' '));
+      }
+      i = end + 1;
+    }
+    return pw.RichText(
+      // The spans go from right to left; in a left-to-right text, in reverse.
+      text: pw.TextSpan(
+        style: style,
+        children: rtl ? spans : spans.reversed.toList(),
+      ),
+      textAlign: align,
+      textDirection: pw.TextDirection.rtl,
+    );
+  }
+
+  /// Figures and signs as they show in right-to-left text: the figures read
+  /// left to right, the signs around them ($, %) in reverse, brackets
+  /// mirrored, as the pdf package sets them after Arabic words.
+  static String _rtlSigns(String w) {
+    const mirror = {'(': ')', ')': '(', '[': ']', ']': '['};
+    return [
+      for (final m in RegExp(r'[0-9]+(?:[.,][0-9]+)*|.').allMatches(w))
+        mirror[m[0]] ?? m[0]!,
+    ].reversed.join();
+  }
+
+  @override
+  void layout(
+    pw.Context context,
+    pw.BoxConstraints constraints, {
+    bool parentUsesSize = false,
+  }) {
+    final words = text.split(' ');
+    final rtl = !_latinFirst(text);
+    // 1: a word in the other direction, 2: one in the text's direction,
+    // 3: figures (they join a run they follow), 0: signs.
+    final kind = [
+      for (final w in words)
+        if (_arabicStrong.hasMatch(w))
+          rtl ? 2 : 1
+        else if (_latinLetters.hasMatch(w))
+          rtl ? 1 : 2
+        else if (w.contains(RegExp('[0-9]')))
+          3
+        else
+          0,
+    ];
+    // Runs in the other direction, with the figures and signs between their
+    // words, and the punctuation that ends each.
+    final runs = List<int?>.filled(words.length, null);
+    final tails = <int, int>{};
+    for (var i = 0; i < words.length; i++) {
+      if (kind[i] != 1) continue;
+      var end = i;
+      for (var k = i; k < words.length && kind[k] != 2; k++) {
+        if (kind[k] == 1 || kind[k] == 3) end = k;
+      }
+      for (var k = i; k <= end; k++) {
+        runs[k] = i;
+      }
+      final t = _tail.firstMatch(words[end]);
+      if (t != null && t.start > 0) tails[end] = t.start;
+      i = end;
+    }
+    // Lines broken in reading order.
+    final max = constraints.maxWidth + 0.00001;
+    final breaks = <int>[0];
+    if (constraints.hasBoundedWidth && _width(context, text) > max) {
+      for (var k = 1; k < words.length; k++) {
+        final line = words.sublist(breaks.last, k + 1).join(' ');
+        if (_width(context, line) > max) breaks.add(k);
+      }
+    }
+    breaks.add(words.length);
+    // A "·" between parts is dropped where a line breaks next to it.
+    final lines = <pw.Widget>[];
+    for (var n = 0; n + 1 < breaks.length; n++) {
+      var from = breaks[n], to = breaks[n + 1];
+      while (to > from + 1 && words[to - 1] == '·') {
+        to--;
+      }
+      while (from + 1 < to && words[from] == '·') {
+        from++;
+      }
+      lines.add(_setLine(words, runs, tails, from, to, rtl));
+    }
+    _child = lines.length == 1
+        ? lines.single
+        : pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: lines,
+          );
+    _child!.layout(context, constraints, parentUsesSize: parentUsesSize);
+    box = _child!.box;
+  }
+
+  @override
+  void paint(pw.Context context) {
+    super.paint(context);
+    // The child is drawn where its parent placed this widget.
+    _child!
+      ..box = box
+      ..paint(context);
+  }
+}
+
+/// Table cells in reading order: in Arabic the first column is on the right.
+List<T> _cols<T>(List<T> cells) => _rtl ? cells.reversed.toList() : cells;
+
+/// Column widths matching [_cols].
+Map<int, pw.TableColumnWidth> _colWidths(
+  Map<int, pw.TableColumnWidth> widths,
+  int count,
+) => _rtl
+    ? {for (final e in widths.entries) count - 1 - e.key: e.value}
+    : widths;
 
 /// Builds the branded PDF for a quotation or an invoice.
 Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
@@ -48,21 +341,18 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
 
   final pdf = pw.Document(
     theme: await _theme(repo),
-    title: '$number ${isInvoice ? 'Invoice' : 'Quotation'}',
+    title: '$number ${isInvoice ? 'Invoice'.td : 'Quotation'.td}',
     author: repo.companyName,
   );
 
-  pw.Widget label(String s) => pw.Text(
-    s.toUpperCase(),
-    style: pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
-  );
+  const label = _label;
 
   pw.Widget moneyRow(String l, double v, {bool bold = false}) => pw.Padding(
     padding: const pw.EdgeInsets.symmetric(vertical: 2.5),
     child: pw.Row(
       children: [
         pw.Expanded(
-          child: pw.Text(
+          child: _text(
             l,
             style: pw.TextStyle(
               fontSize: bold ? 11 : 9.5,
@@ -70,7 +360,7 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
             ),
           ),
         ),
-        pw.Text(
+        _text(
           fmtMoney(v),
           style: pw.TextStyle(
             fontSize: bold ? 11 : 9.5,
@@ -85,8 +375,9 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
+      textDirection: _dir,
       header: (ctx) =>
-          _header(repo, isInvoice ? 'INVOICE' : 'QUOTATION', number),
+          _header(repo, isInvoice ? 'INVOICE'.td : 'QUOTATION'.td, number),
       footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         // Parties and dates.
@@ -97,9 +388,9 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  label(isInvoice ? 'Bill to' : 'Prepared for'),
+                  label(isInvoice ? 'Bill to'.td : 'Prepared for'.td),
                   pw.SizedBox(height: 3),
-                  pw.Text(
+                  _text(
                     client?.name ?? '—',
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
@@ -107,16 +398,16 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
                     ),
                   ),
                   if (client != null && client.company.isNotEmpty)
-                    pw.Text(
+                    _text(
                       client.company,
                       style: const pw.TextStyle(fontSize: 9),
                     ),
                   if (client != null)
-                    pw.Text(
+                    _text(
                       [
                         client.phone,
                         client.email,
-                        client.country,
+                        client.country.td,
                       ].where((s) => s.isNotEmpty).join(' · '),
                       style: pw.TextStyle(fontSize: 9, color: _muted),
                     ),
@@ -134,15 +425,15 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _kv('Date', fmtDate(date)),
+                  _kv('Date'.td, fmtDocDate(date)),
                   if (second != null)
                     _kv(
-                      isInvoice ? 'Payment due' : 'Valid until',
-                      fmtDate(second),
+                      isInvoice ? 'Payment due'.td : 'Valid until'.td,
+                      fmtDocDate(second),
                     ),
-                  if (project != null) _kv('Project', project.code),
+                  if (project != null) _kv('Project'.td, project.code),
                   if (info['tax_number']?.isNotEmpty ?? false)
-                    _kv('VAT no.', info['tax_number']!),
+                    _kv('VAT no.'.td, info['tax_number']!),
                 ],
               ),
             ),
@@ -150,14 +441,14 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
         ),
         pw.SizedBox(height: 18),
         if (title.isNotEmpty || project != null) ...[
-          label('Subject'),
+          label('Subject'.td),
           pw.SizedBox(height: 3),
-          pw.Text(
+          _text(
             title.isNotEmpty ? title : project!.name,
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
           ),
           if (project != null && project.location.isNotEmpty)
-            pw.Text(
+            _text(
               '${project.name} · ${project.location}',
               style: pw.TextStyle(fontSize: 9, color: _muted),
             ),
@@ -175,27 +466,27 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
               child: pw.Column(
                 children: [
                   if (doc.showMarkup && doc.markupRate != 0) ...[
-                    moneyRow('Cost subtotal', doc.subtotal),
+                    moneyRow('Cost subtotal'.td, doc.subtotal),
                     moneyRow(
-                      'Cost-plus fee ${_qty(doc.markupRate)}%',
+                      'Cost-plus fee {0}%'.tdArgs([_qty(doc.markupRate)]),
                       doc.markup,
                     ),
                   ] else
-                    moneyRow('Subtotal', doc.subtotal + doc.markup),
-                  if (doc.discount != 0) moneyRow('Discount', -doc.discount),
-                  moneyRow('VAT ${_qty(doc.vatRate)}%', doc.vat),
+                    moneyRow('Subtotal'.td, doc.subtotal + doc.markup),
+                  if (doc.discount != 0) moneyRow('Discount'.td, -doc.discount),
+                  moneyRow('VAT {0}%'.tdArgs([_qty(doc.vatRate)]), doc.vat),
                   pw.Container(
                     margin: const pw.EdgeInsets.symmetric(vertical: 4),
                     height: 1,
                     color: _graphite,
                   ),
-                  moneyRow('Total (USD)', doc.total, bold: true),
+                  moneyRow('Total (USD)'.td, doc.total, bold: true),
                   if (isInvoice && paid > 0) ...[
                     if (paid - setOff > 0.005)
-                      moneyRow('Received', -(paid - setOff)),
+                      moneyRow('Received'.td, -(paid - setOff)),
                     if (setOff > 0.005)
-                      moneyRow('Set off from other payments', -setOff),
-                    moneyRow('Balance due', repo.balanceOf(doc), bold: true),
+                      moneyRow('Set off from other payments'.td, -setOff),
+                    moneyRow('Balance due'.td, repo.balanceOf(doc), bold: true),
                   ],
                 ],
               ),
@@ -204,35 +495,37 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
         ),
         pw.SizedBox(height: 22),
         if (!isInvoice && (doc as Quotation).paymentTerms.isNotEmpty) ...[
-          label('Payment schedule'),
+          label('Payment schedule'.td),
           pw.SizedBox(height: 5),
           _scheduleTable(doc),
           pw.SizedBox(height: 16),
         ],
         if (notes.isNotEmpty) ...[
-          label('Notes'),
+          label('Notes'.td),
           pw.SizedBox(height: 3),
-          pw.Text(notes, style: const pw.TextStyle(fontSize: 9)),
+          _text(notes, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 12),
         ],
         if (isInvoice && (info['bank']?.isNotEmpty ?? false)) ...[
-          label('Payment details'),
+          label('Payment details'.td),
           pw.SizedBox(height: 3),
-          pw.Text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
+          _text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 12),
         ],
         if (terms.isNotEmpty) ...[
-          label('Terms and conditions'),
+          label('Terms and conditions'.td),
           pw.SizedBox(height: 3),
-          pw.Text(terms, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+          _text(terms.td, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
         ],
         if (!isInvoice) ...[
           pw.SizedBox(height: 36),
           pw.Row(
             children: [
-              pw.Expanded(child: _signature('For ${repo.companyName}')),
+              pw.Expanded(
+                child: _signature('For {0}'.tdArgs([repo.companyName])),
+              ),
               pw.SizedBox(width: 40),
-              pw.Expanded(child: _signature('Client acceptance')),
+              pw.Expanded(child: _signature('Client acceptance'.td)),
             ],
           ),
         ],
@@ -249,17 +542,23 @@ pw.Widget _scheduleTable(Quotation q) {
     for (final (k, t) in terms.indexed)
       [
         '${k + 1}',
-        t.label.isEmpty ? 'Payment ${k + 1}' : t.label,
-        t.due,
+        t.label.isEmpty ? 'Payment {0}'.tdArgs([k + 1]) : t.label.td,
+        t.due.td,
         t.percent == 0 ? '' : '${_qty(t.percent)}%',
         fmtMoney(t.valueOf(q.total)),
       ],
   ];
   final pct = terms.fold(0.0, (s, t) => s + t.percent);
   final sum = terms.fold(0.0, (s, t) => s + t.valueOf(q.total));
-  rows.add(['', 'Total', '', pct == 0 ? '' : '${_qty(pct)}%', fmtMoney(sum)]);
+  rows.add([
+    '',
+    'Total'.td,
+    '',
+    pct == 0 ? '' : '${_qty(pct)}%',
+    fmtMoney(sum),
+  ]);
   return _table(
-    ['#', 'Instalment', 'Due', 'Share', 'Amount'],
+    ['#', 'Instalment'.td, 'Due'.td, 'Share'.td, 'Amount'.td],
     rows,
     widths: {
       0: const pw.FixedColumnWidth(22),
@@ -280,10 +579,10 @@ pw.Widget _kv(String k, String v) => pw.Padding(
     children: [
       pw.SizedBox(
         width: 70,
-        child: pw.Text(k, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+        child: _text(k, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
       ),
       pw.Expanded(
-        child: pw.Text(
+        child: _text(
           v,
           style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
         ),
@@ -298,9 +597,9 @@ pw.Widget _signature(String who) => pw.Column(
     pw.SizedBox(height: 30),
     pw.Container(height: .8, color: _graphite),
     pw.SizedBox(height: 4),
-    pw.Text(who, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
-    pw.Text(
-      'Name, signature and date',
+    _text(who, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+    _text(
+      'Name, signature and date'.td,
       style: pw.TextStyle(fontSize: 7.5, color: _muted),
     ),
   ],
@@ -334,10 +633,10 @@ pw.Widget _itemsTable(PricedDocument doc) {
 
   pw.Widget c(String t, int col, pw.TextStyle style) => pw.Padding(
     padding: pad,
-    child: pw.Text(
+    child: _text(
       t,
       style: style,
-      textAlign: rightCols.contains(col) ? pw.TextAlign.right : null,
+      align: rightCols.contains(col) ? _endAlign : null,
     ),
   );
   pw.TableRow row(
@@ -349,23 +648,23 @@ pw.Widget _itemsTable(PricedDocument doc) {
       color: fill,
       border: pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
     ),
-    children: [for (var k = 0; k < 6; k++) c(cells[k], k, style)],
+    children: _cols([for (var k = 0; k < 6; k++) c(cells[k], k, style)]),
   );
 
   final rows = <pw.TableRow>[
     pw.TableRow(
       decoration: pw.BoxDecoration(color: _graphite),
-      children: [
+      children: _cols([
         for (final (k, h) in [
           '#',
-          'Description',
-          'Qty',
-          'Unit',
-          'Rate',
-          'Amount',
+          'Description'.td,
+          'Qty'.td,
+          'Unit'.td,
+          'Rate'.td,
+          'Amount'.td,
         ].indexed)
           c(h, k, head),
-      ],
+      ]),
     ),
   ];
 
@@ -394,7 +693,14 @@ pw.Widget _itemsTable(PricedDocument doc) {
     if (showHead) {
       rows.add(
         row(
-          ['$g', name.isEmpty ? 'General' : name.toUpperCase(), '', '', '', ''],
+          [
+            '$g',
+            name.isEmpty ? 'General'.td : name.td.toUpperCase(),
+            '',
+            '',
+            '',
+            '',
+          ],
           style: bold,
           fill: _soft,
         ),
@@ -411,7 +717,7 @@ pw.Widget _itemsTable(PricedDocument doc) {
           sectioned ? '$g.${k + 1}' : '$n',
           i.description,
           _qty(i.quantity),
-          i.unit,
+          i.unit.td,
           fmtMoney(i.rate * factor),
           fmtMoney(amount),
         ]),
@@ -421,7 +727,7 @@ pw.Widget _itemsTable(PricedDocument doc) {
       rows.add(
         row([
           '',
-          'Total ${name.isEmpty ? 'general' : name}',
+          'Total {0}'.tdArgs([name.isEmpty ? 'general'.td : name.td]),
           '',
           '',
           '',
@@ -432,14 +738,14 @@ pw.Widget _itemsTable(PricedDocument doc) {
   }
 
   return pw.Table(
-    columnWidths: {
+    columnWidths: _colWidths({
       0: const pw.FixedColumnWidth(26),
       1: const pw.FlexColumnWidth(5),
       2: const pw.FixedColumnWidth(36),
       3: const pw.FixedColumnWidth(50),
       4: const pw.FixedColumnWidth(68),
       5: const pw.FixedColumnWidth(76),
-    },
+    }, 6),
     children: rows,
   );
 }
@@ -480,7 +786,7 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(
+              _text(
                 repo.companyName,
                 style: pw.TextStyle(
                   fontWeight: pw.FontWeight.bold,
@@ -488,8 +794,8 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
                   color: _graphite,
                 ),
               ),
-              pw.Text(
-                'Design · Consultancy · Contracting',
+              _text(
+                'Design · Consultancy · Contracting'.td,
                 style: pw.TextStyle(fontSize: 8, color: _muted),
               ),
             ],
@@ -498,16 +804,16 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Text(
+            _text(
               title,
               style: pw.TextStyle(
                 fontSize: 18,
                 fontWeight: pw.FontWeight.bold,
                 color: _graphite,
-                letterSpacing: 2,
+                letterSpacing: _spacing(2),
               ),
             ),
-            pw.Text(number, style: pw.TextStyle(fontSize: 10, color: _blue)),
+            _text(number, style: pw.TextStyle(fontSize: 10, color: _blue)),
           ],
         ),
       ],
@@ -535,11 +841,11 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
               runSpacing: 2,
               children: [
                 if (address.isNotEmpty)
-                  pw.Text(address.split('\n').first, style: style),
+                  _text(address.split('\n').first.td, style: style),
                 for (final l in links)
                   pw.UrlLink(
                     destination: l.url,
-                    child: pw.Text(
+                    child: _text(
                       '${_linkLabel(l.kind)}${l.display}',
                       style: style,
                     ),
@@ -548,7 +854,10 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
             ),
           ),
           pw.SizedBox(width: 10),
-          pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}', style: style),
+          _text(
+            'Page {0} of {1}'.tdArgs([ctx.pageNumber, ctx.pagesCount]),
+            style: style,
+          ),
         ],
       ),
     ],
@@ -558,12 +867,23 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
 String _linkLabel(String kind) => kind == 'instagram' ? 'Instagram ' : '';
 
 /// Builds the branded statement of account for a client.
-Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
+Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
+  // The lines are worded again when built in another language.
+  final st = built.lang == docLang
+      ? built
+      : buildStatement(
+          repo,
+          built.client.id,
+          from: built.from,
+          to: built.to,
+          projectId: built.projectId,
+          lang: docLang,
+        );
   final info = repo.companyInfo;
   final client = st.client;
   final pdf = pw.Document(
     theme: await _theme(repo),
-    title: 'Statement of account ${client.name}',
+    title: 'Statement of account {0}'.tdArgs([client.name]),
     author: repo.companyName,
   );
   const label = _label;
@@ -574,10 +894,17 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
 
   final moves = <List<String>>[
     if (st.from != null)
-      [fmtDate(st.from), '', 'Opening balance', '', '', fmtMoney(st.opening)],
+      [
+        fmtDocDate(st.from),
+        '',
+        'Opening balance'.td,
+        '',
+        '',
+        fmtMoney(st.opening),
+      ],
     for (final l in st.lines)
       [
-        fmtDate(l.date),
+        fmtDocDate(l.date),
         l.reference,
         l.description,
         m(l.debit),
@@ -585,9 +912,9 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
         fmtMoney(l.balance),
       ],
     [
-      fmtDate(st.to),
+      fmtDocDate(st.to),
       '',
-      'Closing balance',
+      'Closing balance'.td,
       fmtMoney(st.invoiced),
       fmtMoney(st.received),
       fmtMoney(st.closing),
@@ -599,7 +926,12 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      header: (ctx) => _header(repo, 'STATEMENT', 'As of ${fmtDate(st.to)}'),
+      textDirection: _dir,
+      header: (ctx) => _header(
+        repo,
+        'STATEMENT'.td,
+        'As of {0}'.tdArgs([fmtDocDate(st.to)]),
+      ),
       footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         pw.Row(
@@ -609,9 +941,9 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  label('Statement of account for'),
+                  label('Statement of account for'.td),
                   pw.SizedBox(height: 3),
-                  pw.Text(
+                  _text(
                     client.name,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
@@ -619,15 +951,15 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
                     ),
                   ),
                   if (client.company.isNotEmpty)
-                    pw.Text(
+                    _text(
                       client.company,
                       style: const pw.TextStyle(fontSize: 9),
                     ),
-                  pw.Text(
+                  _text(
                     [
                       client.phone,
                       client.email,
-                      client.country,
+                      client.country.td,
                     ].where((s) => s.isNotEmpty).join(' · '),
                     style: pw.TextStyle(fontSize: 9, color: _muted),
                   ),
@@ -636,7 +968,7 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
             ),
             pw.SizedBox(width: 20),
             pw.Container(
-              width: 200,
+              width: _rtl ? 230 : 200,
               padding: const pw.EdgeInsets.all(10),
               decoration: pw.BoxDecoration(
                 color: _soft,
@@ -646,20 +978,20 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   _kv(
-                    'Period',
+                    'Period'.td,
                     st.from == null
-                        ? 'All to ${fmtDate(st.to)}'
-                        : '${fmtDate(st.from)} – ${fmtDate(st.to)}',
+                        ? 'All to {0}'.tdArgs([fmtDocDate(st.to)])
+                        : '${fmtDocDate(st.from)} – ${fmtDocDate(st.to)}',
                   ),
                   _kv(
-                    'Project',
+                    'Project'.td,
                     st.project == null
-                        ? 'All projects'
+                        ? 'All projects'.td
                         : '${st.project!.code} ${st.project!.name}',
                   ),
-                  _kv('Currency', 'USD'),
+                  _kv('Currency'.td, 'USD'),
                   if (info['tax_number']?.isNotEmpty ?? false)
-                    _kv('VAT no.', info['tax_number']!),
+                    _kv('VAT no.'.td, info['tax_number']!),
                 ],
               ),
             ),
@@ -668,27 +1000,35 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
         pw.SizedBox(height: 16),
         pw.Row(
           children: [
-            if (st.contractValue > 0) tile('Agreed contract', st.contractValue),
-            if (st.from != null) tile('Opening balance', st.opening),
-            tile('Invoiced', st.invoiced),
-            tile('Received', st.received),
+            if (st.contractValue > 0)
+              tile('Agreed contract'.td, st.contractValue),
+            if (st.from != null) tile('Opening balance'.td, st.opening),
+            tile('Invoiced'.td, st.invoiced),
+            tile('Received'.td, st.received),
             if (st.advances > 0.005) ...[
-              tile('Advances held', st.advances),
-              tile('Due on invoices', st.dueOnInvoices, strong: true),
+              tile('Advances held'.td, st.advances),
+              tile('Due on invoices'.td, st.dueOnInvoices, strong: true),
             ] else if (st.closing < -0.005)
-              tile('Credit balance', -st.closing, strong: true)
+              tile('Credit balance'.td, -st.closing, strong: true)
             else
-              tile('Balance due', st.closing, strong: true),
+              tile('Balance due'.td, st.closing, strong: true),
           ],
         ),
         pw.SizedBox(height: 16),
-        label('Account movements'),
+        label('Account movements'.td),
         pw.SizedBox(height: 5),
         table(
-          ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Balance'],
+          [
+            'Date'.td,
+            'Reference'.td,
+            'Description'.td,
+            'Debit'.td,
+            'Credit@@column'.td,
+            'Balance'.td,
+          ],
           moves,
           widths: {
-            0: const pw.FixedColumnWidth(66),
+            0: pw.FixedColumnWidth(_dateWidth),
             1: const pw.FixedColumnWidth(64),
             2: const pw.FlexColumnWidth(4),
             3: const pw.FixedColumnWidth(62),
@@ -701,26 +1041,36 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
         ),
         if (st.open.isNotEmpty) ...[
           pw.SizedBox(height: 18),
-          label('Open invoices'),
+          label('Open invoices'.td),
           pw.SizedBox(height: 5),
           table(
-            ['Invoice', 'Date', 'Due', 'Amount', 'Paid', 'Balance', 'Late'],
+            [
+              'Invoice'.td,
+              'Date'.td,
+              'Due'.td,
+              'Amount'.td,
+              'Paid'.td,
+              'Balance'.td,
+              'Late'.td,
+            ],
             [
               for (final o in st.open)
                 [
                   o.invoice.number,
-                  fmtDate(o.invoice.date),
-                  fmtDate(o.invoice.dueDate),
+                  fmtDocDate(o.invoice.date),
+                  fmtDocDate(o.invoice.dueDate),
                   fmtMoney(o.invoice.total),
                   fmtMoney(o.paid),
                   fmtMoney(o.balance),
-                  o.daysOverdue > 0 ? '${o.daysOverdue} days' : 'Not due',
+                  o.daysOverdue > 0
+                      ? '{0} days'.tdArgs([o.daysOverdue])
+                      : 'Not due'.td,
                 ],
             ],
             widths: {
               0: const pw.FlexColumnWidth(2),
-              1: const pw.FixedColumnWidth(66),
-              2: const pw.FixedColumnWidth(66),
+              1: pw.FixedColumnWidth(_dateWidth),
+              2: pw.FixedColumnWidth(_dateWidth),
               3: const pw.FixedColumnWidth(62),
               4: const pw.FixedColumnWidth(62),
               5: const pw.FixedColumnWidth(62),
@@ -731,11 +1081,11 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
           pw.SizedBox(height: 10),
           table(
             [
-              'Not yet due',
-              '1–30 days',
-              '31–60 days',
-              '61–90 days',
-              '90+ days',
+              'Not yet due'.td,
+              '1–30 days'.td,
+              '31–60 days'.td,
+              '61–90 days'.td,
+              '90+ days'.td,
             ],
             [
               [for (final v in aging) fmtMoney(v)],
@@ -746,35 +1096,40 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
         ],
         pw.SizedBox(height: 18),
         if (info['bank']?.isNotEmpty ?? false) ...[
-          label('Bank details'),
+          label('Bank details'.td),
           pw.SizedBox(height: 3),
-          pw.Text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
+          _text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 12),
         ],
         if (st.advances > 0.005)
-          pw.Text(
-            'Advances held: ${fmtMoney(st.advances)} received on payment '
-            'terms or on account and not yet set against an invoice. An '
-            'advance on a payment term is set against that term\'s invoice; '
-            'money on account against the next invoices. Due on issued '
-            'invoices: '
-            '${fmtMoney(st.dueOnInvoices)}. Net account balance: '
-            '${st.closing < 0 ? 'credit ' : ''}${fmtMoney(st.closing.abs())}. '
-            'Please report any difference within 15 days of this '
-            'statement; otherwise it is considered accepted.',
+          _text(
+            'Advances held: {0} received on payment '
+                    'terms or on account and not yet set against an invoice. An '
+                    'advance on a payment term is set against that term\'s invoice; '
+                    'money on account against the next invoices. Due on issued '
+                    'invoices: {1}. Net account balance: {2}. '
+                    'Please report any difference within 15 days of this '
+                    'statement; otherwise it is considered accepted.'
+                .tdArgs([
+                  fmtMoney(st.advances),
+                  fmtMoney(st.dueOnInvoices),
+                  _net(st.closing),
+                ]),
             style: pw.TextStyle(fontSize: 8.5, color: _muted),
           )
         else
-          pw.Text(
+          _text(
             st.closing > 0.005
-                ? 'Kindly settle the balance due of ${fmtMoney(st.closing)}. '
-                      'Please report any difference within 15 days of this '
-                      'statement; otherwise it is considered accepted.'
+                ? 'Kindly settle the balance due of {0}. '
+                          'Please report any difference within 15 days of this '
+                          'statement; otherwise it is considered accepted.'
+                      .tdArgs([fmtMoney(st.closing)])
                 : st.closing < -0.005
-                ? 'Your account is in credit by ${fmtMoney(-st.closing)}. '
-                      'Please report any difference within 15 days of this '
-                      'statement; otherwise it is considered accepted.'
-                : 'Your account is fully settled. Thank you.',
+                ? 'Your account is in credit by {0}. '
+                          'Please report any difference within 15 days of this '
+                          'statement; otherwise it is considered accepted.'
+                      .tdArgs([fmtMoney(-st.closing)])
+                : 'Your account is fully settled. Thank you.'.td,
             style: pw.TextStyle(fontSize: 8.5, color: _muted),
           ),
         pw.SizedBox(height: 30),
@@ -786,8 +1141,8 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
                 children: [
                   pw.Container(height: .6, color: _graphite),
                   pw.SizedBox(height: 4),
-                  pw.Text(
-                    'For ${repo.companyName}',
+                  _text(
+                    'For {0}'.tdArgs([repo.companyName]),
                     style: const pw.TextStyle(fontSize: 8),
                   ),
                 ],
@@ -800,8 +1155,8 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement st) async {
                 children: [
                   pw.Container(height: .6, color: _graphite),
                   pw.SizedBox(height: 4),
-                  pw.Text(
-                    'Client confirmation',
+                  _text(
+                    'Client confirmation'.td,
                     style: const pw.TextStyle(fontSize: 8),
                   ),
                 ],
@@ -824,9 +1179,19 @@ Future<void> shareStatementPdf(Repository repo, Statement st) async {
   );
 }
 
-pw.Widget _label(String s) => pw.Text(
+/// "Net account balance" on statements: the amount, or "credit" and the
+/// amount when the client is in credit.
+String _net(double closing) => closing < 0
+    ? 'credit {0}'.tdArgs([fmtMoney(closing.abs())])
+    : fmtMoney(closing.abs());
+
+pw.Widget _label(String s) => _text(
   s.toUpperCase(),
-  style: pw.TextStyle(fontSize: 7.5, color: _muted, letterSpacing: 1),
+  style: pw.TextStyle(
+    fontSize: _labelSize(7.5),
+    color: _muted,
+    letterSpacing: _spacing(1),
+  ),
 );
 
 /// A data table with a graphite header row, as used on statements.
@@ -848,19 +1213,15 @@ pw.Widget _table(
   const pad = pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5);
   pw.Widget c(String t, int k, pw.TextStyle style) => pw.Padding(
     padding: pad,
-    child: pw.Text(
-      t,
-      style: style,
-      textAlign: right.contains(k) ? pw.TextAlign.right : null,
-    ),
+    child: _text(t, style: style, align: right.contains(k) ? _endAlign : null),
   );
   return pw.Table(
-    columnWidths: widths,
+    columnWidths: _colWidths(widths, headers.length),
     children: [
       pw.TableRow(
         repeat: true,
         decoration: pw.BoxDecoration(color: _graphite),
-        children: [for (final (k, h) in headers.indexed) c(h, k, head)],
+        children: _cols([for (final (k, h) in headers.indexed) c(h, k, head)]),
       ),
       for (final (r, row) in rows.indexed)
         pw.TableRow(
@@ -868,10 +1229,10 @@ pw.Widget _table(
             color: softRows.contains(r) ? _soft : null,
             border: pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
           ),
-          children: [
+          children: _cols([
             for (final (k, t) in row.indexed)
               c(t, k, boldRows.contains(r) ? bold : cell),
-          ],
+          ]),
         ),
     ],
   );
@@ -880,7 +1241,7 @@ pw.Widget _table(
 /// A summary figure box; [strong] is the dark one for the key figure.
 pw.Widget _tile(String l, String value, {bool strong = false}) => pw.Expanded(
   child: pw.Container(
-    margin: const pw.EdgeInsets.only(right: 6),
+    margin: const pw.EdgeInsetsDirectional.only(end: 6),
     padding: const pw.EdgeInsets.all(8),
     decoration: pw.BoxDecoration(
       color: strong ? _graphite : _soft,
@@ -889,16 +1250,16 @@ pw.Widget _tile(String l, String value, {bool strong = false}) => pw.Expanded(
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
+        _text(
           l.toUpperCase(),
           style: pw.TextStyle(
-            fontSize: 6.5,
-            letterSpacing: .8,
+            fontSize: _labelSize(6.5),
+            letterSpacing: _spacing(.8),
             color: strong ? PdfColors.white : _muted,
           ),
         ),
         pw.SizedBox(height: 3),
-        pw.Text(
+        _text(
           value,
           style: pw.TextStyle(
             fontSize: 11,
@@ -911,7 +1272,8 @@ pw.Widget _tile(String l, String value, {bool strong = false}) => pw.Expanded(
   ),
 );
 
-/// Two signature lines: the company on the left, [other] on the right.
+/// Two signature lines: the company first (on the left in English, on the
+/// right in Arabic), then [other].
 pw.Widget _signatures(Repository repo, String other) {
   pw.Widget line(String t) => pw.Expanded(
     child: pw.Column(
@@ -919,20 +1281,21 @@ pw.Widget _signatures(Repository repo, String other) {
       children: [
         pw.Container(height: .6, color: _graphite),
         pw.SizedBox(height: 4),
-        pw.Text(t, style: const pw.TextStyle(fontSize: 8)),
+        _text(t, style: const pw.TextStyle(fontSize: 8)),
       ],
     ),
   );
   return pw.Row(
     children: [
-      line('For ${repo.companyName}'),
+      line('For {0}'.tdArgs([repo.companyName])),
       pw.SizedBox(width: 60),
       line(other),
     ],
   );
 }
 
-/// The "prepared for" client block with a facts box on the right.
+/// The "prepared for" client block with a facts box at the end (on the
+/// right in English, on the left in Arabic).
 pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
     pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -943,7 +1306,7 @@ pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
             children: [
               _label(caption),
               pw.SizedBox(height: 3),
-              pw.Text(
+              _text(
                 client?.name ?? '—',
                 style: pw.TextStyle(
                   fontWeight: pw.FontWeight.bold,
@@ -951,13 +1314,13 @@ pw.Widget _partyBlock(String caption, Client? client, List<pw.Widget> facts) =>
                 ),
               ),
               if (client != null && client.company.isNotEmpty)
-                pw.Text(client.company, style: const pw.TextStyle(fontSize: 9)),
+                _text(client.company, style: const pw.TextStyle(fontSize: 9)),
               if (client != null)
-                pw.Text(
+                _text(
                   [
                     client.phone,
                     client.email,
-                    client.country,
+                    client.country.td,
                   ].where((s) => s.isNotEmpty).join(' · '),
                   style: pw.TextStyle(fontSize: 9, color: _muted),
                 ),
@@ -996,7 +1359,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
   final project = repo.project(repo.projectOfPayment(pay));
   final pdf = pw.Document(
     theme: await _theme(repo),
-    title: '${pay.number} Receipt',
+    title: '${pay.number} ${'Receipt'.td}',
     author: repo.companyName,
   );
 
@@ -1024,15 +1387,15 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         if (i.id != inv.id) (i, a),
     ];
     final held = repo.unappliedOf(pay, until: pay.date);
-    purpose = 'Invoice ${inv.number}';
+    purpose = 'Invoice {0}'.tdArgs([inv.number]);
     detail = _table(
       [
-        'Invoice',
-        'Subject',
-        'Invoice total',
-        'Received before',
-        'This receipt',
-        'Balance',
+        'Invoice'.td,
+        'Subject'.td,
+        'Invoice total'.td,
+        'Received before'.td,
+        'This receipt'.td,
+        'Balance'.td,
       ],
       [
         [
@@ -1050,14 +1413,19 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
     final went = elsewhere.fold(0.0, (s, e) => s + e.$2);
     after = [
       left <= 0.005
-          ? '${inv.number} is now fully paid. Thank you.'
-          : 'Remaining on ${inv.number}: ${fmtMoney(left)}.',
+          ? '{0} is now fully paid. Thank you.'.tdArgs([inv.number])
+          : 'Remaining on {0}: {1}.'.tdArgs([inv.number, fmtMoney(left)]),
       if (went > 0.005)
-        'Open invoices are settled oldest first, so ${fmtMoney(went)} of '
-            'this receipt went to '
-            '${elsewhere.map((e) => e.$1.number).join(', ')}.',
+        'Open invoices are settled oldest first, so {0} of '
+                'this receipt went to {1}.'
+            .tdArgs([
+              fmtMoney(went),
+              elsewhere.map((e) => e.$1.number).join(', '),
+            ]),
       if (held > 0.005)
-        'The extra ${fmtMoney(held)} is held as credit on the account.',
+        'The extra {0} is held as credit on the account.'.tdArgs([
+          fmtMoney(held),
+        ]),
     ].join(' ');
   } else if (q != null && term != null) {
     final value = (term.valueOf(q.total) * 100).round() / 100;
@@ -1086,22 +1454,24 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
     final rest = value - prior - pay.amount;
     final left = rest > 0 ? rest : 0.0;
     extra = rest < -0.005 ? (-rest < pay.amount ? -rest : pay.amount) : 0;
-    final label = term.label.isEmpty ? 'Payment ${termIndex + 1}' : term.label;
+    final label = term.label.isEmpty
+        ? 'Payment {0}'.tdArgs([termIndex + 1])
+        : term.label.td;
     final share = term.percent == 0 ? '' : ' (${_qty(term.percent)}%)';
-    purpose = '$label$share, ${q.number}';
+    purpose = '$label$share${_rtl ? '،' : ','} ${q.number}';
     detail = _table(
       [
-        'Instalment',
-        'Due',
-        'Instalment value',
-        'Received before',
-        'This receipt',
-        'Remaining',
+        'Instalment'.td,
+        'Due'.td,
+        'Instalment value'.td,
+        'Received before'.td,
+        'This receipt'.td,
+        'Remaining'.td,
       ],
       [
         [
           '${termIndex + 1}. $label$share',
-          term.due,
+          term.due.td,
           fmtMoney(value),
           fmtMoney(prior),
           fmtMoney(pay.amount),
@@ -1111,19 +1481,29 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       widths: _receiptWidths,
       right: {2, 3, 4, 5},
     );
-    after =
-        'As per the payment schedule of ${q.number}'
-        '${q.title.isEmpty ? '' : ' (${q.title})'}, contract value '
-        '${fmtMoney(q.total)}. '
-        '${left <= 0.005 ? 'This instalment is now fully paid.' : 'Remaining on this instalment: ${fmtMoney(left)}.'}'
-        '${extra > 0 ? ' The extra ${fmtMoney(extra)} is held as credit on the account.' : ''}';
+    after = [
+      q.title.isEmpty
+          ? 'As per the payment schedule of {0}, contract value {1}.'.tdArgs([
+              q.number,
+              fmtMoney(q.total),
+            ])
+          : 'As per the payment schedule of {0} ({1}), contract value {2}.'
+                .tdArgs([q.number, q.title, fmtMoney(q.total)]),
+      left <= 0.005
+          ? 'This instalment is now fully paid.'.td
+          : 'Remaining on this instalment: {0}.'.tdArgs([fmtMoney(left)]),
+      if (extra > 0)
+        'The extra {0} is held as credit on the account.'.tdArgs([
+          fmtMoney(extra),
+        ]),
+    ].join(' ');
   } else {
-    purpose = 'On account';
+    purpose = 'On account'.td;
     detail = _table(
-      ['Description', 'Amount'],
+      ['Description'.td, 'Amount'.td],
       [
         [
-          pay.notes.isNotEmpty ? pay.notes : 'Payment on account',
+          pay.notes.isNotEmpty ? pay.notes : 'Payment on account'.td,
           fmtMoney(pay.amount),
         ],
       ],
@@ -1134,9 +1514,11 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       right: {1},
     );
     after =
-        'Received on account. It is set against the open invoices'
-        '${project == null ? '' : ' of ${project.code}'}, oldest first; '
-        'any balance stays as credit on the account.';
+        'Received on account. It is set against the open invoices{0}, '
+                'oldest first; any balance stays as credit on the account.'
+            .tdArgs([
+              project == null ? '' : ' of {0}'.tdArgs([project.code]),
+            ]);
   }
 
   // How a receipt not taken on an invoice has been used so far.
@@ -1160,16 +1542,17 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      header: (ctx) => _header(repo, 'RECEIPT', pay.number),
+      textDirection: _dir,
+      header: (ctx) => _header(repo, 'RECEIPT'.td, pay.number),
       footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
-        _partyBlock('Received from', client, [
-          _kv('Receipt no.', pay.number),
-          _kv('Date', fmtDate(pay.date)),
-          _kv('Method', paymentMethodLabel(pay.method)),
-          if (pay.reference.isNotEmpty) _kv('Reference', pay.reference),
-          if (project != null) _kv('Project', project.code),
-          _kv('Payment for', purpose),
+        _partyBlock('Received from'.td, client, [
+          _kv('Receipt no.'.td, pay.number),
+          _kv('Date'.td, fmtDocDate(pay.date)),
+          _kv('Method'.td, paymentMethodLabel(pay.method, docLang)),
+          if (pay.reference.isNotEmpty) _kv('Reference'.td, pay.reference),
+          if (project != null) _kv('Project'.td, project.code),
+          _kv('Payment for'.td, purpose),
         ]),
         pw.SizedBox(height: 22),
         pw.Container(
@@ -1185,17 +1568,17 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
-                      'AMOUNT RECEIVED',
-                      style: const pw.TextStyle(
-                        fontSize: 7.5,
-                        letterSpacing: 1,
+                    _text(
+                      'AMOUNT RECEIVED'.td,
+                      style: pw.TextStyle(
+                        fontSize: _labelSize(7.5),
+                        letterSpacing: _spacing(1),
                         color: PdfColors.grey300,
                       ),
                     ),
                     pw.SizedBox(height: 6),
-                    pw.Text(
-                      dollarsInWords(pay.amount),
+                    _text(
+                      dollarsInWords(pay.amount, docLang),
                       style: const pw.TextStyle(
                         fontSize: 10,
                         color: PdfColors.white,
@@ -1205,7 +1588,7 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
                 ),
               ),
               pw.SizedBox(width: 16),
-              pw.Text(
+              _text(
                 fmtMoney(pay.amount),
                 style: pw.TextStyle(
                   fontSize: 22,
@@ -1217,22 +1600,26 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
           ),
         ),
         pw.SizedBox(height: 22),
-        _label('Payment for'),
+        _label('Payment for'.td),
         pw.SizedBox(height: 5),
         detail,
         pw.SizedBox(height: 8),
-        pw.Text(after, style: pw.TextStyle(fontSize: 9, color: _muted)),
+        _text(after, style: pw.TextStyle(fontSize: 9, color: _muted)),
         if (applied.any((e) => e.$1.id != inv?.id) || credit > 0.005) ...[
           pw.SizedBox(height: 18),
-          _label('How this receipt was used · as of ${fmtDate(repo.now())}'),
+          _label(
+            'How this receipt was used · as of {0}'.tdArgs([
+              fmtDocDate(repo.now()),
+            ]),
+          ),
           pw.SizedBox(height: 5),
           _table(
-            ['Invoice', 'Date', 'Subject', 'Amount set off'],
+            ['Invoice'.td, 'Date'.td, 'Subject'.td, 'Amount set off'.td],
             [
               for (final (i, a) in applied)
                 [
                   i.number,
-                  fmtDate(i.date),
+                  fmtDocDate(i.date),
                   i.title.isNotEmpty
                       ? i.title
                       : (repo.project(i.projectId)?.name ?? ''),
@@ -1242,14 +1629,14 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
                 '',
                 '',
                 term == null
-                    ? 'Credit remaining on account'
-                    : 'Credit held for the next invoices',
+                    ? 'Credit remaining on account'.td
+                    : 'Credit held for the next invoices'.td,
                 fmtMoney(credit),
               ],
             ],
             widths: {
               0: const pw.FixedColumnWidth(70),
-              1: const pw.FixedColumnWidth(66),
+              1: pw.FixedColumnWidth(_dateWidth),
               2: const pw.FlexColumnWidth(3),
               3: const pw.FixedColumnWidth(80),
             },
@@ -1260,14 +1647,16 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         ],
         if (project != null && contract > 0) ...[
           pw.SizedBox(height: 18),
-          _label('Project account after this receipt · ${project.code}'),
+          _label(
+            'Project account after this receipt · {0}'.tdArgs([project.code]),
+          ),
           pw.SizedBox(height: 5),
           pw.Row(
             children: [
-              _tile('Contract value', fmtMoney(contract)),
-              _tile('Received to date', fmtMoney(receivedToDate)),
+              _tile('Contract value'.td, fmtMoney(contract)),
+              _tile('Received to date'.td, fmtMoney(receivedToDate)),
               _tile(
-                'Remaining on contract',
+                'Remaining on contract'.td,
                 fmtMoney(contract - receivedToDate),
                 strong: true,
               ),
@@ -1276,19 +1665,19 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
         ],
         if (pay.notes.isNotEmpty && (inv != null || term != null)) ...[
           pw.SizedBox(height: 14),
-          _label('Notes'),
+          _label('Notes'.td),
           pw.SizedBox(height: 3),
-          pw.Text(pay.notes, style: const pw.TextStyle(fontSize: 9)),
+          _text(pay.notes, style: const pw.TextStyle(fontSize: 9)),
         ],
         if (pay.method == PaymentMethod.cheque) ...[
           pw.SizedBox(height: 12),
-          pw.Text(
-            'Payment by cheque is valid subject to collection.',
+          _text(
+            'Payment by cheque is valid subject to collection.'.td,
             style: pw.TextStyle(fontSize: 8.5, color: _muted),
           ),
         ],
         pw.SizedBox(height: 40),
-        _signatures(repo, 'Received by (name and signature)'),
+        _signatures(repo, 'Received by (name and signature)'.td),
       ],
     ),
   );
@@ -1314,14 +1703,18 @@ Future<void> shareReceiptPdf(Repository repo, Payment pay) async {
 /// and the account movements.
 Future<Uint8List> buildProjectStatementPdf(
   Repository repo,
-  ProjectStatement ps,
+  ProjectStatement built,
 ) async {
+  // The lines and phases are worded again when built in another language.
+  final ps = built.lang == docLang
+      ? built
+      : buildProjectStatement(repo, built.project.id, lang: docLang);
   final info = repo.companyInfo;
   final st = ps.account;
   final p = ps.project;
   final pdf = pw.Document(
     theme: await _theme(repo),
-    title: 'Project statement ${p.code}',
+    title: 'Project statement {0}'.tdArgs([p.code]),
     author: repo.companyName,
   );
   String m(double v) => v.abs() < .005 ? '—' : fmtMoney(v);
@@ -1329,18 +1722,23 @@ Future<Uint8List> buildProjectStatementPdf(
   final phaseRows = <List<String>>[
     for (final ph in ps.phases)
       [
-        ph.name + (ph.stage?.id == ps.currentStageId ? '  (current)' : ''),
-        ph.tasks.isEmpty ? '—' : '${ph.tasksDone} of ${ph.tasks.length}',
+        ph.name +
+            (ph.stage?.id == ps.currentStageId ? '  ${'(current)'.td}' : ''),
+        ph.tasks.isEmpty
+            ? '—'
+            : '{0} of {1}'.tdArgs([ph.tasksDone, ph.tasks.length]),
         m(ph.invoiced),
         m(ph.received),
         m(ph.balance),
       ],
     if (st.advances > 0.005)
-      ['Advances not yet set off', '', '—', m(st.advances), m(-st.advances)],
+      ['Advances not yet set off'.td, '', '—', m(st.advances), m(-st.advances)],
     [
-      'Total',
-      '${ps.phases.fold(0, (s, ph) => s + ph.tasksDone)} of '
-          '${ps.phases.fold(0, (s, ph) => s + ph.tasks.length)}',
+      'Total'.td,
+      '{0} of {1}'.tdArgs([
+        ps.phases.fold<int>(0, (s, ph) => s + ph.tasksDone),
+        ps.phases.fold<int>(0, (s, ph) => s + ph.tasks.length),
+      ]),
       fmtMoney(st.invoiced),
       fmtMoney(st.received),
       fmtMoney(st.closing),
@@ -1355,21 +1753,21 @@ Future<Uint8List> buildProjectStatementPdf(
             l.quotation.number,
           '${l.index + 1}. ${l.label}',
         ].join(' · '),
-        l.status.term.due,
+        l.status.term.due.td,
         l.status.term.percent == 0 ? '' : '${_qty(l.status.term.percent)}%',
         fmtMoney(l.status.value),
         l.status.invoices.isEmpty
             ? '—'
             : l.status.invoices.map((i) => i.number).join(', '),
         m(l.status.received),
-        l.status.settled ? 'Paid' : fmtMoney(l.status.remaining),
+        l.status.settled ? 'Paid'.td : fmtMoney(l.status.remaining),
       ],
   ];
   if (scheduleRows.isNotEmpty) {
     final value = ps.schedule.fold(0.0, (s, l) => s + l.status.value);
     final got = ps.schedule.fold(0.0, (s, l) => s + l.status.received);
     scheduleRows.add([
-      'Total',
+      'Total'.td,
       '',
       '',
       fmtMoney(value),
@@ -1390,7 +1788,7 @@ Future<Uint8List> buildProjectStatementPdf(
       layerHeads.add(layerRows.length);
       layerRows.add([
         '$g',
-        (l.name.isEmpty ? 'General' : l.name).toUpperCase(),
+        (l.name.isEmpty ? 'General'.td : l.name.td).toUpperCase(),
         '',
         m(l.contractAmount),
         m(l.invoicedAmount),
@@ -1401,7 +1799,7 @@ Future<Uint8List> buildProjectStatementPdf(
       layerRows.add([
         sectioned ? '$g.${k + 1}' : '${k + 1}',
         i.description,
-        i.unit,
+        i.unit.td,
         m(i.contractAmount),
         m(i.invoicedAmount),
         i.contractAmount == 0 ? '' : _pct(i.percent),
@@ -1413,7 +1811,7 @@ Future<Uint8List> buildProjectStatementPdf(
   layerTotals.add(layerRows.length);
   layerRows.add([
     '',
-    'Total before VAT',
+    'Total before VAT'.td,
     '',
     fmtMoney(contractNet),
     fmtMoney(invoicedNet),
@@ -1423,7 +1821,7 @@ Future<Uint8List> buildProjectStatementPdf(
   final moves = <List<String>>[
     for (final l in st.lines)
       [
-        fmtDate(l.date),
+        fmtDocDate(l.date),
         l.reference,
         l.description,
         l.debit == 0 ? '' : fmtMoney(l.debit),
@@ -1431,9 +1829,9 @@ Future<Uint8List> buildProjectStatementPdf(
         fmtMoney(l.balance),
       ],
     [
-      fmtDate(st.to),
+      fmtDocDate(st.to),
       '',
-      'Closing balance',
+      'Closing balance'.td,
       fmtMoney(st.invoiced),
       fmtMoney(st.received),
       fmtMoney(st.closing),
@@ -1444,43 +1842,57 @@ Future<Uint8List> buildProjectStatementPdf(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      header: (ctx) =>
-          _header(repo, 'PROJECT STATEMENT', 'As of ${fmtDate(st.to)}'),
+      textDirection: _dir,
+      header: (ctx) => _header(
+        repo,
+        'PROJECT STATEMENT'.td,
+        'As of {0}'.tdArgs([fmtDocDate(st.to)]),
+      ),
       footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
-        _partyBlock('Prepared for', st.client, [
-          _kv('Project', p.code),
-          _kv('Name', p.name),
-          if (p.location.isNotEmpty) _kv('Location', p.location),
-          _kv('Phase', repo.stage(p.stageId)?.name ?? '—'),
-          _kv('Currency', 'USD'),
+        _partyBlock('Prepared for'.td, st.client, [
+          _kv('Project'.td, p.code),
+          _kv('Name'.td, p.name),
+          if (p.location.isNotEmpty) _kv('Location'.td, p.location),
+          _kv('Phase'.td, repo.stage(p.stageId)?.name.td ?? '—'),
+          _kv('Currency'.td, 'USD'),
         ]),
         pw.SizedBox(height: 16),
         pw.Row(
           children: [
-            _tile('Contract value', fmtMoney(ps.contractValue)),
-            _tile('Invoiced', fmtMoney(st.invoiced)),
-            _tile('Received', fmtMoney(st.received)),
+            _tile('Contract value'.td, fmtMoney(ps.contractValue)),
+            _tile('Invoiced'.td, fmtMoney(st.invoiced)),
+            _tile('Received'.td, fmtMoney(st.received)),
             if (st.advances > 0.005) ...[
-              _tile('Advances held', fmtMoney(st.advances)),
+              _tile('Advances held'.td, fmtMoney(st.advances)),
               _tile(
-                'Due on invoices',
+                'Due on invoices'.td,
                 fmtMoney(st.dueOnInvoices),
                 strong: true,
               ),
             ] else ...[
-              _tile('Billed', _pct(ps.billedPercent)),
+              _tile('Billed'.td, _pct(ps.billedPercent)),
               st.closing < -0.005
-                  ? _tile('Credit balance', fmtMoney(-st.closing), strong: true)
-                  : _tile('Balance due', fmtMoney(st.closing), strong: true),
+                  ? _tile(
+                      'Credit balance'.td,
+                      fmtMoney(-st.closing),
+                      strong: true,
+                    )
+                  : _tile('Balance due'.td, fmtMoney(st.closing), strong: true),
             ],
           ],
         ),
         pw.SizedBox(height: 18),
-        _label('1 · By phase'),
+        _label('1 · By phase'.td),
         pw.SizedBox(height: 5),
         _table(
-          ['Phase', 'Tasks done', 'Invoiced', 'Received', 'Balance'],
+          [
+            'Phase'.td,
+            'Tasks done'.td,
+            'Invoiced'.td,
+            'Received'.td,
+            'Balance'.td,
+          ],
           phaseRows,
           widths: {
             0: const pw.FlexColumnWidth(3),
@@ -1500,7 +1912,7 @@ Future<Uint8List> buildProjectStatementPdf(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text(
+                  _text(
                     ph.name,
                     style: pw.TextStyle(
                       fontSize: 9.5,
@@ -1509,12 +1921,15 @@ Future<Uint8List> buildProjectStatementPdf(
                   ),
                   for (final t in ph.tasks)
                     pw.Padding(
-                      padding: const pw.EdgeInsets.only(left: 8, top: 2),
+                      padding: const pw.EdgeInsetsDirectional.only(
+                        start: 8,
+                        top: 2,
+                      ),
                       child: pw.Row(
                         children: [
                           pw.SizedBox(
                             width: 60,
-                            child: pw.Text(
+                            child: _text(
                               _taskState(t.status),
                               style: pw.TextStyle(
                                 fontSize: 8,
@@ -1525,13 +1940,13 @@ Future<Uint8List> buildProjectStatementPdf(
                             ),
                           ),
                           pw.Expanded(
-                            child: pw.Text(
+                            child: _text(
                               t.title,
                               style: const pw.TextStyle(fontSize: 8.5),
                             ),
                           ),
-                          pw.Text(
-                            t.dueDate == null ? '' : fmtDate(t.dueDate),
+                          _text(
+                            t.dueDate == null ? '' : fmtDocDate(t.dueDate),
                             style: pw.TextStyle(fontSize: 8, color: _muted),
                           ),
                         ],
@@ -1539,25 +1954,30 @@ Future<Uint8List> buildProjectStatementPdf(
                     ),
                   for (final o in ph.invoices)
                     pw.Padding(
-                      padding: const pw.EdgeInsets.only(left: 8, top: 2),
+                      padding: const pw.EdgeInsetsDirectional.only(
+                        start: 8,
+                        top: 2,
+                      ),
                       child: pw.Row(
                         children: [
                           pw.SizedBox(
                             width: 60,
-                            child: pw.Text(
+                            child: _text(
                               o.invoice.number,
                               style: const pw.TextStyle(fontSize: 8),
                             ),
                           ),
                           pw.Expanded(
-                            child: pw.Text(
+                            child: _text(
                               o.invoice.title,
                               style: const pw.TextStyle(fontSize: 8.5),
                             ),
                           ),
-                          pw.Text(
-                            '${fmtMoney(o.invoice.total)} · paid '
-                            '${fmtMoney(o.paid)}',
+                          _text(
+                            '{0} · paid {1}'.tdArgs([
+                              fmtMoney(o.invoice.total),
+                              fmtMoney(o.paid),
+                            ]),
                             style: const pw.TextStyle(fontSize: 8),
                           ),
                         ],
@@ -1568,17 +1988,17 @@ Future<Uint8List> buildProjectStatementPdf(
             ),
         if (scheduleRows.isNotEmpty) ...[
           pw.SizedBox(height: 18),
-          _label('2 · Payment schedule'),
+          _label('2 · Payment schedule'.td),
           pw.SizedBox(height: 5),
           _table(
             [
-              'Instalment',
-              'Due',
-              'Share',
-              'Value',
-              'Invoice',
-              'Received',
-              'Remaining',
+              'Instalment'.td,
+              'Due'.td,
+              'Share'.td,
+              'Value'.td,
+              'Invoice'.td,
+              'Received'.td,
+              'Remaining'.td,
             ],
             scheduleRows,
             widths: {
@@ -1598,12 +2018,20 @@ Future<Uint8List> buildProjectStatementPdf(
         if (ps.layers.isNotEmpty) ...[
           pw.SizedBox(height: 18),
           _label(
-            '${scheduleRows.isEmpty ? 2 : 3} · By trade and item '
-            '(before VAT, fee included)',
+            '{0} · By trade and item (before VAT, fee included)'.tdArgs([
+              scheduleRows.isEmpty ? 2 : 3,
+            ]),
           ),
           pw.SizedBox(height: 5),
           _table(
-            ['#', 'Item', 'Unit', 'Contract', 'Invoiced', 'Billed'],
+            [
+              '#',
+              'Item'.td,
+              'Unit'.td,
+              'Contract'.td,
+              'Invoiced'.td,
+              'Billed'.td,
+            ],
             layerRows,
             widths: {
               0: const pw.FixedColumnWidth(26),
@@ -1620,15 +2048,23 @@ Future<Uint8List> buildProjectStatementPdf(
         ],
         pw.SizedBox(height: 18),
         _label(
-          '${2 + (scheduleRows.isEmpty ? 0 : 1) + (ps.layers.isEmpty ? 0 : 1)}'
-          ' · Account movements',
+          '{0} · Account movements'.tdArgs([
+            2 + (scheduleRows.isEmpty ? 0 : 1) + (ps.layers.isEmpty ? 0 : 1),
+          ]),
         ),
         pw.SizedBox(height: 5),
         _table(
-          ['Date', 'Reference', 'Description', 'Debit', 'Credit', 'Balance'],
+          [
+            'Date'.td,
+            'Reference'.td,
+            'Description'.td,
+            'Debit'.td,
+            'Credit@@column'.td,
+            'Balance'.td,
+          ],
           moves,
           widths: {
-            0: const pw.FixedColumnWidth(66),
+            0: pw.FixedColumnWidth(_dateWidth),
             1: const pw.FixedColumnWidth(64),
             2: const pw.FlexColumnWidth(4),
             3: const pw.FixedColumnWidth(62),
@@ -1641,33 +2077,38 @@ Future<Uint8List> buildProjectStatementPdf(
         ),
         pw.SizedBox(height: 18),
         if (info['bank']?.isNotEmpty ?? false) ...[
-          _label('Bank details'),
+          _label('Bank details'.td),
           pw.SizedBox(height: 3),
-          pw.Text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
+          _text(info['bank']!, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 12),
         ],
-        pw.Text(
+        _text(
           st.advances > 0.005
-              ? 'Due on issued invoices: ${fmtMoney(st.dueOnInvoices)}. '
-                    'Advances of ${fmtMoney(st.advances)} are held on this '
-                    'project: an advance on a payment term is set against '
-                    'that term\'s invoice, money on account against the '
-                    'next invoices. '
-                    'Net account balance: '
-                    '${st.closing < 0 ? 'credit ' : ''}'
-                    '${fmtMoney(st.closing.abs())}. Please report any '
-                    'difference within 15 days of this statement.'
+              ? 'Due on issued invoices: {0}. '
+                        'Advances of {1} are held on this '
+                        'project: an advance on a payment term is set against '
+                        'that term\'s invoice, money on account against the '
+                        'next invoices. '
+                        'Net account balance: {2}. Please report any '
+                        'difference within 15 days of this statement.'
+                    .tdArgs([
+                      fmtMoney(st.dueOnInvoices),
+                      fmtMoney(st.advances),
+                      _net(st.closing),
+                    ])
               : st.closing > 0.005
-              ? 'Balance due: ${fmtMoney(st.closing)}. Please report any '
-                    'difference within 15 days of this statement.'
+              ? 'Balance due: {0}. Please report any '
+                        'difference within 15 days of this statement.'
+                    .tdArgs([fmtMoney(st.closing)])
               : st.closing < -0.005
-              ? 'The project account is in credit by '
-                    '${fmtMoney(-st.closing)}.'
-              : 'The project account is fully settled. Thank you.',
+              ? 'The project account is in credit by {0}.'.tdArgs([
+                  fmtMoney(-st.closing),
+                ])
+              : 'The project account is fully settled. Thank you.'.td,
           style: pw.TextStyle(fontSize: 8.5, color: _muted),
         ),
         pw.SizedBox(height: 30),
-        _signatures(repo, 'Client confirmation'),
+        _signatures(repo, 'Client confirmation'.td),
       ],
     ),
   );
@@ -1675,9 +2116,9 @@ Future<Uint8List> buildProjectStatementPdf(
 }
 
 String _taskState(TaskStatus s) => switch (s) {
-  TaskStatus.done => 'Done',
-  TaskStatus.inProgress => 'In progress',
-  _ => 'To do',
+  TaskStatus.done => 'Done'.td,
+  TaskStatus.inProgress => 'In progress'.td,
+  _ => 'To do'.td,
 };
 
 Future<void> shareProjectStatementPdf(

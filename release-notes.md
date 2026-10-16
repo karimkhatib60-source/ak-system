@@ -1,6 +1,6 @@
-Version 11
+Version 12
 
-- The Windows installer is now made with NSIS, a tool that is free for businesses with no conditions.
-- An update shows a small progress window, and AK System opens again by itself when it is done. If a file is in use, the update stops and asks you to close AK System, so the app is never left half updated.
-- AK System has its own AK icon in the Start menu, on the desktop and on the taskbar. On some computers the old icon on the desktop or taskbar changes only after a restart.
+- Arabic and English: choose the language of the screens in Settings, and separately the language of quotations, invoices, receipts and statements. Arabic screens and documents read from right to left.
+- Document colours: pick one of six colour themes for your quotations, invoices, receipts and statements, or choose your own main and highlight colours. Graphite and blue stays the default.
+- Payments: every payment from a client, whether an advance, money on account or a payment on an invoice, now settles the client's invoices by date, oldest first, within the same project. Receipts and invoices show where each payment went.
 - Your projects and documents stay as they are.

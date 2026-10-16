@@ -19,5 +19,9 @@ void main() {
     expect(trIn(AppLang.ar, 'Language'), 'اللغة');
     expect(trIn(AppLang.en, 'Language'), 'Language');
     expect(trIn(AppLang.ar, 'Not translated {0}', ['x']), 'Not translated x');
+    // A note after @@ tells two meanings apart and never shows.
+    expect(trIn(AppLang.en, 'Credit@@column'), 'Credit');
+    expect(trIn(AppLang.ar, 'Credit@@column'), 'دائن');
+    expect(trIn(AppLang.ar, 'Credit'), 'رصيد دائن');
   });
 }

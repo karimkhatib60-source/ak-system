@@ -120,7 +120,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
   }
 
   Future<void> _delete() async {
-    if (!await confirmDelete(context, 'this deliverable')) return;
+    if (!await confirmDelete(context, 'this deliverable'.tr)) return;
     if (!mounted) return;
     await context.read<Repository>().deleteDeliverable(widget.deliverable!);
     if (mounted) Navigator.pop(context);
@@ -134,17 +134,17 @@ class _DeliverableFormState extends State<DeliverableForm> {
     const gap = SizedBox(height: 14);
     return Scaffold(
       appBar: AppBar(
-        title: Text(d == null ? 'New deliverable' : 'Deliverable'),
+        title: Text(d == null ? 'New deliverable'.tr : 'Deliverable'.tr),
         actions: [
           if (d != null)
             IconButton(
-              tooltip: 'Delete',
+              tooltip: 'Delete'.tr,
               icon: const Icon(Icons.delete_outline),
               onPressed: _delete,
             ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: FilledButton(onPressed: _save, child: Text('Save'.tr)),
           ),
         ],
       ),
@@ -159,12 +159,12 @@ class _DeliverableFormState extends State<DeliverableForm> {
               TextFormField(
                 controller: _title,
                 autofocus: d == null,
-                decoration: const InputDecoration(
-                  labelText: 'Deliverable',
-                  hintText: 'e.g. Ground floor plan, Permit set',
+                decoration: InputDecoration(
+                  labelText: 'Deliverable'.tr,
+                  hintText: 'e.g. Ground floor plan, Permit set'.tr,
                 ),
                 validator: (v) => v == null || v.trim().isEmpty
-                    ? 'Enter the deliverable'
+                    ? 'Enter the deliverable'.tr
                     : null,
               ),
               gap,
@@ -174,9 +174,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
                     child: DropdownButtonFormField<Discipline>(
                       initialValue: _discipline,
                       isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Discipline',
-                      ),
+                      decoration: InputDecoration(labelText: 'Discipline'.tr),
                       items: [
                         for (final x in Discipline.values)
                           DropdownMenuItem(
@@ -192,8 +190,8 @@ class _DeliverableFormState extends State<DeliverableForm> {
                     child: DropdownButtonFormField<DocType>(
                       initialValue: _docType,
                       isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Document type',
+                      decoration: InputDecoration(
+                        labelText: 'Document type'.tr,
                       ),
                       items: [
                         for (final x in DocType.values)
@@ -221,7 +219,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
                     number: _number(repo),
                   ).docCode(repo.project(_projectId)?.code ?? '');
                   return Text(
-                    'Document number: $code',
+                    'Document number: {0}'.trArgs([code]),
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -234,7 +232,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
               DropdownButtonFormField<String>(
                 initialValue: _projectId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Project'),
+                decoration: InputDecoration(labelText: 'Project'.tr),
                 items: [
                   for (final p in repo.visibleProjects)
                     DropdownMenuItem(value: p.id, child: Text(p.name)),
@@ -245,7 +243,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
                         _stageId = repo.project(v)?.stageId;
                       })
                     : null,
-                validator: (v) => v == null ? 'Choose a project' : null,
+                validator: (v) => v == null ? 'Choose a project'.tr : null,
               ),
               gap,
               Row(
@@ -258,14 +256,11 @@ class _DeliverableFormState extends State<DeliverableForm> {
                           ? _stageId
                           : null,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Stage'),
+                      decoration: InputDecoration(labelText: 'Stage'.tr),
                       items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('None'),
-                        ),
+                        DropdownMenuItem(value: null, child: Text('None'.tr)),
                         for (final s in repo.stagesOf(_projectId))
-                          DropdownMenuItem(value: s.id, child: Text(s.name)),
+                          DropdownMenuItem(value: s.id, child: Text(s.name.tr)),
                       ],
                       onChanged: (v) => setState(() => _stageId = v),
                     ),
@@ -273,7 +268,7 @@ class _DeliverableFormState extends State<DeliverableForm> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DateField(
-                      label: 'Due date',
+                      label: 'Due date'.tr,
                       value: _due,
                       onChanged: (v) => setState(() => _due = v),
                     ),
@@ -284,16 +279,16 @@ class _DeliverableFormState extends State<DeliverableForm> {
               TextFormField(
                 controller: _link,
                 decoration: InputDecoration(
-                  labelText: 'File link',
-                  hintText: 'Google Drive or OneDrive link to the files',
+                  labelText: 'File link'.tr,
+                  hintText: 'Google Drive or OneDrive link to the files'.tr,
                   suffixIcon: IconButton(
-                    tooltip: 'Copy link',
+                    tooltip: 'Copy link'.tr,
                     icon: const Icon(Icons.copy, size: 18),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: _link.text));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Link copied')),
-                      );
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('Link copied'.tr)));
                     },
                   ),
                 ),
@@ -303,17 +298,21 @@ class _DeliverableFormState extends State<DeliverableForm> {
                 controller: _notes,
                 minLines: 3,
                 maxLines: 8,
-                decoration: const InputDecoration(
-                  labelText: 'Notes',
-                  hintText: 'Client comments, scope…',
+                decoration: InputDecoration(
+                  labelText: 'Notes'.tr,
+                  hintText: 'Client comments, scope…'.tr,
                 ),
               ),
               if (d != null) ...[
                 const SizedBox(height: 20),
                 Text(
-                  'Revision ${d.revisionLabel}'
-                  '${d.submittedAt != null ? ' · last sent ${fmtDate(d.submittedAt)}' : ''}'
-                  '${d.approvedAt != null ? ' · approved ${fmtDate(d.approvedAt)}' : ''}',
+                  'Revision {0}'.trArgs([d.revisionLabel]) +
+                      (d.submittedAt != null
+                          ? ' · last sent {0}'.trArgs([fmtDate(d.submittedAt)])
+                          : '') +
+                      (d.approvedAt != null
+                          ? ' · approved {0}'.trArgs([fmtDate(d.approvedAt)])
+                          : ''),
                   style: TextStyle(color: c.onSurfaceVariant),
                 ),
               ],
@@ -361,50 +360,50 @@ class _Workflow extends StatelessWidget {
     switch (d.status) {
       case DeliverableStatus.draft:
         add(
-          'Ready for review',
+          'Ready for review'.tr,
           Icons.rate_review_outlined,
           () => repo.setDeliverableStatus(d, DeliverableStatus.internalReview),
         );
         add(
-          'Send to client',
+          'Send to client'.tr,
           Icons.send_outlined,
           () => repo.setDeliverableStatus(d, DeliverableStatus.submitted),
           primary: true,
         );
       case DeliverableStatus.internalReview:
         add(
-          'Back to draft',
+          'Back to draft'.tr,
           Icons.undo,
           () => repo.setDeliverableStatus(d, DeliverableStatus.draft),
         );
         add(
-          'Send to client',
+          'Send to client'.tr,
           Icons.send_outlined,
           () => repo.setDeliverableStatus(d, DeliverableStatus.submitted),
           primary: true,
         );
       case DeliverableStatus.submitted:
         add(
-          'Client asked for changes',
+          'Client asked for changes'.tr,
           Icons.edit_note,
           () => repo.setDeliverableStatus(d, DeliverableStatus.revise),
         );
         add(
-          'Client approved',
+          'Client approved'.tr,
           Icons.verified_outlined,
           () => repo.setDeliverableStatus(d, DeliverableStatus.approved),
           primary: true,
         );
       case DeliverableStatus.revise:
         add(
-          'Start revision ${_next(d)}',
+          'Start revision {0}'.trArgs([_next(d)]),
           Icons.restart_alt,
           () => repo.newRevision(d),
           primary: true,
         );
       case DeliverableStatus.approved:
         add(
-          'Reopen as new revision',
+          'Reopen as new revision'.tr,
           Icons.restart_alt,
           () => repo.newRevision(d),
         );

@@ -32,9 +32,15 @@ final Map<String, String> arabicTexts = {
 };
 
 /// [english] in [lang], with {0}, {1}… replaced by [args]. Text with no
-/// Arabic yet stays in English.
+/// Arabic yet stays in English. A key may end in "@@" and a note when one
+/// English word needs two Arabic ones ('Credit@@column'); the note never
+/// shows.
 String trIn(AppLang lang, String english, [List<Object?> args = const []]) {
-  var s = lang == AppLang.ar ? (arabicTexts[english] ?? english) : english;
+  final cut = english.indexOf('@@');
+  final plain = cut < 0 ? english : english.substring(0, cut);
+  var s = lang == AppLang.ar
+      ? (arabicTexts[english] ?? arabicTexts[plain] ?? plain)
+      : plain;
   for (var i = 0; i < args.length; i++) {
     s = s.replaceAll('{$i}', '${args[i]}');
   }

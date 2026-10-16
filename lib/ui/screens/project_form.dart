@@ -148,11 +148,13 @@ class _ProjectFormState extends State<ProjectForm> {
     const gap = SizedBox(height: 14);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.project == null ? 'New project' : 'Edit project'),
+        title: Text(
+          widget.project == null ? 'New project'.tr : 'Edit project'.tr,
+        ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: FilledButton(onPressed: _save, child: Text('Save'.tr)),
           ),
         ],
       ),
@@ -169,7 +171,7 @@ class _ProjectFormState extends State<ProjectForm> {
                     width: 130,
                     child: TextFormField(
                       controller: _code,
-                      decoration: const InputDecoration(labelText: 'Code'),
+                      decoration: InputDecoration(labelText: 'Code'.tr),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -177,11 +179,10 @@ class _ProjectFormState extends State<ProjectForm> {
                     child: TextFormField(
                       controller: _name,
                       autofocus: widget.project == null,
-                      decoration: const InputDecoration(
-                        labelText: 'Project name',
-                      ),
-                      validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Enter a name' : null,
+                      decoration: InputDecoration(labelText: 'Project name'.tr),
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Enter a name'.tr
+                          : null,
                     ),
                   ),
                 ],
@@ -195,11 +196,11 @@ class _ProjectFormState extends State<ProjectForm> {
                           ? null
                           : _clientId,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Client'),
+                      decoration: InputDecoration(labelText: 'Client'.tr),
                       items: [
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: null,
-                          child: Text('No client yet'),
+                          child: Text('No client yet'.tr),
                         ),
                         for (final c in repo.clients)
                           DropdownMenuItem(value: c.id, child: Text(c.name)),
@@ -209,7 +210,7 @@ class _ProjectFormState extends State<ProjectForm> {
                   ),
                   const SizedBox(width: 8),
                   IconButton.outlined(
-                    tooltip: 'New client',
+                    tooltip: 'New client'.tr,
                     onPressed: _newClient,
                     icon: const Icon(Icons.person_add_alt),
                   ),
@@ -218,8 +219,8 @@ class _ProjectFormState extends State<ProjectForm> {
               gap,
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Outside Lebanon'),
-                subtitle: const Text('Consultancy only'),
+                title: Text('Outside Lebanon'.tr),
+                subtitle: Text('Consultancy only'.tr),
                 value: _abroad,
                 onChanged: (v) => setState(() {
                   _abroad = v;
@@ -246,7 +247,7 @@ class _ProjectFormState extends State<ProjectForm> {
               gap,
               DropdownButtonFormField<ProjectType>(
                 initialValue: _type,
-                decoration: const InputDecoration(labelText: 'Project type'),
+                decoration: InputDecoration(labelText: 'Project type'.tr),
                 items: [
                   for (final t in ProjectType.values)
                     DropdownMenuItem(
@@ -263,9 +264,9 @@ class _ProjectFormState extends State<ProjectForm> {
                     flex: 3,
                     child: TextFormField(
                       controller: _location,
-                      decoration: const InputDecoration(
-                        labelText: 'Location',
-                        hintText: 'City, area or country',
+                      decoration: InputDecoration(
+                        labelText: 'Location'.tr,
+                        hintText: 'City, area or country'.tr,
                       ),
                     ),
                   ),
@@ -277,8 +278,8 @@ class _ProjectFormState extends State<ProjectForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Area',
+                      decoration: InputDecoration(
+                        labelText: 'Area'.tr,
                         suffixText: 'm²',
                       ),
                       validator: (v) =>
@@ -287,7 +288,7 @@ class _ProjectFormState extends State<ProjectForm> {
                               double.tryParse(v.replaceAll(',', '').trim()) !=
                                   null
                           ? null
-                          : 'Numbers only',
+                          : 'Numbers only'.tr,
                     ),
                   ),
                 ],
@@ -297,11 +298,11 @@ class _ProjectFormState extends State<ProjectForm> {
                 controller: _mapLink,
                 keyboardType: TextInputType.url,
                 decoration: InputDecoration(
-                  labelText: 'Google Maps link',
-                  hintText: 'Paste the pin link from Google Maps',
+                  labelText: 'Google Maps link'.tr,
+                  hintText: 'Paste the pin link from Google Maps'.tr,
                   prefixIcon: const Icon(Icons.place_outlined),
                   suffixIcon: IconButton(
-                    tooltip: 'Find on Google Maps',
+                    tooltip: 'Find on Google Maps'.tr,
                     icon: const Icon(Icons.map_outlined),
                     onPressed: () => openUri(
                       _mapLink.text.trim().isNotEmpty
@@ -320,10 +321,11 @@ class _ProjectFormState extends State<ProjectForm> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(top: 4, left: 4),
+                padding: const EdgeInsetsDirectional.only(top: 4, start: 4),
                 child: Text(
                   'Tap the map button, drop a pin on the site, press Share, '
-                  'copy the link and paste it here.',
+                          'copy the link and paste it here.'
+                      .tr,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -334,21 +336,22 @@ class _ProjectFormState extends State<ProjectForm> {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
-                  decoration: const InputDecoration(
-                    labelText: 'Cost-plus fee',
-                    hintText: 'For example 15',
+                  decoration: InputDecoration(
+                    labelText: 'Cost-plus fee'.tr,
+                    hintText: 'For example 15'.tr,
                     suffixText: '%',
-                    prefixIcon: Icon(Icons.percent),
+                    prefixIcon: const Icon(Icons.percent),
                     helperText:
                         'Added on top of cost in this project\'s quotations '
-                        'and invoices.',
+                                'and invoices.'
+                            .tr,
                   ),
                   validator: (v) =>
                       v == null ||
                           v.trim().isEmpty ||
                           double.tryParse(v.replaceAll('%', '').trim()) != null
                       ? null
-                      : 'Numbers only',
+                      : 'Numbers only'.tr,
                 ),
               ],
               gap,
@@ -365,12 +368,13 @@ class _ProjectFormState extends State<ProjectForm> {
                           : null,
                       isExpanded: true,
                       decoration: InputDecoration(
-                        labelText:
-                            'Current stage (${serviceLabel(_effectiveService).toLowerCase()})',
+                        labelText: 'Current stage ({0})'.trArgs([
+                          serviceLabel(_effectiveService).toLowerCase(),
+                        ]),
                       ),
                       items: [
                         for (final s in repo.stagesFor(_effectiveService))
-                          DropdownMenuItem(value: s.id, child: Text(s.name)),
+                          DropdownMenuItem(value: s.id, child: Text(s.name.tr)),
                       ],
                       onChanged: (v) => setState(() => _stageId = v),
                     ),
@@ -379,7 +383,7 @@ class _ProjectFormState extends State<ProjectForm> {
                   Expanded(
                     child: DropdownButtonFormField<ProjectStatus>(
                       initialValue: _status,
-                      decoration: const InputDecoration(labelText: 'Status'),
+                      decoration: InputDecoration(labelText: 'Status'.tr),
                       items: [
                         for (final s in ProjectStatus.values)
                           DropdownMenuItem(
@@ -397,7 +401,7 @@ class _ProjectFormState extends State<ProjectForm> {
                 children: [
                   Expanded(
                     child: DateField(
-                      label: 'Start date',
+                      label: 'Start date'.tr,
                       value: _start,
                       onChanged: (d) => setState(() => _start = d),
                     ),
@@ -405,7 +409,7 @@ class _ProjectFormState extends State<ProjectForm> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DateField(
-                      label: 'Deadline',
+                      label: 'Deadline'.tr,
                       value: _due,
                       onChanged: (d) => setState(() => _due = d),
                     ),
@@ -415,7 +419,7 @@ class _ProjectFormState extends State<ProjectForm> {
               if (repo.members.isNotEmpty) ...[
                 gap,
                 Text(
-                  'Team on this project',
+                  'Team on this project'.tr,
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
                 const SizedBox(height: 6),
@@ -438,7 +442,7 @@ class _ProjectFormState extends State<ProjectForm> {
                 controller: _notes,
                 minLines: 3,
                 maxLines: 8,
-                decoration: const InputDecoration(labelText: 'Notes'),
+                decoration: InputDecoration(labelText: 'Notes'.tr),
               ),
             ],
           ),

@@ -20,9 +20,13 @@ ReceiptAgainst receiptKind(Payment p) => p.onInvoice
     : ReceiptAgainst.account;
 
 String termLabel(Quotation q, int index, [AppLang? lang]) {
+  final l = lang ?? appLang;
   final t = q.paymentTerms[index];
   final pct = t.percent == 0 ? '' : ' · ${_plain(t.percent)}%';
-  return '${t.label.isEmpty ? 'Payment ${index + 1}' : t.label}$pct';
+  final label = t.label.isEmpty
+      ? 'Payment {0}'.inLang(l, [index + 1])
+      : t.label.inLang(l);
+  return '$label$pct';
 }
 
 String _plain(double v) =>
@@ -57,9 +61,9 @@ Future<void> openReceiptForm(
   if (saved == null) return;
   messenger.showSnackBar(
     SnackBar(
-      content: Text('Receipt ${saved.number} saved'),
+      content: Text('Receipt {0} saved'.trArgs([saved.number])),
       action: SnackBarAction(
-        label: 'Send receipt',
+        label: 'Send receipt'.tr,
         onPressed: () => shareReceiptPdf(repo, saved),
       ),
     ),
@@ -273,11 +277,11 @@ class _ReceiptFormState extends State<ReceiptForm> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New receipt'),
+        title: Text('New receipt'.tr),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _save, child: const Text('Save')),
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: FilledButton(onPressed: _save, child: Text('Save'.tr)),
           ),
         ],
       ),
@@ -291,7 +295,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
               DropdownButtonFormField<String?>(
                 initialValue: repo.client(_clientId) == null ? null : _clientId,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Received from'),
+                decoration: InputDecoration(labelText: 'Received from'.tr),
                 items: [
                   for (final cl in repo.clients)
                     DropdownMenuItem(value: cl.id, child: Text(cl.name)),
@@ -303,7 +307,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
                   }
                   _setKind(repo, _kind);
                 }),
-                validator: (v) => v == null ? 'Choose the client' : null,
+                validator: (v) => v == null ? 'Choose the client'.tr : null,
               ),
               gap,
               DropdownButtonFormField<String?>(
@@ -312,11 +316,11 @@ class _ReceiptFormState extends State<ReceiptForm> {
                     ? _projectId
                     : null,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Project'),
+                decoration: InputDecoration(labelText: 'Project'.tr),
                 items: [
-                  const DropdownMenuItem(
+                  DropdownMenuItem(
                     value: null,
-                    child: Text('All projects of this client'),
+                    child: Text('All projects of this client'.tr),
                   ),
                   for (final p in clientProjects)
                     DropdownMenuItem(
@@ -329,21 +333,21 @@ class _ReceiptFormState extends State<ReceiptForm> {
                   _setKind(repo, _kind);
                 }),
               ),
-              const SectionHeader('Received against'),
+              SectionHeader('Received against'.tr),
               SegmentedButton<ReceiptAgainst>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: ReceiptAgainst.invoice,
-                    label: Text('Invoice'),
+                    label: Text('Invoice'.tr),
                   ),
                   ButtonSegment(
                     value: ReceiptAgainst.term,
-                    label: Text('Payment term'),
+                    label: Text('Payment term'.tr),
                   ),
                   ButtonSegment(
                     value: ReceiptAgainst.account,
-                    label: Text('On account'),
+                    label: Text('On account'.tr),
                   ),
                 ],
                 selected: {_kind},
@@ -353,14 +357,14 @@ class _ReceiptFormState extends State<ReceiptForm> {
               const SizedBox(height: 12),
               if (_kind == ReceiptAgainst.invoice)
                 invoices.isEmpty
-                    ? muted('No unpaid invoices for this client.')
+                    ? muted('No unpaid invoices for this client.'.tr)
                     : DropdownButtonFormField<String>(
                         key: ValueKey('i$_clientId$_projectId'),
                         initialValue: invoices.any((i) => i.id == _invoiceId)
                             ? _invoiceId
                             : null,
                         isExpanded: true,
-                        decoration: const InputDecoration(labelText: 'Invoice'),
+                        decoration: InputDecoration(labelText: 'Invoice'.tr),
                         items: [
                           for (final i in invoices)
                             DropdownMenuItem(
@@ -368,8 +372,11 @@ class _ReceiptFormState extends State<ReceiptForm> {
                               child: Text(
                                 [
                                   i.number,
-                                  '${fmtMoney(repo.balanceOf(i))} due',
-                                  if (i.status == InvoiceStatus.draft) 'draft',
+                                  '{0} due'.trArgs([
+                                    fmtMoney(repo.balanceOf(i)),
+                                  ]),
+                                  if (i.status == InvoiceStatus.draft)
+                                    'draft'.tr,
                                   if (i.title.isNotEmpty) i.title,
                                 ].join(' · '),
                                 overflow: TextOverflow.ellipsis,
@@ -381,13 +388,14 @@ class _ReceiptFormState extends State<ReceiptForm> {
                           _prefill(repo);
                         }),
                         validator: (v) =>
-                            v == null ? 'Choose the invoice' : null,
+                            v == null ? 'Choose the invoice'.tr : null,
                       ),
               if (_kind == ReceiptAgainst.term)
                 terms.isEmpty
                     ? muted(
                         'No open payment terms. Add the payment terms on '
-                        'the approved quotation first.',
+                                'the approved quotation first.'
+                            .tr,
                       )
                     : DropdownButtonFormField<String>(
                         key: ValueKey('t$_clientId$_projectId'),
@@ -396,8 +404,8 @@ class _ReceiptFormState extends State<ReceiptForm> {
                             ? _term
                             : null,
                         isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Payment term',
+                        decoration: InputDecoration(
+                          labelText: 'Payment term'.tr,
                         ),
                         items: [
                           for (final t in terms)
@@ -405,7 +413,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
                               value: '${t.$1.id}#${t.$2}',
                               child: Text(
                                 '${t.$1.number} · ${termLabel(t.$1, t.$2)} · '
-                                '${fmtMoney(t.$3.remaining)} left',
+                                '${'{0} left'.trArgs([fmtMoney(t.$3.remaining)])}',
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -415,14 +423,15 @@ class _ReceiptFormState extends State<ReceiptForm> {
                           _prefill(repo);
                         }),
                         validator: (v) =>
-                            v == null ? 'Choose the payment term' : null,
+                            v == null ? 'Choose the payment term'.tr : null,
                       ),
               if (_kind == ReceiptAgainst.account)
                 muted(
                   'Money received without a specific invoice, for example a '
-                  'deposit. It is set against this client\'s open invoices '
-                  'automatically, oldest first, and the rest stays as '
-                  'credit on the account.',
+                          'deposit. It is set against this client\'s open '
+                          'invoices automatically, oldest first, and the rest '
+                          'stays as credit on the account.'
+                      .tr,
                 ),
               _Position(
                 kind: _kind,
@@ -441,18 +450,18 @@ class _ReceiptFormState extends State<ReceiptForm> {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Amount received',
+                      decoration: InputDecoration(
+                        labelText: 'Amount received'.tr,
                         prefixText: '\$ ',
                       ),
                       validator: (v) {
                         final a = _parse(v ?? '');
-                        if (a == null || a <= 0) return 'Enter the amount';
+                        if (a == null || a <= 0) return 'Enter the amount'.tr;
                         if (remaining != null && a > remaining + 0.005) {
                           return remaining <= 0.005
-                              ? 'Nothing left to collect here'
-                              : 'Only ${fmtMoney(remaining)} is due. Record '
-                                    'the extra on account.';
+                              ? 'Nothing left to collect here'.tr
+                              : 'Only {0} is due. Record the extra on account.'
+                                    .trArgs([fmtMoney(remaining)]);
                         }
                         return null;
                       },
@@ -461,7 +470,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DateField(
-                      label: 'Date received',
+                      label: 'Date received'.tr,
                       value: _date,
                       onChanged: (d) => setState(() => _date = d ?? _date),
                     ),
@@ -472,7 +481,7 @@ class _ReceiptFormState extends State<ReceiptForm> {
               DropdownButtonFormField<PaymentMethod>(
                 initialValue: _method,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Method'),
+                decoration: InputDecoration(labelText: 'Method'.tr),
                 items: [
                   for (final m in PaymentMethod.values)
                     DropdownMenuItem(
@@ -487,10 +496,10 @@ class _ReceiptFormState extends State<ReceiptForm> {
                 controller: _reference,
                 decoration: InputDecoration(
                   labelText: switch (_method) {
-                    PaymentMethod.cheque => 'Cheque number and bank',
-                    PaymentMethod.bankTransfer => 'Transfer reference',
-                    PaymentMethod.card => 'Card slip number',
-                    _ => 'Reference (optional)',
+                    PaymentMethod.cheque => 'Cheque number and bank'.tr,
+                    PaymentMethod.bankTransfer => 'Transfer reference'.tr,
+                    PaymentMethod.card => 'Card slip number'.tr,
+                    _ => 'Reference (optional)'.tr,
                   },
                 ),
               ),
@@ -501,15 +510,15 @@ class _ReceiptFormState extends State<ReceiptForm> {
                 maxLines: 4,
                 decoration: InputDecoration(
                   labelText: _kind == ReceiptAgainst.account
-                      ? 'Received for'
-                      : 'Notes (printed on the receipt)',
+                      ? 'Received for'.tr
+                      : 'Notes (printed on the receipt)'.tr,
                   hintText: _kind == ReceiptAgainst.account
-                      ? 'e.g. Deposit before the design agreement'
+                      ? 'e.g. Deposit before the design agreement'.tr
                       : null,
                 ),
                 validator: (v) =>
                     _kind == ReceiptAgainst.account && (v ?? '').trim().isEmpty
-                    ? 'Say what the money is for'
+                    ? 'Say what the money is for'.tr
                     : null,
               ),
             ],
@@ -537,9 +546,9 @@ class _Position extends StatelessWidget {
     if (invoice != null) {
       final i = invoice!;
       rows = [
-        ('Invoice total', i.total),
-        ('Received so far', repo.paidOn(i)),
-        ('Balance due', repo.balanceOf(i)),
+        ('Invoice total'.tr, i.total),
+        ('Received so far'.tr, repo.paidOn(i)),
+        ('Balance due'.tr, repo.balanceOf(i)),
       ];
       final older = [
         for (final o in repo.openInvoices(i.clientId, projectId: i.projectId))
@@ -547,30 +556,35 @@ class _Position extends StatelessWidget {
       ];
       note = [
         if (repo.advanceOn(i) > 0)
-          'Includes ${fmtMoney(repo.advanceOn(i))} set off from other '
-              'payments of the client.',
-        if (older.isNotEmpty)
-          'Payments settle the oldest invoices first, so ${older.join(', ')} '
-              '${older.length == 1 ? 'is' : 'are'} paid before ${i.number}.',
+          'Includes {0} set off from other payments of the client.'.trArgs([
+            fmtMoney(repo.advanceOn(i)),
+          ]),
+        if (older.length == 1)
+          'Payments settle the oldest invoices first, so {0} is paid '
+                  'before {1}.'
+              .trArgs([older.single, i.number])
+        else if (older.isNotEmpty)
+          'Payments settle the oldest invoices first, so {0} are paid '
+                  'before {1}.'
+              .trArgs([older.join(', '), i.number]),
       ].join(' ');
       if (note.isEmpty) note = null;
     } else if (term != null) {
       final (q, _, st) = term!;
       rows = [
-        ('Contract value (${q.number})', q.total),
-        ('Instalment value', st.value),
-        ('Received so far', st.received),
-        ('Remaining', st.remaining),
+        ('Contract value ({0})'.trArgs([q.number]), q.total),
+        ('Instalment value'.tr, st.value),
+        ('Received so far'.tr, st.received),
+        ('Remaining'.tr, st.remaining),
       ];
       final open = repo
           .openInvoices(q.clientId, projectId: q.projectId)
           .map((i) => i.number);
       if (open.isNotEmpty) {
-        note =
-            'This receipt settles the open invoices oldest first: '
-            '${open.join(', ')}.';
+        note = 'This receipt settles the open invoices oldest first: {0}.'
+            .trArgs([open.join(', ')]);
       } else if (st.term.due.isNotEmpty) {
-        note = 'Due: ${st.term.due}.';
+        note = 'Due: {0}.'.trArgs([st.term.due.tr]);
       }
     } else {
       return const SizedBox.shrink();
@@ -649,12 +663,16 @@ class ReceiptTile extends StatelessWidget {
         [
           if (p.number.isNotEmpty) p.number,
           if (showProject && project != null) project.code,
-          if (part) '${fmtMoneyShort(share)} of ${fmtMoneyShort(p.amount)}',
+          if (part)
+            '{0} of {1}'.trArgs([
+              fmtMoneyShort(share),
+              fmtMoneyShort(p.amount),
+            ]),
           receiptPurpose(repo, p),
           if (used.any((e) => e.$1.id != p.invoiceId))
-            'set against ${used.map((e) => e.$1.number).join(', ')}',
+            'set against {0}'.trArgs([used.map((e) => e.$1.number).join(', ')]),
           if (advance && used.isNotEmpty)
-            '${fmtMoneyShort(credit)} credit left',
+            '{0} credit left'.trArgs([fmtMoneyShort(credit)]),
           paymentMethodLabel(p.method),
           fmtDate(p.date),
         ].join(' · '),
@@ -670,11 +688,11 @@ class ReceiptTile extends StatelessWidget {
           const SizedBox(height: 4),
           Pill(
             advance
-                ? 'Advance'
+                ? 'Advance'.tr
                 : switch (kind) {
-                    ReceiptAgainst.invoice => 'Invoice',
-                    ReceiptAgainst.term => 'Term',
-                    ReceiptAgainst.account => 'On account',
+                    ReceiptAgainst.invoice => 'Invoice'.tr,
+                    ReceiptAgainst.term => 'Term'.tr,
+                    ReceiptAgainst.account => 'On account'.tr,
                   },
             color: advance ? AkPalette.info : AkPalette.good,
           ),
@@ -723,7 +741,7 @@ Future<void> showReceiptSheet(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'RECEIPT ${p.number}',
+              'RECEIPT {0}'.trArgs([p.number]),
               style: TextStyle(
                 fontSize: 12,
                 letterSpacing: 1.2,
@@ -737,29 +755,29 @@ Future<void> showReceiptSheet(
               style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 10),
-            row('Received from', client?.name ?? '—'),
+            row('Received from'.tr, client?.name ?? '—'),
             if (project != null)
-              row('Project', '${project.code} · ${project.name}'),
-            row('For', receiptPurpose(repo, p)),
-            row('Date', fmtDate(p.date)),
-            row('Method', paymentMethodLabel(p.method)),
-            if (p.reference.isNotEmpty) row('Reference', p.reference),
+              row('Project'.tr, '${project.code} · ${project.name}'),
+            row('For'.tr, receiptPurpose(repo, p)),
+            row('Date'.tr, fmtDate(p.date)),
+            row('Method'.tr, paymentMethodLabel(p.method)),
+            if (p.reference.isNotEmpty) row('Reference'.tr, p.reference),
             if (p.notes.isNotEmpty && receiptKind(p) != ReceiptAgainst.account)
-              row('Notes', p.notes),
+              row('Notes'.tr, p.notes),
             for (final (i, a) in setAgainst)
               row(
-                'Set against',
+                'Set against'.tr,
                 '${i.number} · ${fmtMoney(a)}'
-                    '${i.title.isEmpty ? '' : ' · ${i.title}'}',
+                '${i.title.isEmpty ? '' : ' · ${i.title}'}',
               ),
             if (!p.onInvoice ||
                 advance > 0.005 ||
                 setAgainst.any((e) => e.$1.id != p.invoiceId))
               row(
-                'Credit left',
+                'Credit left'.tr,
                 advance > 0.005
-                    ? '${fmtMoney(advance)} on the account'
-                    : 'None, fully set against invoices',
+                    ? '{0} on the account'.trArgs([fmtMoney(advance)])
+                    : 'None, fully set against invoices'.tr,
               ),
             const SizedBox(height: 16),
             Wrap(
@@ -769,7 +787,7 @@ Future<void> showReceiptSheet(
                 FilledButton.icon(
                   onPressed: () => shareReceiptPdf(repo, p),
                   icon: const Icon(Icons.ios_share),
-                  label: const Text('Send receipt'),
+                  label: Text('Send receipt'.tr),
                 ),
                 if (p.onInvoice && repo.invoice(p.invoiceId) != null)
                   OutlinedButton.icon(
@@ -781,26 +799,27 @@ Future<void> showReceiptSheet(
                       );
                     },
                     icon: const Icon(Icons.receipt_long_outlined),
-                    label: const Text('Open invoice'),
+                    label: Text('Open invoice'.tr),
                   ),
                 TextButton.icon(
                   onPressed: () async {
                     final ok = await showDialog<bool>(
                       context: ctx,
                       builder: (d) => AlertDialog(
-                        title: Text('Delete receipt ${p.number}?'),
-                        content: const Text(
+                        title: Text('Delete receipt {0}?'.trArgs([p.number])),
+                        content: Text(
                           'A receipt is proof of money received. Delete '
-                          'it only if it was recorded by mistake.',
+                                  'it only if it was recorded by mistake.'
+                              .tr,
                         ),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(d, false),
-                            child: const Text('Cancel'),
+                            child: Text('Cancel'.tr),
                           ),
                           FilledButton(
                             onPressed: () => Navigator.pop(d, true),
-                            child: const Text('Delete'),
+                            child: Text('Delete'.tr),
                           ),
                         ],
                       ),
@@ -810,7 +829,7 @@ Future<void> showReceiptSheet(
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
                   icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
+                  label: Text('Delete'.tr),
                 ),
               ],
             ),
@@ -855,7 +874,7 @@ class TermStatusTile extends StatelessWidget {
         ? 0.0
         : (st.received / st.value).clamp(0.0, 1.0);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -877,7 +896,7 @@ class TermStatusTile extends StatelessWidget {
             Text(
               [
                 if (showQuotation) q.number,
-                if (st.term.due.isNotEmpty) st.term.due,
+                if (st.term.due.isNotEmpty) st.term.due.tr,
               ].join(' · '),
               style: TextStyle(color: ak.muted, fontSize: 12.5),
             ),
@@ -894,9 +913,11 @@ class TermStatusTile extends StatelessWidget {
           Text(
             [
               st.settled
-                  ? 'Received in full'
-                  : 'Received ${fmtMoney(st.received)} · '
-                        'Remaining ${fmtMoney(st.remaining)}',
+                  ? 'Received in full'.tr
+                  : 'Received {0} · Remaining {1}'.trArgs([
+                      fmtMoney(st.received),
+                      fmtMoney(st.remaining),
+                    ]),
               if (live.isNotEmpty) live.map((i) => i.number).join(', '),
             ].join(' · '),
             style: TextStyle(
@@ -907,7 +928,7 @@ class TermStatusTile extends StatelessWidget {
           ),
           if (!st.settled)
             Align(
-              alignment: Alignment.centerRight,
+              alignment: AlignmentDirectional.centerEnd,
               child: Wrap(
                 spacing: 6,
                 children: [
@@ -925,7 +946,7 @@ class TermStatusTile extends StatelessWidget {
                         );
                       },
                       icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                      label: const Text('Invoice'),
+                      label: Text('Invoice'.tr),
                     ),
                   FilledButton.tonalIcon(
                     onPressed: () async {
@@ -942,7 +963,7 @@ class TermStatusTile extends StatelessWidget {
                       );
                     },
                     icon: const Icon(Icons.payments_outlined, size: 18),
-                    label: const Text('Receive'),
+                    label: Text('Receive'.tr),
                   ),
                 ],
               ),

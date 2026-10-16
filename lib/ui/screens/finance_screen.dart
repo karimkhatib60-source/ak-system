@@ -74,10 +74,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
         },
         icon: const Icon(Icons.add),
         label: Text(switch (_tab) {
-          _Tab.quotations => 'Quotation',
-          _Tab.invoices => 'Invoice',
-          _Tab.receipts => 'Receipt',
-          _Tab.expenses || _Tab.profit => 'Expense',
+          _Tab.quotations => 'Quotation'.tr,
+          _Tab.invoices => 'Invoice'.tr,
+          _Tab.receipts => 'Receipt'.tr,
+          _Tab.expenses || _Tab.profit => 'Expense'.tr,
         }),
       ),
       body: Readable(
@@ -89,13 +89,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
               child: SegmentedButton<_Period>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: _Period.month,
-                    label: Text('This month'),
+                    label: Text('This month'.tr),
                   ),
-                  ButtonSegment(value: _Period.year, label: Text('This year')),
-                  ButtonSegment(value: _Period.all, label: Text('All time')),
+                  ButtonSegment(
+                    value: _Period.year,
+                    label: Text('This year'.tr),
+                  ),
+                  ButtonSegment(value: _Period.all, label: Text('All time'.tr)),
                 ],
                 selected: {_period},
                 onSelectionChanged: (v) => setState(() => _period = v.first),
@@ -110,24 +113,24 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 segments: [
                   ButtonSegment(
                     value: _Tab.quotations,
-                    label: Text('Quotes ${repo.quotations.length}'),
+                    label: Text('Quotes {0}'.trArgs([repo.quotations.length])),
                   ),
                   ButtonSegment(
                     value: _Tab.invoices,
-                    label: Text('Invoices ${repo.invoices.length}'),
+                    label: Text('Invoices {0}'.trArgs([repo.invoices.length])),
                   ),
                   ButtonSegment(
                     value: _Tab.receipts,
-                    label: Text('Receipts ${repo.payments.length}'),
+                    label: Text('Receipts {0}'.trArgs([repo.payments.length])),
                   ),
                   ButtonSegment(
                     value: _Tab.expenses,
-                    label: Text('Expenses ${repo.expenses.length}'),
+                    label: Text('Expenses {0}'.trArgs([repo.expenses.length])),
                   ),
-                  const ButtonSegment(
+                  ButtonSegment(
                     value: _Tab.profit,
-                    icon: Icon(Icons.lock_outline, size: 16),
-                    label: Text('Profit'),
+                    icon: const Icon(Icons.lock_outline, size: 16),
+                    label: Text('Profit'.tr),
                   ),
                 ],
                 selected: {_tab},
@@ -146,11 +149,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
                     _Tab.profit => Icons.trending_up,
                   },
                   title: switch (_tab) {
-                    _Tab.quotations => 'No quotations in this period',
-                    _Tab.invoices => 'No invoices in this period',
-                    _Tab.receipts => 'No receipts in this period',
-                    _Tab.expenses => 'No expenses in this period',
-                    _Tab.profit => 'No income or expenses in this period',
+                    _Tab.quotations => 'No quotations in this period'.tr,
+                    _Tab.invoices => 'No invoices in this period'.tr,
+                    _Tab.receipts => 'No receipts in this period'.tr,
+                    _Tab.expenses => 'No expenses in this period'.tr,
+                    _Tab.profit => 'No income or expenses in this period'.tr,
                   },
                 ),
               )
@@ -184,36 +187,36 @@ class MoneyPanel extends StatelessWidget {
     final ak = AkColors.of(context);
     final tiles = [
       if (showQuoted)
-        ('Approved quotes', m.quoted, Icons.handshake_outlined, null, null),
-      ('Invoiced', m.invoiced, Icons.receipt_long_outlined, null, null),
-      ('Received', m.received, Icons.savings_outlined, ak.good, null),
+        ('Approved quotes'.tr, m.quoted, Icons.handshake_outlined, null, null),
+      ('Invoiced'.tr, m.invoiced, Icons.receipt_long_outlined, null, null),
+      ('Received'.tr, m.received, Icons.savings_outlined, ak.good, null),
       (
-        'Outstanding',
+        'Outstanding'.tr,
         m.outstanding,
         Icons.hourglass_bottom,
         m.overdue > 0 ? ak.bad : null,
         m.advances > 0.005
-            ? 'Advances held ${fmtMoneyShort(m.advances)}'
+            ? 'Advances held {0}'.trArgs([fmtMoneyShort(m.advances)])
             : null,
       ),
       if (showProfit) ...[
         (
-          'Expenses',
+          'Expenses'.tr,
           m.expenses,
           Icons.shopping_bag_outlined,
           null,
           m.unpaidBills > 0.005
-              ? 'Unpaid bills ${fmtMoneyShort(m.unpaidBills)}'
-              : 'Without VAT',
+              ? 'Unpaid bills {0}'.trArgs([fmtMoneyShort(m.unpaidBills)])
+              : 'Without VAT'.tr,
         ),
         (
-          'Profit',
+          'Profit'.tr,
           m.profit,
           Icons.trending_up,
           m.profit < 0 ? ak.bad : ak.good,
           m.margin == null
-              ? 'Invoiced without VAT, less expenses'
-              : '${m.margin!.round()}% margin · without VAT',
+              ? 'Invoiced without VAT, less expenses'.tr
+              : '{0}% margin · without VAT'.trArgs([m.margin!.round()]),
         ),
       ],
     ];
@@ -257,7 +260,7 @@ class MoneyPanel extends StatelessWidget {
                           const SizedBox(height: 6),
                           FittedBox(
                             fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
+                            alignment: AlignmentDirectional.centerStart,
                             child: Text(
                               fmtMoneyShort(t.$2),
                               style: TextStyle(
@@ -362,7 +365,7 @@ class InvoiceTile extends StatelessWidget {
           ?client,
           if (showProject && project != null) project,
           if (state == PaymentState.partlyPaid || state == PaymentState.overdue)
-            '${fmtMoneyShort(balance)} due',
+            '{0} due'.trArgs([fmtMoneyShort(balance)]),
           if (i.dueDate != null &&
               state != PaymentState.paid &&
               state != PaymentState.cancelled)
@@ -433,7 +436,7 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
     List<Widget> rows(List<Widget> tiles, String empty) => tiles.isEmpty
         ? [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 16, 4),
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 16, 4),
               child: Text(empty, style: TextStyle(color: ak.muted)),
             ),
           ]
@@ -464,7 +467,7 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
                   buildProjectStatement(repo, p.id),
                 ),
                 icon: const Icon(Icons.request_quote_outlined),
-                label: const Text('Project statement'),
+                label: Text('Project statement'.tr),
               ),
               OutlinedButton.icon(
                 onPressed: () => openReceiptForm(
@@ -473,19 +476,21 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
                   clientId: p.clientId,
                 ),
                 icon: const Icon(Icons.payments_outlined),
-                label: const Text('Receipt'),
+                label: Text('Receipt'.tr),
               ),
             ],
           ),
         ),
       header(
-        'Quotations',
+        'Quotations'.tr,
         () => openQuotationForm(context, projectId: p.id),
-        'Quotation',
+        'Quotation'.tr,
       ),
-      ...rows([for (final q in quotes) QuotationTile(q)], 'No quotation yet.'),
+      ...rows([
+        for (final q in quotes) QuotationTile(q),
+      ], 'No quotation yet.'.tr),
       if (accepted.isNotEmpty) ...[
-        const SectionHeader('Payment schedule'),
+        SectionHeader('Payment schedule'.tr),
         ...rows([
           for (final q in accepted)
             for (var k = 0; k < q.paymentTerms.length; k++)
@@ -497,24 +502,24 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
         ], ''),
       ],
       header(
-        'Invoices',
+        'Invoices'.tr,
         () => openInvoiceForm(context, projectId: p.id),
-        'Invoice',
+        'Invoice'.tr,
       ),
-      ...rows([for (final i in invoices) InvoiceTile(i)], 'No invoice yet.'),
+      ...rows([for (final i in invoices) InvoiceTile(i)], 'No invoice yet.'.tr),
       header(
-        'Receipts',
+        'Receipts'.tr,
         () => openReceiptForm(context, projectId: p.id, clientId: p.clientId),
-        'Receipt',
+        'Receipt'.tr,
       ),
       ...rows([
         for (final r in receipts) ReceiptTile(r, projectId: p.id),
-      ], 'No money received yet.'),
+      ], 'No money received yet.'.tr),
     ];
 
     final internalPart = <Widget>[
       Padding(
-        padding: const EdgeInsets.fromLTRB(18, 12, 16, 0),
+        padding: const EdgeInsetsDirectional.fromSTEB(18, 12, 16, 0),
         child: Row(
           children: [
             Icon(Icons.lock_outline, size: 15, color: ak.muted),
@@ -522,7 +527,8 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
             Expanded(
               child: Text(
                 'AK only. Expenses and profit never appear on client '
-                'documents.',
+                        'documents.'
+                    .tr,
                 style: TextStyle(color: ak.muted, fontSize: 12.5),
               ),
             ),
@@ -539,14 +545,15 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
           child: CostBreakdown(expenses),
         ),
       header(
-        'Expenses',
+        'Expenses'.tr,
         () => openExpenseForm(context, projectId: p.id),
-        'Expense',
+        'Expense'.tr,
       ),
       ...rows(
         [for (final e in expenses) ExpenseTile(e)],
         'No expenses yet. Add each supplier bill or cost you pay for this '
-        'project.',
+                'project.'
+            .tr,
       ),
     ];
 
@@ -560,16 +567,16 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
               width: double.infinity,
               child: SegmentedButton<bool>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: false,
-                    icon: Icon(Icons.handshake_outlined, size: 18),
-                    label: Text('Client account'),
+                    icon: const Icon(Icons.handshake_outlined, size: 18),
+                    label: Text('Client account'.tr),
                   ),
                   ButtonSegment(
                     value: true,
-                    icon: Icon(Icons.lock_outline, size: 18),
-                    label: Text('AK internal'),
+                    icon: const Icon(Icons.lock_outline, size: 18),
+                    label: Text('AK internal'.tr),
                   ),
                 ],
                 selected: {_internal},
@@ -596,14 +603,16 @@ String projectNextStep(
   final drafts = invoices.where((i) => i.status == InvoiceStatus.draft);
   if (quotes.isEmpty && invoices.isEmpty) {
     return 'Start with a quotation. When the client approves it, mark it '
-        'Approved and invoice from it.';
+            'Approved and invoice from it.'
+        .tr;
   }
   if (approved.isEmpty && issued.isEmpty) {
     final open = quotes.where((q) => q.status != QuotationStatus.rejected);
     return open.isEmpty
-        ? 'No approved quotation. Prepare a new one for the client.'
-        : 'Waiting for the client to approve ${open.first.number}. Mark it '
-              'Approved when they agree, then invoice from it.';
+        ? 'No approved quotation. Prepare a new one for the client.'.tr
+        : 'Waiting for the client to approve {0}. Mark it '
+                  'Approved when they agree, then invoice from it.'
+              .trArgs([open.first.number]);
   }
   final due = [
     for (final i in issued)
@@ -612,33 +621,49 @@ String projectNextStep(
   if (due.isNotEmpty) {
     final names = due.length <= 3
         ? due.map((i) => i.number).join(', ')
-        : '${due.length} invoices';
+        : '{0} invoices'.trArgs([due.length]);
     final allLate = m.overdue >= m.outstanding - 0.005;
-    return '${fmtMoney(m.outstanding)} is ${allLate ? 'overdue' : 'due'} on '
-        '$names'
-        '${m.overdue > 0.005 && !allLate ? ', ${fmtMoney(m.overdue)} of it overdue' : ''}. '
-        'Record a receipt when the client pays.';
+    final args = [fmtMoney(m.outstanding), names, fmtMoney(m.overdue)];
+    return allLate
+        ? '{0} is overdue on {1}. Record a receipt when the client pays.'
+              .trArgs(args)
+        : m.overdue > 0.005
+        ? '{0} is due on {1}, {2} of it overdue. Record a receipt when the '
+                  'client pays.'
+              .trArgs(args)
+        : '{0} is due on {1}. Record a receipt when the client pays.'.trArgs(
+            args,
+          );
   }
   if (drafts.isNotEmpty) {
-    return '${drafts.first.number} is still a draft. Send it to issue it; '
-        'money already received is set off automatically.';
+    return '{0} is still a draft. Send it to issue it; '
+            'money already received is set off automatically.'
+        .trArgs([drafts.first.number]);
   }
   if (approved.isNotEmpty && issued.isEmpty) {
-    return 'Raise the first invoice from ${approved.first.number}'
-        '${m.advances > 0.005 ? '; the ${fmtMoney(m.advances)} received in advance is deducted from it' : ''}.';
+    return m.advances > 0.005
+        ? 'Raise the first invoice from {0}; the {1} received in advance is '
+                  'deducted from it.'
+              .trArgs([approved.first.number, fmtMoney(m.advances)])
+        : 'Raise the first invoice from {0}.'.trArgs([approved.first.number]);
   }
   if (m.leftToInvoice > 0.005) {
-    return 'Nothing due now. ${fmtMoney(m.leftToInvoice)} of the contract is '
-        'left to invoice'
-        '${m.advances > 0.005 ? ', and the ${fmtMoney(m.advances)} received in advance is set off on the next invoices' : ''}.';
+    return m.advances > 0.005
+        ? 'Nothing due now. {0} of the contract is left to invoice, and the '
+                  '{1} received in advance is set off on the next invoices.'
+              .trArgs([fmtMoney(m.leftToInvoice), fmtMoney(m.advances)])
+        : 'Nothing due now. {0} of the contract is left to invoice.'.trArgs([
+            fmtMoney(m.leftToInvoice),
+          ]);
   }
   if (issued.isNotEmpty) {
     return m.advances > 0.005
-        ? 'Fully invoiced and paid. ${fmtMoney(m.advances)} credit is held '
-              'for the client.'
-        : 'Fully invoiced and paid.';
+        ? 'Fully invoiced and paid. {0} credit is held for the client.'.trArgs([
+            fmtMoney(m.advances),
+          ])
+        : 'Fully invoiced and paid.'.tr;
   }
-  return 'Raise the first invoice from the approved quotation.';
+  return 'Raise the first invoice from the approved quotation.'.tr;
 }
 
 /// A project's account with the client, as the client's own documents
@@ -705,7 +730,7 @@ class ClientAccountCard extends StatelessWidget {
           children: [
             Text(
               [
-                'CLIENT ACCOUNT',
+                'CLIENT ACCOUNT'.tr,
                 if (clientName != null) clientName!.toUpperCase(),
               ].join(' · '),
               maxLines: 1,
@@ -719,33 +744,34 @@ class ClientAccountCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             row(
-              'Contract value',
+              'Contract value'.tr,
               m.quoted,
               hint: m.quoted > 0
-                  ? 'Approved quotations'
-                  : 'No approved quotation yet',
+                  ? 'Approved quotations'.tr
+                  : 'No approved quotation yet'.tr,
             ),
             row(
-              'Invoiced',
+              'Invoiced'.tr,
               m.invoiced,
               hint: [
                 if (m.quoted > 0 && m.onContract > 0.005)
-                  '${pct(m.onContract, m.quoted)} of the contract',
-                if (m.extras > 0.005) '${fmtMoney(m.extras)} extra work',
+                  '{0} of the contract'.trArgs([pct(m.onContract, m.quoted)]),
+                if (m.extras > 0.005)
+                  '{0} extra work'.trArgs([fmtMoney(m.extras)]),
               ].join(' · '),
             ),
             row(
-              'Received',
+              'Received'.tr,
               m.received,
               color: m.received > 0 ? ak.good : null,
               hint: m.invoiced > 0 && m.received > 0
-                  ? '${pct(m.received, m.invoiced)} of invoiced'
+                  ? '{0} of invoiced'.trArgs([pct(m.received, m.invoiced)])
                   : null,
             ),
             const Divider(height: 16),
             if (due > 0.005 || m.advances <= 0.005)
               row(
-                'Due now',
+                'Due now'.tr,
                 due,
                 bold: true,
                 color: m.overdue > 0.005
@@ -754,51 +780,52 @@ class ClientAccountCard extends StatelessWidget {
                     ? null
                     : ak.good,
                 hint: m.overdue > 0.005
-                    ? '${fmtMoney(m.overdue)} overdue'
+                    ? '{0} overdue'.trArgs([fmtMoney(m.overdue)])
                     : due > 0.005
-                    ? 'On issued invoices, after advances'
-                    : 'Nothing to collect on issued invoices',
+                    ? 'On issued invoices, after advances'.tr
+                    : 'Nothing to collect on issued invoices'.tr,
               ),
             if (m.advances > 0.005)
               row(
-                'Credit held',
+                'Credit held'.tr,
                 m.advances,
                 bold: due <= 0.005,
                 color: ak.info,
                 hint:
                     'Received ahead; set off on the next invoices, '
-                    'oldest first',
+                            'oldest first'
+                        .tr,
               ),
             if (m.quoted > 0 || m.invoiced > 0) ...[
               const SizedBox(height: 6),
               if (m.quoted > 0)
                 row(
-                  'Left to invoice',
+                  'Left to invoice'.tr,
                   m.leftToInvoice,
-                  hint: 'Contract less what was invoiced on it',
+                  hint: 'Contract less what was invoiced on it'.tr,
                 ),
               row(
-                'Still to receive',
+                'Still to receive'.tr,
                 m.leftToReceive,
                 hint: m.quoted <= 0.005
-                    ? 'Invoiced less received'
+                    ? 'Invoiced less received'.tr
                     : m.extras > 0.005
-                    ? 'Contract and extra work, less received'
+                    ? 'Contract and extra work, less received'.tr
                     : m.onContract > m.quoted + 0.005
-                    ? 'Invoiced less received (above the contract)'
-                    : 'Contract less received',
+                    ? 'Invoiced less received (above the contract)'.tr
+                    : 'Contract less received'.tr,
               ),
             ],
             if (m.quoted > 0) ...[
               const SizedBox(height: 10),
               _Progress(
-                label: 'Invoiced of the contract',
+                label: 'Invoiced of the contract'.tr,
                 value: m.onContract / m.quoted,
               ),
               const SizedBox(height: 8),
               if (m.extras > 0.005)
                 _Progress(
-                  label: 'Received of the contract and extra work',
+                  label: 'Received of the contract and extra work'.tr,
                   value:
                       m.received /
                       ((m.onContract > m.quoted ? m.onContract : m.quoted) +
@@ -806,7 +833,7 @@ class ClientAccountCard extends StatelessWidget {
                 )
               else
                 _Progress(
-                  label: 'Received of the contract',
+                  label: 'Received of the contract'.tr,
                   value: m.received / m.quoted,
                 ),
             ],
@@ -836,7 +863,7 @@ class ClientAccountCard extends StatelessWidget {
             ],
             const SizedBox(height: 8),
             Text(
-              'Amounts include VAT, as on the client\'s documents.',
+              'Amounts include VAT, as on the client\'s documents.'.tr,
               style: TextStyle(color: ak.muted, fontSize: 12),
             ),
           ],

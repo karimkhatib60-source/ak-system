@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../l10n/lang.dart';
 import '../../update/update_service.dart';
 import '../theme.dart';
 
@@ -24,7 +25,7 @@ class UpdateBanner extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 12, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -36,39 +37,43 @@ class UpdateBanner extends StatelessWidget {
                   Expanded(
                     child: Text(switch (u.state) {
                       UpdateState.downloading =>
-                        'Downloading version ${r.version}… '
-                            '${(u.progress * 100).round()}%',
+                        'Downloading version {0}… {1}%'.trArgs([
+                          r.version,
+                          (u.progress * 100).round(),
+                        ]),
                       UpdateState.installing =>
-                        'Installing version ${r.version}. AK System will '
-                            'open again in a moment.',
-                      _ => 'Version ${r.version} of AK System is ready.',
+                        'Installing version {0}. AK System will '
+                                'open again in a moment.'
+                            .trArgs([r.version]),
+                      _ => 'Version {0} of AK System is ready.'.trArgs([
+                        r.version,
+                      ]),
                     }, style: const TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 ],
               ),
               if (!busy)
                 Align(
-                  alignment: Alignment.centerRight,
+                  alignment: AlignmentDirectional.centerEnd,
                   child: Wrap(
                     spacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       TextButton(
                         onPressed: () => showWhatsNew(context, r),
-                        child: const Text('What\'s new'),
+                        child: Text('What\'s new'.tr),
                       ),
-                      TextButton(
-                        onPressed: u.later,
-                        child: const Text('Later'),
-                      ),
+                      TextButton(onPressed: u.later, child: Text('Later'.tr)),
                       if (u.blocked)
                         TextButton(
                           onPressed: () => openDownloadPage(u),
-                          child: const Text('Download page'),
+                          child: Text('Download page'.tr),
                         ),
                       FilledButton(
                         onPressed: u.install,
-                        child: Text(u.blocked ? 'Try again' : 'Update now'),
+                        child: Text(
+                          u.blocked ? 'Try again'.tr : 'Update now'.tr,
+                        ),
                       ),
                     ],
                   ),
@@ -93,17 +98,17 @@ class UpdateBanner extends StatelessWidget {
 Future<void> showWhatsNew(BuildContext context, Release r) => showDialog<void>(
   context: context,
   builder: (context) => AlertDialog(
-    title: Text('What\'s new in version ${r.version}'),
+    title: Text('What\'s new in version {0}'.trArgs([r.version])),
     content: SingleChildScrollView(
       child: Text(
-        r.notes.isEmpty ? 'Improvements and fixes.' : r.notes,
+        r.notes.isEmpty ? 'Improvements and fixes.'.tr : r.notes,
         style: const TextStyle(height: 1.4),
       ),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Close'),
+        child: Text('Close'.tr),
       ),
     ],
   ),

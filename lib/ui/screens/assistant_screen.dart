@@ -22,13 +22,15 @@ class _AssistantScreenState extends State<AssistantScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
 
-  static const _examples = [
+  static List<String> get _examples => [
     'New design project: villa in Byblos for Nadim Haddad, 450 m², '
-        'deadline end of March',
+            'deadline end of March'
+        .tr,
     'Make a quotation for the villa: concept 3,000, permit drawings 5,000, '
-        'execution drawings 7,000',
-    'Received 2,000 from Nadim by bank transfer',
-    'What am I missing?',
+            'execution drawings 7,000'
+        .tr,
+    'Received 2,000 from Nadim by bank transfer'.tr,
+    'What am I missing?'.tr,
   ];
 
   @override
@@ -66,17 +68,17 @@ class _AssistantScreenState extends State<AssistantScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(ai.ready ? 'AK Assistant' : 'To cover'),
+        title: Text(ai.ready ? 'AK Assistant'.tr : 'To cover'.tr),
         actions: [
           if (ai.lines.isNotEmpty)
             IconButton(
-              tooltip: 'New conversation',
+              tooltip: 'New conversation'.tr,
               icon: const Icon(Icons.refresh),
               onPressed: ai.clear,
             ),
           if (ai.ready)
             IconButton(
-              tooltip: 'AI key',
+              tooltip: 'AI key'.tr,
               icon: const Icon(Icons.key_outlined),
               onPressed: () => showAiKeyDialog(context),
             ),
@@ -99,7 +101,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
                         padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
                         child: Text(
                           'What is missing, late or waiting across your '
-                          'projects. Tap an item to open the project and fix it.',
+                                  'projects. Tap an item to open the project '
+                                  'and fix it.'
+                              .tr,
                           style: TextStyle(color: ak.muted, height: 1.4),
                         ),
                       ),
@@ -115,11 +119,11 @@ class _AssistantScreenState extends State<AssistantScreen> {
                             ),
                         ],
                       ),
-                    SectionHeader('To cover (${advice.length})'),
+                    SectionHeader('To cover ({0})'.trArgs([advice.length])),
                     if (advice.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4),
-                        child: Text('Nothing missing right now.'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text('Nothing missing right now.'.tr),
                       ),
                     for (var i = 0; i < advice.length && i < 25; i++)
                       GroupedRow(
@@ -141,7 +145,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                           ),
                           const SizedBox(width: 10),
                           Text(
-                            'Working on it…',
+                            'Working on it…'.tr,
                             style: TextStyle(color: ak.muted),
                           ),
                         ],
@@ -158,7 +162,7 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 top: false,
                 child: Readable(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                    padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 8, 8),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -171,14 +175,14 @@ class _AssistantScreenState extends State<AssistantScreen> {
                             textInputAction: TextInputAction.newline,
                             decoration: InputDecoration(
                               hintText: ai.ready
-                                  ? 'Tell me what to do…'
-                                  : 'Add your AI key to start',
+                                  ? 'Tell me what to do…'.tr
+                                  : 'Add your AI key to start'.tr,
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         IconButton.filled(
-                          tooltip: 'Send',
+                          tooltip: 'Send'.tr,
                           onPressed: !ai.ready || ai.busy
                               ? null
                               : () => _send(_input.text),
@@ -218,7 +222,7 @@ class _Intro extends StatelessWidget {
               Icon(Icons.auto_awesome, color: ak.accent),
               const SizedBox(width: 8),
               Text(
-                'Tell it, and it is done',
+                'Tell it, and it is done'.tr,
                 style: TextStyle(
                   color: ak.onChrome,
                   fontWeight: FontWeight.w800,
@@ -230,9 +234,10 @@ class _Intro extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Write or dictate what you need: a new client or project, tasks '
-            'for the team, a quotation, an invoice, a payment received. The '
-            'assistant enters it in the app and asks about anything you '
-            'missed.',
+                    'for the team, a quotation, an invoice, a payment received. '
+                    'The assistant enters it in the app and asks about anything '
+                    'you missed.'
+                .tr,
             style: TextStyle(color: ak.onChromeMuted, height: 1.4),
           ),
           if (!ready) ...[
@@ -240,7 +245,7 @@ class _Intro extends StatelessWidget {
             FilledButton.icon(
               onPressed: () => showAiKeyDialog(context),
               icon: const Icon(Icons.key_outlined),
-              label: const Text('Add AI key'),
+              label: Text('Add AI key'.tr),
             ),
           ],
         ],
@@ -260,7 +265,9 @@ class _Bubble extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     final user = line.fromUser;
     return Align(
-      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: user
+          ? AlignmentDirectional.centerEnd
+          : AlignmentDirectional.centerStart,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Container(
@@ -368,18 +375,19 @@ Future<void> showAiKeyDialog(BuildContext context) async {
   final v = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('AI key'),
+      title: Text('AI key'.tr),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'The assistant uses Claude. Create a key at '
-              'console.anthropic.com (API keys), add a small prepaid credit, '
-              'and paste the key here. You pay only for what you use. The '
-              'key stays on this device.',
+                      'console.anthropic.com (API keys), add a small prepaid '
+                      'credit, and paste the key here. You pay only for what '
+                      'you use. The key stays on this device.'
+                  .tr,
             ),
             const SizedBox(height: 8),
             TextButton.icon(
@@ -387,14 +395,14 @@ Future<void> showAiKeyDialog(BuildContext context) async {
                 Uri.parse('https://console.anthropic.com/settings/keys'),
               ),
               icon: const Icon(Icons.open_in_new, size: 16),
-              label: const Text('Open the Claude console'),
+              label: Text('Open the Claude console'.tr),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: ctrl,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Key (starts with sk-ant-)',
+              decoration: InputDecoration(
+                labelText: 'Key (starts with sk-ant-)'.tr,
               ),
             ),
           ],
@@ -404,15 +412,15 @@ Future<void> showAiKeyDialog(BuildContext context) async {
         if ((ai.apiKey ?? '').isNotEmpty)
           TextButton(
             onPressed: () => Navigator.pop(ctx, ''),
-            child: const Text('Remove key'),
+            child: Text('Remove key'.tr),
           ),
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
+          child: Text('Cancel'.tr),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-          child: const Text('Save'),
+          child: Text('Save'.tr),
         ),
       ],
     ),

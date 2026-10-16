@@ -524,12 +524,15 @@ class Repository extends ChangeNotifier {
     final pct = term.percent == 0
         ? ''
         : ' (${term.percent == term.percent.roundToDouble() ? term.percent.toStringAsFixed(0) : term.percent}%)';
+    // Written in the documents language; a preset label is translated.
+    final label =
+        '${term.label.isEmpty ? 'Payment {0}'.tdArgs([index + 1]) : term.label.td}$pct';
     return Invoice(
       id: newId(),
       createdAt: t,
       updatedAt: t,
       number: nextInvoiceNumber(),
-      title: '${term.label.isEmpty ? 'Payment ${index + 1}' : term.label}$pct',
+      title: label,
       clientId: q.clientId,
       projectId: q.projectId,
       quotationId: q.id,
@@ -541,8 +544,8 @@ class Repository extends ChangeNotifier {
       items: [
         LineItem(
           description:
-              '${term.label.isEmpty ? 'Payment ${index + 1}' : term.label}$pct '
-              'as per ${q.number}${q.title.isEmpty ? '' : ' · ${q.title}'}',
+              '${'{0} as per {1}'.tdArgs([label, q.number])}'
+              '${q.title.isEmpty ? '' : ' · ${q.title}'}',
           rate: value / (1 + q.vatRate / 100),
         ),
       ],
@@ -729,7 +732,7 @@ class Repository extends ChangeNotifier {
       createdAt: t,
       updatedAt: t,
       number: nextInvoiceNumber(),
-      title: 'Progress invoice ${p(percent)}% of ${q.number}',
+      title: 'Progress invoice {0}% of {1}'.tdArgs([p(percent), q.number]),
       clientId: q.clientId,
       projectId: q.projectId,
       quotationId: q.id,
@@ -849,7 +852,7 @@ class Repository extends ChangeNotifier {
               termIndex: i.termIndex,
               notes: [
                 if (p.notes.isNotEmpty) p.notes,
-                'Was on ${i.number}',
+                'Was on {0}'.tdArgs([i.number]),
               ].join(' · '),
             )
             .toMap(),

@@ -14,74 +14,89 @@ String fmtDocDate(DateTime? d) => d == null ? '—' : dayIn(docLang, d);
 
 /// "Today", "Tomorrow", "3 days late", or a short date.
 String fmtDue(DateTime? d, DateTime now) {
-  if (d == null) return 'No date';
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(d.year, d.month, d.day);
-  final diff = day.difference(today).inDays;
-  if (diff == 0) return 'Today';
-  if (diff == 1) return 'Tomorrow';
-  if (diff == -1) return '1 day late';
-  if (diff < 0) return '${-diff} days late';
-  if (diff < 7) return 'In $diff days';
+  if (d == null) return 'No date'.tr;
+  final diff = _daysAhead(d, now);
+  if (diff == 0) return 'Today'.tr;
+  if (diff == 1) return 'Tomorrow'.tr;
+  if (diff == -1) return '1 day late'.tr;
+  // Two has its own wording in Arabic; the English is the same.
+  if (diff == -2) return '2 days late'.tr;
+  if (diff < 0) return '{0} days late'.trArgs([-diff]);
+  if (diff == 2) return 'In 2 days'.tr;
+  if (diff < 7) return 'In {0} days'.trArgs([diff]);
   return dayIn(appLang, d, year: false);
 }
 
+/// Whole days from today to [d]; negative when [d] is past.
+int _daysAhead(DateTime d, DateTime now) => DateTime(
+  d.year,
+  d.month,
+  d.day,
+).difference(DateTime(now.year, now.month, now.day)).inDays;
+
 String serviceLabel(ServiceType s, [AppLang? lang]) => switch (s) {
-  ServiceType.design => 'Design',
-  ServiceType.consultancy => 'Consultancy',
-  ServiceType.contracting => 'Contracting',
+  ServiceType.design => 'Design'.inLang(lang ?? appLang),
+  ServiceType.consultancy => 'Consultancy'.inLang(lang ?? appLang),
+  ServiceType.contracting => 'Contracting'.inLang(lang ?? appLang),
 };
 
 String projectStatusLabel(ProjectStatus s, [AppLang? lang]) => switch (s) {
-  ProjectStatus.lead => 'Lead',
-  ProjectStatus.active => 'Active',
-  ProjectStatus.onHold => 'On hold',
-  ProjectStatus.completed => 'Completed',
-  ProjectStatus.cancelled => 'Cancelled',
+  ProjectStatus.lead => 'Lead'.inLang(lang ?? appLang),
+  ProjectStatus.active => 'Active'.inLang(lang ?? appLang),
+  ProjectStatus.onHold => 'On hold'.inLang(lang ?? appLang),
+  ProjectStatus.completed => 'Completed'.inLang(lang ?? appLang),
+  ProjectStatus.cancelled => 'Cancelled'.inLang(lang ?? appLang),
 };
 
 String taskStatusLabel(TaskStatus s, [AppLang? lang]) => switch (s) {
-  TaskStatus.todo => 'To do',
-  TaskStatus.inProgress => 'In progress',
-  TaskStatus.done => 'Done',
+  TaskStatus.todo => 'To do'.inLang(lang ?? appLang),
+  TaskStatus.inProgress => 'In progress'.inLang(lang ?? appLang),
+  TaskStatus.done => 'Done'.inLang(lang ?? appLang),
 };
 
 String priorityLabel(TaskPriority p, [AppLang? lang]) => switch (p) {
-  TaskPriority.low => 'Low',
-  TaskPriority.normal => 'Normal',
-  TaskPriority.high => 'High',
+  TaskPriority.low => 'Low'.inLang(lang ?? appLang),
+  TaskPriority.normal => 'Normal'.inLang(lang ?? appLang),
+  TaskPriority.high => 'High'.inLang(lang ?? appLang),
 };
 
-String deliverableStatusLabel(DeliverableStatus s, [AppLang? lang]) =>
-    switch (s) {
-      DeliverableStatus.draft => 'Draft',
-      DeliverableStatus.internalReview => 'Internal review',
-      DeliverableStatus.submitted => 'Submitted to client',
-      DeliverableStatus.approved => 'Approved',
-      DeliverableStatus.revise => 'Client asked for changes',
-    };
+String deliverableStatusLabel(
+  DeliverableStatus s, [
+  AppLang? lang,
+]) => switch (s) {
+  DeliverableStatus.draft => 'Draft'.inLang(lang ?? appLang),
+  DeliverableStatus.internalReview => 'Internal review'.inLang(lang ?? appLang),
+  DeliverableStatus.submitted => 'Submitted to client'.inLang(lang ?? appLang),
+  DeliverableStatus.approved => 'Approved'.inLang(lang ?? appLang),
+  DeliverableStatus.revise => 'Client asked for changes'.inLang(
+    lang ?? appLang,
+  ),
+};
 
 /// Short label for list badges where space is tight.
 String deliverableStatusShort(DeliverableStatus s, [AppLang? lang]) =>
     switch (s) {
-      DeliverableStatus.draft => 'Draft',
-      DeliverableStatus.internalReview => 'In review',
-      DeliverableStatus.submitted => 'With client',
-      DeliverableStatus.approved => 'Approved',
-      DeliverableStatus.revise => 'Changes',
+      DeliverableStatus.draft => 'Draft'.inLang(lang ?? appLang),
+      DeliverableStatus.internalReview => 'In review'.inLang(lang ?? appLang),
+      DeliverableStatus.submitted => 'With client'.inLang(lang ?? appLang),
+      DeliverableStatus.approved => 'Approved'.inLang(lang ?? appLang),
+      DeliverableStatus.revise => 'Changes'.inLang(lang ?? appLang),
     };
 
 /// "Due tomorrow", "Due 25 Oct", or "2 days late".
 String dueLine(DateTime d, DateTime now) {
-  final s = fmtDue(d, now);
-  if (s.endsWith('late')) return s;
-  final first = s[0];
-  return 'Due ${first.toUpperCase() == first && int.tryParse(first) == null && !RegExp(r'^[A-Z][a-z]{2} ').hasMatch(s) ? first.toLowerCase() + s.substring(1) : s}';
+  final diff = _daysAhead(d, now);
+  if (diff < 0) return fmtDue(d, now);
+  if (diff == 0) return 'Due today'.tr;
+  if (diff == 1) return 'Due tomorrow'.tr;
+  if (diff == 2) return 'Due in 2 days'.tr;
+  if (diff < 7) return 'Due in {0} days'.trArgs([diff]);
+  return 'Due {0}'.trArgs([dayIn(appLang, d, year: false)]);
 }
 
 String roleLabel(MemberRole r, [AppLang? lang]) => switch (r) {
-  MemberRole.owner => 'Owner',
-  MemberRole.architect => 'Architect',
+  MemberRole.owner => 'Owner'.inLang(lang ?? appLang),
+  MemberRole.architect => 'Architect'.inLang(lang ?? appLang),
 };
 
 Color projectStatusColor(ProjectStatus s, ColorScheme c) => switch (s) {
@@ -107,23 +122,23 @@ Color priorityColor(TaskPriority p, ColorScheme c) => switch (p) {
 };
 
 String projectTypeLabel(ProjectType t, [AppLang? lang]) => switch (t) {
-  ProjectType.residential => 'Residential',
-  ProjectType.commercial => 'Commercial / office',
-  ProjectType.hospitality => 'Hospitality',
-  ProjectType.interior => 'Interior fit-out',
-  ProjectType.mixedUse => 'Mixed-use',
-  ProjectType.industrial => 'Industrial',
-  ProjectType.landscape => 'Landscape',
-  ProjectType.other => 'Other',
+  ProjectType.residential => 'Residential'.inLang(lang ?? appLang),
+  ProjectType.commercial => 'Commercial / office'.inLang(lang ?? appLang),
+  ProjectType.hospitality => 'Hospitality'.inLang(lang ?? appLang),
+  ProjectType.interior => 'Interior fit-out'.inLang(lang ?? appLang),
+  ProjectType.mixedUse => 'Mixed-use'.inLang(lang ?? appLang),
+  ProjectType.industrial => 'Industrial'.inLang(lang ?? appLang),
+  ProjectType.landscape => 'Landscape'.inLang(lang ?? appLang),
+  ProjectType.other => 'Other'.inLang(lang ?? appLang),
 };
 
 String taskCategoryLabel(TaskCategory c, [AppLang? lang]) => switch (c) {
-  TaskCategory.design => 'Design',
-  TaskCategory.drawings => 'Drawings',
-  TaskCategory.siteVisit => 'Site visit',
-  TaskCategory.meeting => 'Meeting',
-  TaskCategory.coordination => 'Coordination',
-  TaskCategory.admin => 'Admin',
+  TaskCategory.design => 'Design'.inLang(lang ?? appLang),
+  TaskCategory.drawings => 'Drawings'.inLang(lang ?? appLang),
+  TaskCategory.siteVisit => 'Site visit'.inLang(lang ?? appLang),
+  TaskCategory.meeting => 'Meeting'.inLang(lang ?? appLang),
+  TaskCategory.coordination => 'Coordination'.inLang(lang ?? appLang),
+  TaskCategory.admin => 'Admin'.inLang(lang ?? appLang),
 };
 
 IconData taskCategoryIcon(TaskCategory c) => switch (c) {
@@ -136,22 +151,22 @@ IconData taskCategoryIcon(TaskCategory c) => switch (c) {
 };
 
 String disciplineLabel(Discipline d, [AppLang? lang]) => switch (d) {
-  Discipline.architecture => 'Architecture',
-  Discipline.interior => 'Interior design',
-  Discipline.structure => 'Structure',
-  Discipline.mep => 'MEP',
-  Discipline.landscape => 'Landscape',
-  Discipline.general => 'General',
+  Discipline.architecture => 'Architecture'.inLang(lang ?? appLang),
+  Discipline.interior => 'Interior design'.inLang(lang ?? appLang),
+  Discipline.structure => 'Structure'.inLang(lang ?? appLang),
+  Discipline.mep => 'MEP'.inLang(lang ?? appLang),
+  Discipline.landscape => 'Landscape'.inLang(lang ?? appLang),
+  Discipline.general => 'General'.inLang(lang ?? appLang),
 };
 
 String docTypeLabel(DocType t, [AppLang? lang]) => switch (t) {
-  DocType.drawing => 'Drawing',
-  DocType.report => 'Report',
-  DocType.presentation => 'Presentation',
-  DocType.model => '3D model / render',
-  DocType.boq => 'Bill of quantities',
-  DocType.specification => 'Specification',
-  DocType.letter => 'Letter / transmittal',
+  DocType.drawing => 'Drawing'.inLang(lang ?? appLang),
+  DocType.report => 'Report'.inLang(lang ?? appLang),
+  DocType.presentation => 'Presentation'.inLang(lang ?? appLang),
+  DocType.model => '3D model / render'.inLang(lang ?? appLang),
+  DocType.boq => 'Bill of quantities'.inLang(lang ?? appLang),
+  DocType.specification => 'Specification'.inLang(lang ?? appLang),
+  DocType.letter => 'Letter / transmittal'.inLang(lang ?? appLang),
 };
 
 String fmtArea(double? a) {
@@ -172,10 +187,10 @@ String fmtMoney(double v) => _money.format(v.abs() < .005 ? 0 : v);
 String fmtMoneyShort(double v) => _moneyRound.format(v.abs() < .5 ? 0 : v);
 
 String quotationStatusLabel(QuotationStatus s, [AppLang? lang]) => switch (s) {
-  QuotationStatus.draft => 'Draft',
-  QuotationStatus.sent => 'Sent',
-  QuotationStatus.accepted => 'Approved',
-  QuotationStatus.rejected => 'Rejected',
+  QuotationStatus.draft => 'Draft'.inLang(lang ?? appLang),
+  QuotationStatus.sent => 'Sent'.inLang(lang ?? appLang),
+  QuotationStatus.accepted => 'Approved'.inLang(lang ?? appLang),
+  QuotationStatus.rejected => 'Rejected'.inLang(lang ?? appLang),
 };
 
 Color quotationStatusColor(QuotationStatus s) => switch (s) {
@@ -186,12 +201,12 @@ Color quotationStatusColor(QuotationStatus s) => switch (s) {
 };
 
 String paymentStateLabel(PaymentState s, [AppLang? lang]) => switch (s) {
-  PaymentState.draft => 'Draft',
-  PaymentState.unpaid => 'Unpaid',
-  PaymentState.partlyPaid => 'Part paid',
-  PaymentState.paid => 'Paid',
-  PaymentState.overdue => 'Overdue',
-  PaymentState.cancelled => 'Cancelled',
+  PaymentState.draft => 'Draft'.inLang(lang ?? appLang),
+  PaymentState.unpaid => 'Unpaid'.inLang(lang ?? appLang),
+  PaymentState.partlyPaid => 'Part paid'.inLang(lang ?? appLang),
+  PaymentState.paid => 'Paid'.inLang(lang ?? appLang),
+  PaymentState.overdue => 'Overdue'.inLang(lang ?? appLang),
+  PaymentState.cancelled => 'Cancelled'.inLang(lang ?? appLang),
 };
 
 Color paymentStateColor(PaymentState s) => switch (s) {
@@ -204,26 +219,32 @@ Color paymentStateColor(PaymentState s) => switch (s) {
 };
 
 String paymentMethodLabel(PaymentMethod m, [AppLang? lang]) => switch (m) {
-  PaymentMethod.bankTransfer => 'Bank transfer',
-  PaymentMethod.cash => 'Cash',
-  PaymentMethod.cheque => 'Cheque',
-  PaymentMethod.card => 'Card',
-  PaymentMethod.other => 'Other',
+  PaymentMethod.bankTransfer => 'Bank transfer'.inLang(lang ?? appLang),
+  PaymentMethod.cash => 'Cash'.inLang(lang ?? appLang),
+  PaymentMethod.cheque => 'Cheque'.inLang(lang ?? appLang),
+  PaymentMethod.card => 'Card'.inLang(lang ?? appLang),
+  PaymentMethod.other => 'Other'.inLang(lang ?? appLang),
 };
 
 String expenseCategoryLabel(ExpenseCategory c, [AppLang? lang]) => switch (c) {
-  ExpenseCategory.materials => 'Materials',
-  ExpenseCategory.subcontractor => 'Subcontractor',
-  ExpenseCategory.labour => 'Labour (daily workers)',
-  ExpenseCategory.equipment => 'Equipment and tool rental',
-  ExpenseCategory.salaries => 'Salaries and fees to team',
-  ExpenseCategory.rent => 'Office rent and utilities',
-  ExpenseCategory.software => 'Software and licences',
-  ExpenseCategory.transport => 'Transport and site visits',
-  ExpenseCategory.printing => 'Printing and models',
-  ExpenseCategory.marketing => 'Marketing',
-  ExpenseCategory.fees => 'Permits and official fees',
-  ExpenseCategory.other => 'Other',
+  ExpenseCategory.materials => 'Materials'.inLang(lang ?? appLang),
+  ExpenseCategory.subcontractor => 'Subcontractor'.inLang(lang ?? appLang),
+  ExpenseCategory.labour => 'Labour (daily workers)'.inLang(lang ?? appLang),
+  ExpenseCategory.equipment => 'Equipment and tool rental'.inLang(
+    lang ?? appLang,
+  ),
+  ExpenseCategory.salaries => 'Salaries and fees to team'.inLang(
+    lang ?? appLang,
+  ),
+  ExpenseCategory.rent => 'Office rent and utilities'.inLang(lang ?? appLang),
+  ExpenseCategory.software => 'Software and licences'.inLang(lang ?? appLang),
+  ExpenseCategory.transport => 'Transport and site visits'.inLang(
+    lang ?? appLang,
+  ),
+  ExpenseCategory.printing => 'Printing and models'.inLang(lang ?? appLang),
+  ExpenseCategory.marketing => 'Marketing'.inLang(lang ?? appLang),
+  ExpenseCategory.fees => 'Permits and official fees'.inLang(lang ?? appLang),
+  ExpenseCategory.other => 'Other'.inLang(lang ?? appLang),
 };
 
 IconData expenseCategoryIcon(ExpenseCategory c) => switch (c) {

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../app_version.dart';
+import '../l10n/lang.dart';
 
 /// Runs a downloaded installer. Only the Windows app can.
 abstract class Installer {
@@ -169,14 +170,17 @@ class UpdateService extends ChangeNotifier {
             : _set(
                 UpdateState.failed,
                 problem:
-                    'The update page github.com/$repo cannot be found, so '
-                    'new versions cannot arrive. Please tell Claude.',
+                    'The update page github.com/{0} cannot be found, so '
+                            'new versions cannot arrive. Please tell Claude.'
+                        .trArgs([repo]),
               );
       }
       if (res.statusCode != 200) {
         return _set(
           available != null ? UpdateState.ready : UpdateState.failed,
-          problem: 'Could not check for updates (${res.statusCode}).',
+          problem: 'Could not check for updates ({0}).'.trArgs([
+            res.statusCode,
+          ]),
         );
       }
       final r = Release.fromGitHub(
@@ -196,7 +200,8 @@ class UpdateService extends ChangeNotifier {
     } catch (_) {
       _set(
         available != null ? UpdateState.ready : UpdateState.failed,
-        problem: 'Could not check for updates. Check the internet connection.',
+        problem:
+            'Could not check for updates. Check the internet connection.'.tr,
       );
     }
   }
@@ -214,7 +219,9 @@ class UpdateService extends ChangeNotifier {
           .send(http.Request('GET', r.installer))
           .timeout(const Duration(seconds: 30));
       if (res.statusCode != 200) {
-        throw _UpdateError('The download failed (${res.statusCode}).');
+        throw _UpdateError(
+          'The download failed ({0}).'.trArgs([res.statusCode]),
+        );
       }
       final bytes = BytesBuilder(copy: false);
       await for (final chunk in res.stream.timeout(
@@ -226,10 +233,10 @@ class UpdateService extends ChangeNotifier {
       }
       data = bytes.takeBytes();
       if (data.length != r.size) {
-        throw _UpdateError('The download was incomplete. Please try again.');
+        throw _UpdateError('The download was incomplete. Please try again.'.tr);
       }
       if (r.sha256 != null && sha256.convert(data).toString() != r.sha256) {
-        throw _UpdateError('The download was damaged. Please try again.');
+        throw _UpdateError('The download was damaged. Please try again.'.tr);
       }
     } on _UpdateError catch (e) {
       return _set(UpdateState.ready, problem: e.message);
@@ -238,7 +245,8 @@ class UpdateService extends ChangeNotifier {
         UpdateState.ready,
         problem:
             'The update could not be downloaded. Check the internet '
-            'connection and try again.',
+                    'connection and try again.'
+                .tr,
       );
     }
     _set(UpdateState.installing);
@@ -254,9 +262,10 @@ class UpdateService extends ChangeNotifier {
       return _set(
         UpdateState.ready,
         problem:
-            'Version ${r.version} was downloaded, but Windows or the '
-            'antivirus did not let the installer start. You can install it '
-            'from the download page instead.',
+            'Version {0} was downloaded, but Windows or the '
+                    'antivirus did not let the installer start. You can '
+                    'install it from the download page instead.'
+                .trArgs([r.version]),
       );
     }
     // The installer is running: close the database and the app.

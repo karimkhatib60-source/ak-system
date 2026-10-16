@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../sync/sync_service.dart';
+import '../../l10n/lang.dart';
 import '../format.dart';
 import '../theme.dart';
 
@@ -79,7 +80,7 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final ak = AkColors.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 22, 8, 8),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 22, 8, 8),
       child: Row(
         children: [
           Expanded(
@@ -88,7 +89,8 @@ class SectionHeader extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.3,
+                // Spacing would break the joined letters of Arabic.
+                letterSpacing: isArabic ? 0 : 1.3,
                 color: ak.muted,
               ),
             ),
@@ -132,12 +134,12 @@ class DateField extends StatelessWidget {
           suffixIcon: value == null
               ? const Icon(Icons.calendar_today_outlined, size: 18)
               : IconButton(
-                  tooltip: 'Clear date',
+                  tooltip: 'Clear date'.tr,
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () => onChanged(null),
                 ),
         ),
-        child: Text(value == null ? 'Not set' : fmtDate(value)),
+        child: Text(value == null ? 'Not set'.tr : fmtDate(value)),
       ),
     );
   }
@@ -153,17 +155,17 @@ class SyncBadge extends StatelessWidget {
     final (icon, tip) = switch (sync.state) {
       SyncState.localOnly => (
         Icons.phone_android,
-        'Saved on this device. Set up cloud sync in Settings.',
+        'Saved on this device. Set up cloud sync in Settings.'.tr,
       ),
-      SyncState.idle => (Icons.cloud_done_outlined, 'All changes synced'),
-      SyncState.syncing => (Icons.cloud_sync_outlined, 'Syncing…'),
+      SyncState.idle => (Icons.cloud_done_outlined, 'All changes synced'.tr),
+      SyncState.syncing => (Icons.cloud_sync_outlined, 'Syncing…'.tr),
       SyncState.offline => (
         Icons.cloud_off_outlined,
-        'Offline. Changes are saved and will sync when you reconnect.',
+        'Offline. Changes are saved and will sync when you reconnect.'.tr,
       ),
       SyncState.error => (
         Icons.error_outline,
-        'Sync problem: ${sync.lastError ?? 'unknown'}',
+        'Sync problem: {0}'.trArgs([sync.lastError ?? 'unknown'.tr]),
       ),
     };
     return IconButton(
@@ -182,16 +184,16 @@ Future<bool> confirmDelete(BuildContext context, String what) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text('Delete $what?'),
-      content: const Text('This cannot be undone.'),
+      title: Text('Delete {0}?'.trArgs([what])),
+      content: Text('This cannot be undone.'.tr),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancel'),
+          child: Text('Cancel'.tr),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('Delete'),
+          child: Text('Delete'.tr),
         ),
       ],
     ),
