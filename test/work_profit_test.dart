@@ -509,14 +509,24 @@ void main() {
             'amount': 250.0,
             'date': '2026-08-01',
           });
+          // Pulled before the update, without the new columns.
+          await db.insert('settings', {
+            'key': 'last_pull_expenses',
+            'value': '2030-01-01T00:00:09.000Z',
+          });
+          await db.insert('settings', {'key': 'app_language', 'value': 'ar'});
         },
       ),
     );
     final before = await old.rawQuery('PRAGMA table_info(expenses)');
     expect(before.any((c) => c['name'] == 'quotation_id'), isFalse);
     await old.close();
+    addTearDown(() => appLang = docLang = AppLang.en);
     final r = Repository(await LocalDb.open(path, factory: f), clock: () => t);
     await r.load();
+    // Everything is pulled again, now with the new columns.
+    expect(await r.local.getSetting('last_pull_expenses'), isNull);
+    expect(await r.local.getSetting('app_language'), 'ar');
     final e = r.expenses.single;
     expect(e.amount, 250);
     expect(e.quotationId, isNull);

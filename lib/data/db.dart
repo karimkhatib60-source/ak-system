@@ -173,6 +173,12 @@ class LocalDb {
           }
           await db.execute(_pendingFilesTable);
           if (from < 8) await db.execute(_notesIndex);
+          // Pull everything again: rows pulled before the update lacked the
+          // new columns, and an edit here would send them back empty.
+          await db.delete(
+            'settings',
+            where: r"key LIKE 'last\_pull\_%' ESCAPE '\'",
+          );
         },
       ),
     );
