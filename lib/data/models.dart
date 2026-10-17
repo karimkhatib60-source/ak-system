@@ -508,6 +508,7 @@ class ProjectNote implements Record {
   };
 
   ProjectNote copyWith({
+    String? id,
     DateTime? date,
     NoteKind? kind,
     String? text,
@@ -515,7 +516,7 @@ class ProjectNote implements Record {
     bool? ownerOnly,
     bool? deleted,
   }) => ProjectNote(
-    id: id,
+    id: id ?? this.id,
     createdAt: createdAt,
     updatedAt: updatedAt,
     deleted: deleted ?? this.deleted,

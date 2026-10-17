@@ -4,6 +4,7 @@ import 'package:ak_system/data/db.dart';
 import 'package:ak_system/data/models.dart';
 import 'package:ak_system/data/repository.dart';
 import 'package:ak_system/sync/sync_service.dart';
+import 'package:ak_system/ui/screens/notes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -127,57 +128,62 @@ void main() {
     expect(repo.notes.map((n) => n.id), ['b1']);
   });
 
-  group('the old notes field', () {
-    Future<void> oldNotes(String id, String text) => repo.local.save(
-      'projects',
-      Project(
-        id: id,
-        createdAt: DateTime.utc(2026, 9, 1),
-        updatedAt: DateTime.utc(2026, 9, 3),
-        name: 'Old $id',
-        notes: text,
-      ).toMap(),
+  test('making a shared note "only me" takes it off the team\'s devices',
+      () async {
+    final cloud = FakeRemote();
+    final archRepo = await memoryRepo(clock);
+    final ownerSync = SyncService(repo.local, repo)..remote = cloud;
+    final archSync = SyncService(archRepo.local, archRepo)..remote = cloud;
+    final shared = await note('n', 'Fee agreed at 8%');
+    await ownerSync.syncNow();
+    await archSync.syncNow();
+    await archRepo.saveMember(
+      Member(
+        id: 'arch',
+        createdAt: t,
+        updatedAt: t,
+        name: 'Rami',
+        role: MemberRole.architect,
+      ),
     );
+    await archRepo.setCurrentMember('arch');
+    expect(archRepo.notesFor('A').map((n) => n.text), ['Fee agreed at 8%']);
 
-    test('becomes the project\'s first note, once', () async {
-      await oldNotes('C', '  Client prefers stone cladding  ');
-      await repo.load();
-      final n = repo.notesFor('C').single;
-      expect(n.text, 'Client prefers stone cladding');
-      expect(n.date, DateTime.utc(2026, 9, 1));
-      expect(n.kind, NoteKind.general);
-      expect(repo.project('C')!.notes, '');
-      await repo.load();
-      expect(repo.notesFor('C'), hasLength(1));
-    });
+    clock.advance(const Duration(minutes: 1));
+    await repo.saveNote(shared.copyWith(ownerOnly: true));
+    final mine = repo.notesFor('A').single;
+    expect(mine.ownerOnly, isTrue);
+    expect(mine.text, 'Fee agreed at 8%');
+    expect(mine.id, isNot('n'));
+    // In the cloud the shared row is now deleted; the team cannot read the
+    // owner-only one (the server's rules hide it, as this fake does here).
+    await ownerSync.syncNow();
+    cloud.tables['project_notes']!.remove(mine.id);
+    await archSync.syncNow();
+    expect(archRepo.notesFor('A'), isEmpty);
+  });
 
-    test('gives the same note on every device', () async {
-      final other = await memoryRepo(clock);
-      for (final r in [repo, other]) {
-        await r.local.save(
-          'projects',
-          Project(
-            id: 'C',
-            createdAt: DateTime.utc(2026, 9, 1),
-            updatedAt: DateTime.utc(2026, 9, 3),
-            name: 'Old C',
-            notes: 'Same text',
-          ).toMap(),
-        );
-        await r.load();
-      }
-      final a = repo.notesFor('C').single, b = other.notesFor('C').single;
-      expect(a.id, b.id);
-      expect(a.toMap(), b.toMap());
-    });
+  test('a note made shared again keeps its id', () async {
+    final n = await note('p', 'Private first', ownerOnly: true);
+    await repo.saveNote(n.copyWith(ownerOnly: false));
+    expect(repo.notesFor('A').single.id, 'p');
+    expect(repo.notesFor('A').single.ownerOnly, isFalse);
+  });
 
-    test('is left alone on an architect\'s device', () async {
-      await asArchitect();
-      await oldNotes('C', 'Owner text');
-      await repo.load();
-      expect(repo.notes, isEmpty);
-      expect(repo.project('C')!.notes, 'Owner text');
-    });
+  test('key points stay on the project and are not turned into notes',
+      () async {
+    await repo.saveProject(
+      repo.project('A')!.copyWith(notes: 'Client prefers stone cladding'),
+    );
+    await repo.load();
+    expect(repo.project('A')!.notes, 'Client prefers stone cladding');
+    expect(repo.notes, isEmpty);
+  });
+
+  test('search finds Arabic words typed with or without hamza', () {
+    expect(searchable('إنشاءات الطابق'), contains(searchable('انشاءات')));
+    expect(searchable('غرفة النوم'), contains(searchable('غرفه')));
+    expect(searchable('Kitchen Layout'), contains(searchable('kitchen')));
   });
 
   test('an architect uploads their notes, never projects', () async {
@@ -218,7 +224,8 @@ void main() {
     expect(back['owner_only'], 0);
   });
 
-  test('upgrading a version 7 database adds notes and moves old ones', () async {
+  test('upgrading a version 7 database adds notes and keeps the old text',
+      () async {
     sqfliteFfiInit();
     final dir = await Directory.systemTemp.createTemp('akdb7');
     final path = p.join(dir.path, 'ak.db');
@@ -252,8 +259,8 @@ void main() {
     await old.close();
     final r = Repository(await LocalDb.open(path, factory: f), clock: () => t);
     await r.load();
-    expect(r.notesFor('P').single.text, 'Gate faces north');
-    expect(r.project('P')!.notes, '');
+    expect(r.notes, isEmpty);
+    expect(r.project('P')!.notes, 'Gate faces north');
     await r.saveNote(
       ProjectNote(
         id: 'n2',
@@ -264,7 +271,7 @@ void main() {
         text: 'Second note',
       ),
     );
-    expect(r.notesFor('P'), hasLength(2));
+    expect(r.notesFor('P').single.text, 'Second note');
     await r.local.db.close();
     await dir.delete(recursive: true);
   });

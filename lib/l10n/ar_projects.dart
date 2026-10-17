@@ -142,6 +142,16 @@ const arProjects = <String, String>{
   'Written by {0}': 'كتبها {0}',
   'Last changed {0}': 'آخر تعديل {0}',
   'Notes · {0}': 'الملاحظات · {0}',
+  'Key points': 'النقاط الأساسية',
+  'Add key points': 'أضف النقاط الأساسية',
+  "What always holds for this project: the client's wishes, budget, access, "
+          'materials.':
+      'ما يبقى ثابتاً في هذا المشروع: رغبات العميل، الميزانية، الوصول إلى '
+      'الموقع، المواد.',
+  'Clear': 'مسح',
+  'Discard your changes?': 'تجاهل التعديلات؟',
+  'Keep editing': 'متابعة التعديل',
+  'Discard': 'تجاهل',
   'Keep meeting minutes, site visits and decisions here.':
       'احفظ هنا محاضر الاجتماعات وزيارات الموقع والقرارات.',
   'Add the work needed for the current stage.':

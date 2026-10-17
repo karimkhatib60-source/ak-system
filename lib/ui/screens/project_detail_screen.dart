@@ -179,7 +179,8 @@ class _Overview extends StatelessWidget {
                           .whereType<String>()
                           .join(', '),
                     ),
-                  if (p.notes.isNotEmpty) fact('Notes'.tr, p.notes),
+                  if (p.notes.trim().isNotEmpty)
+                    fact('Key points'.tr, p.notes.trim()),
                 ],
               ),
             ),

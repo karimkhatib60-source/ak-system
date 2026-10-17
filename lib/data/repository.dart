@@ -115,42 +115,6 @@ class Repository extends ChangeNotifier {
   Future<void> load() async {
     await _seedStages();
     await reload();
-    await _moveProjectNotes();
-  }
-
-  /// Before notes were kept one by one, a project had a single notes field.
-  /// The owner's devices turn that text into the project's first note,
-  /// with an id and times fixed by the project, so every device makes the
-  /// same note, and the field is emptied.
-  Future<void> _moveProjectNotes() async {
-    if (!isOwner) return;
-    var moved = false;
-    for (final p in projects) {
-      if (p.notes.trim().isEmpty) continue;
-      final id = _uuid.v5(Namespace.url.value, 'ak-system/note/${p.id}');
-      if (await local.byId('project_notes', id) == null) {
-        await local.save(
-          'project_notes',
-          ProjectNote(
-            id: id,
-            createdAt: p.createdAt,
-            updatedAt: p.updatedAt,
-            projectId: p.id,
-            date: p.createdAt,
-            text: p.notes.trim(),
-          ).toMap(),
-        );
-      }
-      await local.save('projects', {
-        ...p.copyWith(notes: '').toMap(),
-        'updated_at': now().toUtc().toIso8601String(),
-      });
-      moved = true;
-    }
-    if (moved) {
-      await reload();
-      onLocalChange?.call();
-    }
   }
 
   Future<void> reload() async {
@@ -960,7 +924,21 @@ class Repository extends ChangeNotifier {
   Future<void> saveTask(Task t) => _write('tasks', t.toMap());
   Future<void> saveDeliverable(Deliverable d) =>
       _write('deliverables', d.toMap());
-  Future<void> saveNote(ProjectNote n) => _write('project_notes', n.toMap());
+  /// Saves a note. A shared note the owner makes "only me" is saved as a
+  /// new note and the shared one is deleted, so the deletion reaches the
+  /// team's devices: a note already shared cannot just change its flag
+  /// there, as the team can no longer receive it.
+  Future<void> saveNote(ProjectNote n) async {
+    final was = notes.where((x) => x.id == n.id).firstOrNull;
+    if (was != null && !was.ownerOnly && n.ownerOnly) {
+      await local.save('project_notes', {
+        ...was.copyWith(deleted: true).toMap(),
+        'updated_at': now().toUtc().toIso8601String(),
+      });
+      n = n.copyWith(id: newId());
+    }
+    await _write('project_notes', n.toMap());
+  }
   Future<void> saveStage(Stage s) => _write('stages', s.toMap());
   Future<void> saveMember(Member m) => _write('members', m.toMap());
   Future<void> saveQuotation(Quotation q) => _write('quotations', q.toMap());

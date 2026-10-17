@@ -104,6 +104,9 @@ void main() {
           areaSqm: 450,
           mapLink: 'https://maps.app.goo.gl/example',
           dueDate: DateTime(2026, 12, 20),
+          notes:
+              'Budget around \$650,000. Client prefers natural stone and '
+              'large openings to the sea view.',
         ),
       );
       await r.saveProject(
