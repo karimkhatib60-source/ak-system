@@ -4,7 +4,8 @@
 -- Who sees what:
 --   owner      everything
 --   architect  only projects they are on, plus those projects' client,
---              tasks and deliverables; read-only access to stages and members
+--              tasks, deliverables and shared notes; read-only access to
+--              stages and members
 
 -- ---------------------------------------------------------------- tables --
 
@@ -335,3 +336,28 @@ drop policy if exists attachments_owner on storage.objects;
 create policy attachments_owner on storage.objects for all to authenticated
   using (bucket_id = 'attachments' and public.is_owner())
   with check (bucket_id = 'attachments' and public.is_owner());
+
+-- v13: dated notes for each project. Safe to re-run.
+-- The owner sees and edits every note; architects read and write the notes
+-- of their projects, except the ones marked for the owner only.
+create table if not exists public.project_notes (
+  id uuid primary key, created_at timestamptz not null,
+  updated_at timestamptz not null, deleted boolean not null default false,
+  synced_at timestamptz not null default now(),
+  project_id uuid not null, date text, kind text default 'general',
+  text text default '', author_id uuid, pinned boolean default false,
+  owner_only boolean not null default false
+);
+create index if not exists project_notes_project on public.project_notes (project_id);
+create index if not exists project_notes_synced on public.project_notes (synced_at);
+drop trigger if exists stamp_synced_at on public.project_notes;
+create trigger stamp_synced_at before insert or update on public.project_notes
+  for each row execute function public.stamp_synced_at();
+alter table public.project_notes enable row level security;
+drop policy if exists project_notes_owner on public.project_notes;
+create policy project_notes_owner on public.project_notes for all to authenticated
+  using (public.is_owner()) with check (public.is_owner());
+drop policy if exists project_notes_team on public.project_notes;
+create policy project_notes_team on public.project_notes for all to authenticated
+  using (public.on_project(project_id) and not owner_only)
+  with check (public.on_project(project_id) and not owner_only);

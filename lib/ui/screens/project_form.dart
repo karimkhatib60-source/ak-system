@@ -37,7 +37,6 @@ class _ProjectFormState extends State<ProjectForm> {
   late final TextEditingController _code;
   late final TextEditingController _name;
   late final TextEditingController _location;
-  late final TextEditingController _notes;
   late final TextEditingController _area;
   late final TextEditingController _mapLink;
   late final TextEditingController _fee;
@@ -59,7 +58,6 @@ class _ProjectFormState extends State<ProjectForm> {
     _code = TextEditingController(text: p?.code ?? repo.nextProjectCode());
     _name = TextEditingController(text: p?.name ?? '');
     _location = TextEditingController(text: p?.location ?? '');
-    _notes = TextEditingController(text: p?.notes ?? '');
     _clientId = p?.clientId ?? widget.clientId;
     _service = p?.service ?? ServiceType.design;
     _stageId = p?.stageId ?? repo.stagesFor(_service).firstOrNull?.id;
@@ -88,7 +86,6 @@ class _ProjectFormState extends State<ProjectForm> {
     _area.dispose();
     _mapLink.dispose();
     _fee.dispose();
-    _notes.dispose();
     super.dispose();
   }
 
@@ -121,7 +118,8 @@ class _ProjectFormState extends State<ProjectForm> {
         markupRate: repo.isOwner
             ? double.tryParse(_fee.text.replaceAll('%', '').trim())
             : p?.markupRate,
-        notes: _notes.text.trim(),
+        // Notes are kept one by one in the project's Notes tab.
+        notes: p?.notes ?? '',
       ),
     );
     if (mounted) Navigator.pop(context);
@@ -437,13 +435,6 @@ class _ProjectFormState extends State<ProjectForm> {
                   ],
                 ),
               ],
-              gap,
-              TextFormField(
-                controller: _notes,
-                minLines: 3,
-                maxLines: 8,
-                decoration: InputDecoration(labelText: 'Notes'.tr),
-              ),
             ],
           ),
         ),

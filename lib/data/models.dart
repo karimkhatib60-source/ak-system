@@ -31,6 +31,9 @@ enum ProjectType {
 
 enum TaskCategory { design, drawings, siteVisit, meeting, coordination, admin }
 
+/// What a project note records.
+enum NoteKind { general, meeting, siteVisit, clientRequest, decision }
+
 /// Discipline codes used in document numbers, e.g. ARC.
 enum Discipline {
   architecture('ARC'),
@@ -419,6 +422,110 @@ class Task implements Record {
     stageId: stageId ?? this.stageId,
     notes: notes ?? this.notes,
     category: category,
+  );
+}
+
+/// A dated note kept with a project: minutes of a meeting, what was seen
+/// on site, what the client asked for, a decision, or anything else.
+/// Notes are shared with the project's team unless [ownerOnly].
+class ProjectNote implements Record {
+  @override
+  final String id;
+  @override
+  final DateTime createdAt;
+  @override
+  final DateTime updatedAt;
+  @override
+  final bool deleted;
+  final String projectId;
+
+  /// The day the note is about, such as the day of the meeting.
+  final DateTime date;
+  final NoteKind kind;
+  final String text;
+
+  /// Who wrote it; null when the app is used without a team.
+  final String? authorId;
+
+  /// Kept at the top of the project's notes.
+  final bool pinned;
+
+  /// Seen only by the owner, never by the team.
+  final bool ownerOnly;
+
+  const ProjectNote({
+    required this.id,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deleted = false,
+    required this.projectId,
+    required this.date,
+    this.kind = NoteKind.general,
+    required this.text,
+    this.authorId,
+    this.pinned = false,
+    this.ownerOnly = false,
+  });
+
+  /// The first line of the note, used as its title.
+  String get heading {
+    final t = text.trim();
+    final n = t.indexOf('\n');
+    return n < 0 ? t : t.substring(0, n).trim();
+  }
+
+  /// The rest of the note after its first line.
+  String get body {
+    final t = text.trim();
+    final n = t.indexOf('\n');
+    return n < 0 ? '' : t.substring(n + 1).trim();
+  }
+
+  factory ProjectNote.fromMap(Map<String, Object?> m) => ProjectNote(
+    id: m['id'] as String,
+    createdAt: _date(m['created_at'])!,
+    updatedAt: _date(m['updated_at'])!,
+    deleted: m['deleted'] == 1 || m['deleted'] == true,
+    projectId: m['project_id'] as String,
+    date: _date(m['date']) ?? _date(m['created_at'])!,
+    kind: _enumByName(NoteKind.values, m['kind'], NoteKind.general),
+    text: (m['text'] ?? '') as String,
+    authorId: m['author_id'] as String?,
+    pinned: m['pinned'] == 1 || m['pinned'] == true,
+    ownerOnly: m['owner_only'] == 1 || m['owner_only'] == true,
+  );
+
+  @override
+  Map<String, Object?> toMap() => {
+    ..._base(this),
+    'project_id': projectId,
+    'date': _dateStr(date),
+    'kind': kind.name,
+    'text': text,
+    'author_id': authorId,
+    'pinned': pinned ? 1 : 0,
+    'owner_only': ownerOnly ? 1 : 0,
+  };
+
+  ProjectNote copyWith({
+    DateTime? date,
+    NoteKind? kind,
+    String? text,
+    bool? pinned,
+    bool? ownerOnly,
+    bool? deleted,
+  }) => ProjectNote(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    deleted: deleted ?? this.deleted,
+    projectId: projectId,
+    date: date ?? this.date,
+    kind: kind ?? this.kind,
+    text: text ?? this.text,
+    authorId: authorId,
+    pinned: pinned ?? this.pinned,
+    ownerOnly: ownerOnly ?? this.ownerOnly,
   );
 }
 

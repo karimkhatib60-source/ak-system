@@ -153,8 +153,9 @@ class SyncService extends ChangeNotifier {
         m.contains('timed out');
   }
 
-  /// Architects may only change tasks and deliverables in the cloud.
-  static const teamWritable = {'tasks', 'deliverables'};
+  /// Architects may only change tasks, deliverables and project notes in
+  /// the cloud.
+  static const teamWritable = {'tasks', 'deliverables', 'project_notes'};
 
   Future<void> _push(RemoteStore r, String table) async {
     if (!repo.isOwner && !teamWritable.contains(table)) return;
@@ -250,6 +251,8 @@ class SyncService extends ChangeNotifier {
     'show_markup',
     'paid',
     'extra',
+    'pinned',
+    'owner_only',
   ];
 
   @override

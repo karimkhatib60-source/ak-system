@@ -19,6 +19,9 @@ const syncedTables = <String, String>{
       'version INTEGER, status TEXT, due_date TEXT, submitted_at TEXT, '
       'approved_at TEXT, file_link TEXT, notes TEXT, discipline TEXT, '
       'doc_type TEXT, doc_number INTEGER',
+  'project_notes':
+      'project_id TEXT, date TEXT, kind TEXT, text TEXT, author_id TEXT, '
+      'pinned INTEGER, owner_only INTEGER',
   'quotations':
       'number TEXT, title TEXT, client_id TEXT, project_id TEXT, date TEXT, '
       'valid_until TEXT, items TEXT, discount REAL, vat_rate REAL, '
@@ -61,7 +64,7 @@ class LocalDb {
 
   final Database db;
 
-  static const _version = 7;
+  static const _version = 8;
 
   /// Columns added after the first release, by the version that added them.
   static const _added = {
@@ -107,12 +110,17 @@ class LocalDb {
   static const _newTables = {
     3: ['quotations', 'invoices', 'payments', 'expenses'],
     7: ['attachments'],
+    8: ['project_notes'],
   };
 
   /// Files saved on this device that the cloud does not have yet. Never
   /// synced itself.
   static const _pendingFilesTable =
       'CREATE TABLE IF NOT EXISTS pending_files (id TEXT PRIMARY KEY)';
+
+  static const _notesIndex =
+      'CREATE INDEX IF NOT EXISTS project_notes_project '
+      'ON project_notes(project_id)';
 
   static Future<void> _createTable(Database db, String name) => db.execute(
     'CREATE TABLE IF NOT EXISTS $name ('
@@ -141,6 +149,7 @@ class LocalDb {
           await db.execute(
             'CREATE INDEX deliverables_project ON deliverables(project_id)',
           );
+          await db.execute(_notesIndex);
         },
         onUpgrade: (db, from, to) async {
           for (var v = from + 1; v <= to; v++) {
@@ -158,6 +167,7 @@ class LocalDb {
             }
           }
           await db.execute(_pendingFilesTable);
+          if (from < 8) await db.execute(_notesIndex);
         },
       ),
     );

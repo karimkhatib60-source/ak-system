@@ -27,7 +27,8 @@ const arProjects = <String, String>{
   'Project type': 'نوع المشروع',
   'All projects': 'كل المشاريع',
   'Choose a project': 'اختر مشروعاً',
-  '{0} with its tasks and deliverables': '{0} مع مهامه وتسليماته',
+  '{0} with its tasks, deliverables and notes':
+      '{0} مع مهامه وتسليماته وملاحظاته',
   'Outside Lebanon': 'خارج لبنان',
   'Consultancy only': 'استشارات فقط',
   'Location': 'الموقع',
@@ -111,6 +112,38 @@ const arProjects = <String, String>{
   'this task': 'هذه المهمة',
   'Enter the task': 'أدخل المهمة',
   'No tasks yet': 'لا مهام بعد',
+
+  // Project notes
+  'Note': 'ملاحظة',
+  'Notes@@tab': 'الملاحظات',
+  'General@@note': 'عامة',
+  'Client request': 'طلب العميل',
+  'Decision': 'قرار',
+  'No notes yet': 'لا ملاحظات بعد',
+  'Meeting minutes, site visits, client requests and decisions, each with '
+          'its date.':
+      'محاضر الاجتماعات وزيارات الموقع وطلبات العميل والقرارات، كلٌّ '
+      'بتاريخه.',
+  'Search notes': 'ابحث في الملاحظات',
+  'All@@notes': 'الكل',
+  'No notes match.': 'لا ملاحظات مطابقة.',
+  'Only you': 'لك وحدك',
+  'Pinned': 'مثبّتة',
+  'By {0}': 'بقلم {0}',
+  'this note': 'هذه الملاحظة',
+  'New note': 'ملاحظة جديدة',
+  'Edit note': 'تعديل الملاحظة',
+  'The first line is the title of the note.':
+      'السطر الأول هو عنوان الملاحظة.',
+  'Write the note': 'اكتب الملاحظة',
+  'Pin to the top': 'تثبيت في الأعلى',
+  'Only me': 'لي وحدي',
+  'Your team never sees this note.': 'لا يرى فريقك هذه الملاحظة أبداً.',
+  'Written by {0}': 'كتبها {0}',
+  'Last changed {0}': 'آخر تعديل {0}',
+  'Notes · {0}': 'الملاحظات · {0}',
+  'Keep meeting minutes, site visits and decisions here.':
+      'احفظ هنا محاضر الاجتماعات وزيارات الموقع والقرارات.',
   'Add the work needed for the current stage.':
       'أضف الأعمال المطلوبة للمرحلة الحالية.',
   'Due date': 'تاريخ الاستحقاق',

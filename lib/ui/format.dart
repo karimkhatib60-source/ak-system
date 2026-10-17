@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 import '../l10n/lang.dart';
 
@@ -9,6 +9,20 @@ import 'theme.dart';
 /// [s] kept left to right inside Arabic text, so a phone number, an email
 /// or a handle reads as typed ("+961 79 180 650", "@ak").
 String ltr(String s) => s.isEmpty ? s : '\u2066$s\u2069';
+
+final _strongLetter = RegExp(
+  r'[A-Za-z\u00C0-\u024F\u0620-\u064A\u066E-\u06D3\u06FA-\u06FF'
+  r'\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]',
+);
+
+/// The direction of text the user typed, by its first letter: Arabic reads
+/// right to left and English left to right, whatever the screens'
+/// language. Null when it has no letters.
+TextDirection? directionOf(String s) {
+  final m = _strongLetter.firstMatch(s);
+  if (m == null) return null;
+  return m[0]!.codeUnitAt(0) >= 0x0600 ? TextDirection.rtl : TextDirection.ltr;
+}
 
 /// Parts of a line joined by " · ". On Arabic screens each part keeps its
 /// own direction, so a date or an English name beside it stays whole.
@@ -160,6 +174,22 @@ IconData taskCategoryIcon(TaskCategory c) => switch (c) {
   TaskCategory.meeting => Icons.groups_outlined,
   TaskCategory.coordination => Icons.hub_outlined,
   TaskCategory.admin => Icons.inventory_2_outlined,
+};
+
+String noteKindLabel(NoteKind k) => switch (k) {
+  NoteKind.general => 'General@@note'.tr,
+  NoteKind.meeting => 'Meeting'.tr,
+  NoteKind.siteVisit => 'Site visit'.tr,
+  NoteKind.clientRequest => 'Client request'.tr,
+  NoteKind.decision => 'Decision'.tr,
+};
+
+IconData noteKindIcon(NoteKind k) => switch (k) {
+  NoteKind.general => Icons.sticky_note_2_outlined,
+  NoteKind.meeting => Icons.groups_outlined,
+  NoteKind.siteVisit => Icons.engineering_outlined,
+  NoteKind.clientRequest => Icons.record_voice_over_outlined,
+  NoteKind.decision => Icons.gavel_outlined,
 };
 
 String disciplineLabel(Discipline d, [AppLang? lang]) => switch (d) {

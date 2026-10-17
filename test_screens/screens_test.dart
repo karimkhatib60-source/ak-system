@@ -136,6 +136,56 @@ void main() {
           dueDate: DateTime(2026, 11, 5),
         ),
       );
+      Future<void> note(
+        String id,
+        int day,
+        NoteKind kind,
+        String text, {
+        bool pinned = false,
+        bool ownerOnly = false,
+      }) => r.saveNote(
+        ProjectNote(
+          id: id,
+          createdAt: t,
+          updatedAt: t,
+          projectId: 'p1',
+          date: DateTime(2026, 10, day),
+          kind: kind,
+          text: text,
+          pinned: pinned,
+          ownerOnly: ownerOnly,
+        ),
+      );
+      await note(
+        'n1',
+        2,
+        NoteKind.decision,
+        'Facade in local sandstone\nThe client approved sandstone cladding '
+        'with bronze window frames. Samples to be ordered this week.',
+        pinned: true,
+      );
+      await note(
+        'n2',
+        12,
+        NoteKind.siteVisit,
+        'Site visit: ground floor slab\nRebar checked against the structural '
+        'drawings. Two spacers missing at the north edge; contractor to fix '
+        'before pouring.',
+      );
+      await note(
+        'n3',
+        9,
+        NoteKind.meeting,
+        'Meeting with Nadim and the contractor\n1. Kitchen moves to the east '
+        'side.\n2. Pool depth stays 1.6 m.\n3. Next meeting on site, 23 Oct.',
+      );
+      await note(
+        'n4',
+        6,
+        NoteKind.clientRequest,
+        'Wants a home office on the first floor',
+        ownerOnly: true,
+      );
       Future<void> task(
         String id,
         String p,
@@ -663,6 +713,18 @@ void main() {
       find.byType(AkApp),
       matchesGoldenFile('out/phone_project_detail.png'),
     );
+    await tester.tap(find.text('Notes'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_project_notes.png'),
+    );
+    await tester.tap(find.text('Meeting with Nadim and the contractor'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_note_form.png'),
+    );
   });
 
   testWidgets('phone lists', (tester) async {
@@ -1114,6 +1176,12 @@ void main() {
     await expectLater(
       find.byType(AkApp),
       matchesGoldenFile('out/ar_phone_project_detail.png'),
+    );
+    await tester.tap(find.text('الملاحظات'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/ar_phone_project_notes.png'),
     );
   });
 

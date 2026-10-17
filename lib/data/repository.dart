@@ -72,6 +72,7 @@ class Repository extends ChangeNotifier {
   List<Project> projects = [];
   List<Task> tasks = [];
   List<Deliverable> deliverables = [];
+  List<ProjectNote> notes = [];
   List<Quotation> quotations = [];
   List<Invoice> invoices = [];
   List<Payment> payments = [];
@@ -114,6 +115,42 @@ class Repository extends ChangeNotifier {
   Future<void> load() async {
     await _seedStages();
     await reload();
+    await _moveProjectNotes();
+  }
+
+  /// Before notes were kept one by one, a project had a single notes field.
+  /// The owner's devices turn that text into the project's first note,
+  /// with an id and times fixed by the project, so every device makes the
+  /// same note, and the field is emptied.
+  Future<void> _moveProjectNotes() async {
+    if (!isOwner) return;
+    var moved = false;
+    for (final p in projects) {
+      if (p.notes.trim().isEmpty) continue;
+      final id = _uuid.v5(Namespace.url.value, 'ak-system/note/${p.id}');
+      if (await local.byId('project_notes', id) == null) {
+        await local.save(
+          'project_notes',
+          ProjectNote(
+            id: id,
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+            projectId: p.id,
+            date: p.createdAt,
+            text: p.notes.trim(),
+          ).toMap(),
+        );
+      }
+      await local.save('projects', {
+        ...p.copyWith(notes: '').toMap(),
+        'updated_at': now().toUtc().toIso8601String(),
+      });
+      moved = true;
+    }
+    if (moved) {
+      await reload();
+      onLocalChange?.call();
+    }
   }
 
   Future<void> reload() async {
@@ -134,6 +171,7 @@ class Repository extends ChangeNotifier {
     deliverables = (await local.all('deliverables'))
         .map(Deliverable.fromMap)
         .toList();
+    notes = (await local.all('project_notes')).map(ProjectNote.fromMap).toList();
     quotations = (await local.all('quotations')).map(Quotation.fromMap).toList()
       ..sort((a, b) => b.number.compareTo(a.number));
     invoices = (await local.all('invoices')).map(Invoice.fromMap).toList()
@@ -211,6 +249,16 @@ class Repository extends ChangeNotifier {
     return deliverables.where((d) => ids.contains(d.projectId)).toList();
   }
 
+  /// Notes the current user may read: all for the owner; the team sees
+  /// the notes of their projects that are not kept for the owner.
+  List<ProjectNote> get visibleNotes {
+    if (isOwner) return notes;
+    final ids = _visibleProjectIds;
+    return notes
+        .where((n) => ids.contains(n.projectId) && !n.ownerOnly)
+        .toList();
+  }
+
   List<Client> get visibleClients {
     if (isOwner) return clients;
     final ids = visibleProjects.map((p) => p.clientId).toSet();
@@ -229,6 +277,25 @@ class Repository extends ChangeNotifier {
   List<Deliverable> deliverablesFor(String projectId) =>
       deliverables.where((d) => d.projectId == projectId).toList()
         ..sort((a, b) => a.title.compareTo(b.title));
+  /// A project's notes the current user may read: pinned first, then the
+  /// newest.
+  List<ProjectNote> notesFor(String projectId) =>
+      visibleNotes.where((n) => n.projectId == projectId).toList()
+        ..sort(compareNotes);
+
+  /// Pinned notes first, then by day, newest first, then by last change.
+  static int compareNotes(ProjectNote a, ProjectNote b) {
+    if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+    final c = _day(b.date).compareTo(_day(a.date));
+    return c != 0 ? c : b.updatedAt.compareTo(a.updatedAt);
+  }
+
+  /// Whether the current user may change or delete a note: the owner any
+  /// note, the team the shared notes of their projects.
+  bool canEditNote(ProjectNote n) =>
+      isOwner ||
+      (!n.ownerOnly && _visibleProjectIds.contains(n.projectId));
+
   List<Project> projectsFor(String clientId) =>
       projects.where((p) => p.clientId == clientId).toList();
 
@@ -893,6 +960,7 @@ class Repository extends ChangeNotifier {
   Future<void> saveTask(Task t) => _write('tasks', t.toMap());
   Future<void> saveDeliverable(Deliverable d) =>
       _write('deliverables', d.toMap());
+  Future<void> saveNote(ProjectNote n) => _write('project_notes', n.toMap());
   Future<void> saveStage(Stage s) => _write('stages', s.toMap());
   Future<void> saveMember(Member m) => _write('members', m.toMap());
   Future<void> saveQuotation(Quotation q) => _write('quotations', q.toMap());
@@ -1090,13 +1158,21 @@ class Repository extends ChangeNotifier {
       _write('tasks', t.copyWith(deleted: true).toMap());
   Future<void> deleteDeliverable(Deliverable d) =>
       _write('deliverables', d.copyWith(deleted: true).toMap());
+  Future<void> deleteNote(ProjectNote n) =>
+      _write('project_notes', n.copyWith(deleted: true).toMap());
   Future<void> deleteStage(Stage s) =>
       _write('stages', s.copyWith(deleted: true).toMap());
   Future<void> deleteMember(Member m) =>
       _write('members', m.copyWith(deleted: true).toMap());
 
-  /// Deleting a project also removes its tasks and deliverables.
+  /// Deleting a project also removes its tasks, deliverables and notes.
   Future<void> deleteProject(Project p) async {
+    for (final n in notes.where((n) => n.projectId == p.id).toList()) {
+      await local.save('project_notes', {
+        ...n.copyWith(deleted: true).toMap(),
+        'updated_at': now().toUtc().toIso8601String(),
+      });
+    }
     for (final t in tasksFor(p.id)) {
       await local.save('tasks', {
         ...t.copyWith(deleted: true).toMap(),

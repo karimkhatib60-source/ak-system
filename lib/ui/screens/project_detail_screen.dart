@@ -10,6 +10,7 @@ import '../widgets/tiles.dart';
 import 'client_detail_screen.dart';
 import 'deliverable_form.dart';
 import 'finance_screen.dart';
+import 'notes.dart';
 import 'project_form.dart';
 import 'task_form.dart';
 
@@ -33,7 +34,7 @@ class ProjectDetailScreen extends StatelessWidget {
     }
     final money = repo.isOwner;
     return DefaultTabController(
-      length: money ? 4 : 3,
+      length: money ? 5 : 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(p.name),
@@ -49,7 +50,9 @@ class ProjectDetailScreen extends StatelessWidget {
                   if (v == 'delete' &&
                       await confirmDelete(
                         context,
-                        '{0} with its tasks and deliverables'.trArgs([p.name]),
+                        '{0} with its tasks, deliverables and notes'.trArgs([
+                          p.name,
+                        ]),
                       )) {
                     await repo.deleteProject(p);
                     if (context.mounted) Navigator.pop(context);
@@ -71,6 +74,7 @@ class ProjectDetailScreen extends StatelessWidget {
               Tab(text: 'Overview'.tr),
               Tab(text: 'Tasks'.tr),
               Tab(text: 'Deliverables'.tr),
+              Tab(text: 'Notes@@tab'.tr),
               if (money) Tab(text: 'Finance'.tr),
             ],
           ),
@@ -80,6 +84,7 @@ class ProjectDetailScreen extends StatelessWidget {
             _Overview(p: p),
             _Tasks(p: p),
             _Deliverables(p: p),
+            ProjectNotesTab(project: p),
             if (money) ProjectMoneyTab(project: p),
           ],
         ),
@@ -101,6 +106,7 @@ class _Overview extends StatelessWidget {
     final now = repo.now();
     final tasks = repo.tasksFor(p.id);
     final dels = repo.deliverablesFor(p.id);
+    final notes = repo.notesFor(p.id);
     final stages = repo.stagesFor(p.service);
     final currentIndex = stages.indexWhere((s) => s.id == p.stageId);
     final map = mapUri(p);
@@ -202,6 +208,26 @@ class _Overview extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.sticky_note_2_outlined),
+              title: Text(
+                notes.isEmpty
+                    ? 'Notes'.tr
+                    : 'Notes · {0}'.trArgs(['${notes.length}']),
+              ),
+              subtitle: Text(
+                notes.isEmpty
+                    ? 'Keep meeting minutes, site visits and decisions here.'.tr
+                    : [fmtDate(notes.first.date), notes.first.heading].dots(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => DefaultTabController.of(context).animateTo(3),
+            ),
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
