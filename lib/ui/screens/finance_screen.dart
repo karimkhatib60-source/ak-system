@@ -10,6 +10,7 @@ import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'expenses.dart';
+import 'export_screen.dart';
 import 'money_doc_form.dart';
 import 'profit_view.dart';
 import 'receipts.dart';
@@ -87,21 +88,41 @@ class _FinanceScreenState extends State<FinanceScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-              child: SegmentedButton<_Period>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(
-                    value: _Period.month,
-                    label: Text('This month'.tr),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<_Period>(
+                      showSelectedIcon: false,
+                      segments: [
+                        ButtonSegment(
+                          value: _Period.month,
+                          label: Text('This month'.tr),
+                        ),
+                        ButtonSegment(
+                          value: _Period.year,
+                          label: Text('This year'.tr),
+                        ),
+                        ButtonSegment(
+                          value: _Period.all,
+                          label: Text('All time'.tr),
+                        ),
+                      ],
+                      selected: {_period},
+                      onSelectionChanged: (v) =>
+                          setState(() => _period = v.first),
+                    ),
                   ),
-                  ButtonSegment(
-                    value: _Period.year,
-                    label: Text('This year'.tr),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: 'Export'.tr,
+                    icon: const Icon(Icons.ios_share),
+                    onPressed: () => openExportScreen(
+                      context,
+                      from: since,
+                      internal: _tab == _Tab.expenses || _tab == _Tab.profit,
+                    ),
                   ),
-                  ButtonSegment(value: _Period.all, label: Text('All time'.tr)),
                 ],
-                selected: {_period},
-                onSelectionChanged: (v) => setState(() => _period = v.first),
               ),
             ),
             MoneyPanel(m),
@@ -422,6 +443,7 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
     final m = repo.money(projectId: p.id);
     final client = repo.client(p.clientId);
     final ak = AkColors.of(context);
+    final works = _internal ? profitByWork(repo, p.id) : const <WorkProfit>[];
 
     Widget header(String title, VoidCallback onAdd, String addLabel) =>
         SectionHeader(
@@ -478,7 +500,24 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
                 icon: const Icon(Icons.payments_outlined),
                 label: Text('Receipt'.tr),
               ),
+              OutlinedButton.icon(
+                onPressed: () => openExportScreen(context, projectId: p.id),
+                icon: const Icon(Icons.ios_share),
+                label: Text('Export'.tr),
+              ),
             ],
+          ),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: OutlinedButton.icon(
+              onPressed: () => openExportScreen(context, projectId: p.id),
+              icon: const Icon(Icons.ios_share),
+              label: Text('Export'.tr),
+            ),
           ),
         ),
       header(
@@ -539,6 +578,29 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
         child: ProfitCard(profitOf(repo, projectId: p.id)),
       ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        child: Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: OutlinedButton.icon(
+            onPressed: () =>
+                openExportScreen(context, projectId: p.id, internal: true),
+            icon: const Icon(Icons.ios_share, size: 18),
+            label: Text('Export'.tr),
+          ),
+        ),
+      ),
+      if (works.isNotEmpty) ...[
+        SectionHeader('By contract'.tr),
+        for (final w in works)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: WorkCard(
+              w,
+              key: ValueKey('${w.kind.name}${w.contract?.id ?? ''}'),
+            ),
+          ),
+      ],
       if (expenses.isNotEmpty)
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -550,7 +612,7 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
         'Expense'.tr,
       ),
       ...rows(
-        [for (final e in expenses) ExpenseTile(e)],
+        [for (final e in expenses) ExpenseTile(e, showWork: true)],
         'No expenses yet. Add each supplier bill or cost you pay for this '
                 'project.'
             .tr,

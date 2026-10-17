@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
+import '../../data/profit.dart';
 import '../../data/repository.dart';
 import '../format.dart';
 import '../theme.dart';
@@ -32,10 +33,29 @@ double _cents(double v) => (v * 100).round() / 100;
 // ------------------------------------------------------------- Lists --
 
 class ExpenseTile extends StatelessWidget {
-  const ExpenseTile(this.e, {super.key, this.showProject = false});
+  const ExpenseTile(
+    this.e, {
+    super.key,
+    this.showProject = false,
+    this.showWork = false,
+  });
 
   final Expense e;
   final bool showProject;
+
+  /// Shows the contract or extra work the cost belongs to.
+  final bool showWork;
+
+  static String _workShort(Repository repo, Expense e) {
+    if (e.extra) return 'Extra work'.tr;
+    final q = workContract(
+      repo,
+      e.projectId,
+      quotationId: e.quotationId,
+      extra: false,
+    );
+    return q?.number ?? 'Not linked'.tr;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +77,7 @@ class ExpenseTile extends StatelessWidget {
           if (e.title.isNotEmpty && e.vendor.isNotEmpty) e.vendor,
           expenseCategoryLabel(e.category),
           if (showProject) project?.code ?? 'Company'.tr,
+          if (showWork && project != null) _workShort(repo, e),
           if (e.items.isNotEmpty)
             e.items.length == 1
                 ? '{0} item'.trArgs([e.items.length])
@@ -169,15 +190,19 @@ class CostBreakdown extends StatelessWidget {
 
 // ------------------------------------------------------------- Form --
 
+/// [work] links a new expense to a piece of work of the project, as
+/// [WorkProfit.workKey] gives it.
 Future<void> openExpenseForm(
   BuildContext context, {
   Expense? expense,
   String? projectId,
+  String? work,
 }) => Navigator.push(
   context,
   MaterialPageRoute(
     fullscreenDialog: true,
-    builder: (_) => ExpenseForm(expense: expense, projectId: projectId),
+    builder: (_) =>
+        ExpenseForm(expense: expense, projectId: projectId, work: work),
   ),
 );
 
@@ -219,10 +244,11 @@ class _Row {
 /// An expense as a supplier's bill: who, what for, the lines or the total,
 /// VAT, whether it is paid, and the supplier's invoice kept with it.
 class ExpenseForm extends StatefulWidget {
-  const ExpenseForm({super.key, this.expense, this.projectId});
+  const ExpenseForm({super.key, this.expense, this.projectId, this.work});
 
   final Expense? expense;
   final String? projectId;
+  final String? work;
 
   @override
   State<ExpenseForm> createState() => _ExpenseFormState();
@@ -244,6 +270,10 @@ class _ExpenseFormState extends State<ExpenseForm> {
   late bool _paid;
   PaymentMethod? _method;
   String? _projectId;
+
+  /// The work the cost belongs to: a contract's quotation id,
+  /// [Expense.extraWork], or empty for a general cost of the project.
+  var _work = '';
   late ExpenseCategory _category;
   late DateTime _date;
   final _added = <(Attachment, Uint8List)>[];
@@ -267,6 +297,17 @@ class _ExpenseFormState extends State<ExpenseForm> {
     );
     _notes = TextEditingController(text: e?.notes ?? '');
     _projectId = e?.projectId ?? widget.projectId;
+    _work = e == null
+        ? widget.work ?? _defaultWork(repo, _projectId)
+        : e.extra
+        ? Expense.extraWork
+        : workContract(
+                repo,
+                e.projectId,
+                quotationId: e.quotationId,
+                extra: false,
+              )?.id ??
+              '';
     _category =
         e?.category ??
         (_projectId == null ? ExpenseCategory.rent : ExpenseCategory.materials);
@@ -404,6 +445,11 @@ class _ExpenseFormState extends State<ExpenseForm> {
         updatedAt: now,
         number: e?.number ?? '',
         projectId: _projectId,
+        quotationId:
+            _projectId == null || _work.isEmpty || _work == Expense.extraWork
+            ? null
+            : _work,
+        extra: _projectId != null && _work == Expense.extraWork,
         date: _date,
         category: _category,
         title: _title.text.trim(),
@@ -420,6 +466,66 @@ class _ExpenseFormState extends State<ExpenseForm> {
       detach: _removed,
     );
     if (mounted) Navigator.pop(context);
+  }
+
+  /// A new cost goes to the project's only contract when it has one.
+  static String _defaultWork(Repository repo, String? projectId) {
+    final contracts = contractsOf(repo, projectId);
+    return contracts.length == 1 ? contracts.single.id : '';
+  }
+
+  /// Which work of the project the cost belongs to, so the AK internal
+  /// view matches it with that work's income.
+  Widget _workPicker(Repository repo) {
+    final contracts = contractsOf(repo, _projectId);
+    final linked = repo.quotation(_work);
+    final choices = [
+      ...contracts,
+      if (linked != null &&
+          linked.projectId == _projectId &&
+          !contracts.contains(linked))
+        linked,
+    ];
+    // With one contract, a cost linked to nothing counts in it, so it is
+    // shown as that contract's.
+    final general = contracts.length != 1;
+    final value =
+        _work == Expense.extraWork || choices.any((q) => q.id == _work)
+        ? _work
+        : general
+        ? ''
+        : contracts.single.id;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('work$_projectId'),
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Cost of'.tr,
+        helperMaxLines: 2,
+        helperText: value == Expense.extraWork
+            ? 'Matched with the extra-work invoices'.tr
+            : value.isEmpty
+            ? 'A general cost of the project, not matched to one contract'.tr
+            : "Matched with this contract's invoices for its profit".tr,
+      ),
+      items: [
+        for (final q in choices)
+          DropdownMenuItem(
+            value: q.id,
+            child: Text(workTitle(q, appLang), overflow: TextOverflow.ellipsis),
+          ),
+        DropdownMenuItem(
+          value: Expense.extraWork,
+          child: Text('Extra work, outside the contract'.tr),
+        ),
+        if (general)
+          DropdownMenuItem(
+            value: '',
+            child: Text('General project cost (not linked)'.tr),
+          ),
+      ],
+      onChanged: (v) => setState(() => _work = v ?? ''),
+    );
   }
 
   /// Fills in the category last used with a supplier.
@@ -624,8 +730,15 @@ class _ExpenseFormState extends State<ExpenseForm> {
                       ),
                     ),
                 ],
-                onChanged: (v) => setState(() => _projectId = v),
+                onChanged: (v) {
+                  if (v == _projectId) return;
+                  setState(() {
+                    _projectId = v;
+                    _work = _defaultWork(repo, v);
+                  });
+                },
               ),
+              if (_projectId != null) ...[gap, _workPicker(repo)],
               gap,
               DropdownButtonFormField<ExpenseCategory>(
                 key: ValueKey(_category),

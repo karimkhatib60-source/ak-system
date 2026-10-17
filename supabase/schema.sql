@@ -361,3 +361,8 @@ drop policy if exists project_notes_team on public.project_notes;
 create policy project_notes_team on public.project_notes for all to authenticated
   using (public.on_project(project_id) and not owner_only)
   with check (public.on_project(project_id) and not owner_only);
+
+-- v14: each expense can be linked to the work it is a cost of: a contract
+-- (an approved quotation) or extra work. Safe to re-run.
+alter table public.expenses add column if not exists quotation_id text;
+alter table public.expenses add column if not exists extra boolean;

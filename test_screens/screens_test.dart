@@ -889,6 +889,30 @@ void main() {
     );
   });
 
+  testWidgets('phone export', (tester) async {
+    await pump(tester, const Size(400, 860));
+    await tester.tap(find.byType(NavigationDestination).at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Apartment fit-out').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Finance').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Export').first);
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_export.png'),
+    );
+    await tester.tap(find.text('Invoices').last);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(AkApp),
+      matchesGoldenFile('out/phone_export_invoices.png'),
+    );
+  });
+
   testWidgets('phone project profit', (tester) async {
     await pump(tester, const Size(400, 860));
     await tester.tap(find.byType(NavigationDestination).at(4));

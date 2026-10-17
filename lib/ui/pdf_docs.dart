@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../data/boq_library.dart';
 import '../data/company_links.dart';
 import '../data/models.dart';
+import '../data/profit.dart';
 import '../data/repository.dart';
 import '../data/project_statement.dart';
 import '../data/statement.dart';
@@ -340,6 +341,22 @@ Map<int, pw.TableColumnWidth> _colWidths(
 
 /// Builds the branded PDF for a quotation or an invoice.
 Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
+  final theme = await _theme(repo);
+  final pdf = pw.Document(
+    theme: theme,
+    title:
+        '${_numberOf(doc)} ${doc is Invoice ? 'Invoice'.td : 'Quotation'.td}',
+    author: repo.companyName,
+  );
+  _addPriced(pdf, repo, doc);
+  return pdf.save();
+}
+
+String _numberOf(PricedDocument doc) =>
+    doc is Invoice ? doc.number : (doc as Quotation).number;
+
+/// Adds the pages of a quotation or an invoice to [pdf].
+void _addPriced(pw.Document pdf, Repository repo, PricedDocument doc) {
   final isInvoice = doc is Invoice;
   final number = isInvoice ? doc.number : (doc as Quotation).number;
   final title = isInvoice ? doc.title : (doc as Quotation).title;
@@ -356,12 +373,6 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
   final info = repo.companyInfo;
   final paid = isInvoice ? repo.paidOn(doc) : 0.0;
   final setOff = isInvoice ? repo.advanceOn(doc) : 0.0;
-
-  final pdf = pw.Document(
-    theme: await _theme(repo),
-    title: '$number ${isInvoice ? 'Invoice'.td : 'Quotation'.td}',
-    author: repo.companyName,
-  );
 
   const label = _label;
 
@@ -390,13 +401,11 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
   );
 
   pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      textDirection: _dir,
+    _page(
+      pdf,
+      repo,
       header: (ctx) =>
           _header(repo, isInvoice ? 'INVOICE'.td : 'QUOTATION'.td, number),
-      footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         // Parties and dates.
         pw.Row(
@@ -550,7 +559,6 @@ Future<Uint8List> buildPdf(Repository repo, PricedDocument doc) async {
       ],
     ),
   );
-  return pdf.save();
 }
 
 /// A quotation's payment terms: instalment, when due, share and amount.
@@ -842,7 +850,40 @@ pw.Widget _header(Repository repo, String title, String number) => pw.Column(
   ],
 );
 
-pw.Widget _footer(pw.Context ctx, Repository repo) {
+/// Where each document of a file starts: the number of pages before it.
+/// A file can hold several documents (an export), and each one counts its
+/// own pages.
+final _starts = Expando<List<int>>();
+
+/// An A4 page run for one document of [pdf], with the company footer and
+/// that document's own page numbers.
+pw.MultiPage _page(
+  pw.Document pdf,
+  Repository repo, {
+  required pw.BuildCallback header,
+  required pw.BuildListCallback build,
+}) {
+  final starts = _starts[pdf] ??= [];
+  final k = starts.length;
+  starts.add(pdf.document.pdfPageList.pages.length);
+  return pw.MultiPage(
+    pageFormat: PdfPageFormat.a4,
+    // A long BOQ or a year of expenses runs past the default 20 pages.
+    maxPages: 1000,
+    margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
+    textDirection: _dir,
+    header: header,
+    footer: (ctx) {
+      // While this document is laid out the next one has not started, so
+      // the count so far stands in; it is final when the pages are drawn.
+      final end = k + 1 < starts.length ? starts[k + 1] : ctx.pagesCount;
+      return _footer(ctx, repo, ctx.pageNumber - starts[k], end - starts[k]);
+    },
+    build: build,
+  );
+}
+
+pw.Widget _footer(pw.Context ctx, Repository repo, int page, int pages) {
   final links = companyLinks(repo.companyInfo);
   final address = repo.companyText('address', docLang);
   final style = pw.TextStyle(fontSize: 7.5, color: _muted);
@@ -872,10 +913,7 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
             ),
           ),
           pw.SizedBox(width: 10),
-          _text(
-            'Page {0} of {1}'.tdArgs([ctx.pageNumber, ctx.pagesCount]),
-            style: style,
-          ),
+          _text('Page {0} of {1}'.tdArgs([page, pages]), style: style),
         ],
       ),
     ],
@@ -885,13 +923,25 @@ pw.Widget _footer(pw.Context ctx, Repository repo) {
 String _linkLabel(String kind) => kind == 'instagram' ? 'Instagram ' : '';
 
 /// [s] with only the characters file names can hold, Arabic included.
-String _fileSafe(String s) => s
-    .replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '-')
+String fileSafe(String s) => s
+    .replaceAll(RegExp(r'[\\/:*?"<>|\s\x00-\x1f\x7f]+'), '-')
     .replaceAll(RegExp(r'-+'), '-')
     .replaceAll(RegExp(r'^-|-$'), '');
 
 /// Builds the branded statement of account for a client.
 Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
+  final theme = await _theme(repo);
+  final pdf = pw.Document(
+    theme: theme,
+    title: 'Statement of account {0}'.tdArgs([built.client.name]),
+    author: repo.companyName,
+  );
+  _addStatement(pdf, repo, built);
+  return pdf.save();
+}
+
+/// Adds the pages of a client's statement of account to [pdf].
+void _addStatement(pw.Document pdf, Repository repo, Statement built) {
   // The lines are worded again when built in another language.
   final st = built.lang == docLang
       ? built
@@ -905,11 +955,6 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
         );
   final info = repo.companyInfo;
   final client = st.client;
-  final pdf = pw.Document(
-    theme: await _theme(repo),
-    title: 'Statement of account {0}'.tdArgs([client.name]),
-    author: repo.companyName,
-  );
   const label = _label;
   const table = _table;
   String m(double v) => v == 0 ? '' : fmtMoney(v);
@@ -947,16 +992,14 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
   final aging = st.aging;
 
   pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      textDirection: _dir,
+    _page(
+      pdf,
+      repo,
       header: (ctx) => _header(
         repo,
         'STATEMENT'.td,
         'As of {0}'.tdArgs([fmtDocDate(st.to)]),
       ),
-      footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1192,16 +1235,15 @@ Future<Uint8List> buildStatementPdf(Repository repo, Statement built) async {
       ],
     ),
   );
-  return pdf.save();
 }
 
 Future<void> shareStatementPdf(Repository repo, Statement st) async {
   final bytes = await buildStatementPdf(repo, st);
-  final name = _fileSafe(st.client.name);
+  final name = fileSafe(st.client.name);
   await Printing.sharePdf(
     bytes: bytes,
     filename:
-        '${_fileSafe('Statement@@file'.td)}-$name-'
+        '${fileSafe('Statement@@file'.td)}-$name-'
         '${st.to.toIso8601String().substring(0, 10)}.pdf',
   );
 }
@@ -1637,15 +1679,22 @@ String receiptNote(Repository repo, Payment pay) =>
 }
 
 Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
+  final theme = await _theme(repo);
+  final pdf = pw.Document(
+    theme: theme,
+    title: '${pay.number} ${'Receipt'.td}',
+    author: repo.companyName,
+  );
+  _addReceipt(pdf, repo, pay);
+  return pdf.save();
+}
+
+/// Adds the page of a receipt to [pdf].
+void _addReceipt(pw.Document pdf, Repository repo, Payment pay) {
   final inv = repo.invoice(pay.invoiceId);
   final term = _termOf(repo, pay);
   final client = repo.client(repo.payerOf(pay));
   final project = repo.project(repo.projectOfPayment(pay));
-  final pdf = pw.Document(
-    theme: await _theme(repo),
-    title: '${pay.number} ${'Receipt'.td}',
-    author: repo.companyName,
-  );
   final (:purpose, :detail, :after) = _receiptParts(repo, pay);
 
   // How a receipt not taken on an invoice has been used so far.
@@ -1676,12 +1725,10 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
             );
 
   pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      textDirection: _dir,
+    _page(
+      pdf,
+      repo,
       header: (ctx) => _header(repo, 'RECEIPT'.td, pay.number),
-      footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         _partyBlock('Received from'.td, client, [
           _kv('Receipt no.'.td, pay.number),
@@ -1818,7 +1865,6 @@ Future<Uint8List> buildReceiptPdf(Repository repo, Payment pay) async {
       ],
     ),
   );
-  return pdf.save();
 }
 
 const _receiptWidths = {
@@ -1842,6 +1888,22 @@ Future<Uint8List> buildProjectStatementPdf(
   Repository repo,
   ProjectStatement built,
 ) async {
+  final theme = await _theme(repo);
+  final pdf = pw.Document(
+    theme: theme,
+    title: 'Project statement {0}'.tdArgs([built.project.code]),
+    author: repo.companyName,
+  );
+  _addProjectStatement(pdf, repo, built);
+  return pdf.save();
+}
+
+/// Adds the pages of a project statement to [pdf].
+void _addProjectStatement(
+  pw.Document pdf,
+  Repository repo,
+  ProjectStatement built,
+) {
   // The lines and phases are worded again when built in another language.
   final ps = built.lang == docLang
       ? built
@@ -1849,11 +1911,6 @@ Future<Uint8List> buildProjectStatementPdf(
   final info = repo.companyInfo;
   final st = ps.account;
   final p = ps.project;
-  final pdf = pw.Document(
-    theme: await _theme(repo),
-    title: 'Project statement {0}'.tdArgs([p.code]),
-    author: repo.companyName,
-  );
   String m(double v) => v.abs() < .005 ? '—' : fmtMoney(v);
 
   final phaseRows = <List<String>>[
@@ -1976,16 +2033,14 @@ Future<Uint8List> buildProjectStatementPdf(
   ];
 
   pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 40),
-      textDirection: _dir,
+    _page(
+      pdf,
+      repo,
       header: (ctx) => _header(
         repo,
         'PROJECT STATEMENT'.td,
         'As of {0}'.tdArgs([fmtDocDate(st.to)]),
       ),
-      footer: (ctx) => _footer(ctx, repo),
       build: (ctx) => [
         _partyBlock('Prepared for'.td, st.client, [
           _kv('Project'.td, p.code),
@@ -2248,7 +2303,6 @@ Future<Uint8List> buildProjectStatementPdf(
       ],
     ),
   );
-  return pdf.save();
 }
 
 String _taskState(TaskStatus s) => switch (s) {
@@ -2265,7 +2319,353 @@ Future<void> shareProjectStatementPdf(
   await Printing.sharePdf(
     bytes: bytes,
     filename:
-        '${_fileSafe('Statement@@file'.td)}-${ps.project.code}-'
+        '${fileSafe('Statement@@file'.td)}-${ps.project.code}-'
         '${ps.account.to.toIso8601String().substring(0, 10)}.pdf',
+  );
+}
+
+/// One PDF holding several documents one after the other (quotations,
+/// invoices, receipts, statements and the internal cost report), each
+/// with its own header and page numbers.
+Future<Uint8List> buildBundlePdf(
+  Repository repo,
+  List<Object> docs, {
+  required String title,
+}) async {
+  final theme = await _theme(repo);
+  final pdf = pw.Document(theme: theme, title: title, author: repo.companyName);
+  for (final d in docs) {
+    switch (d) {
+      case PricedDocument():
+        _addPriced(pdf, repo, d);
+      case Payment():
+        _addReceipt(pdf, repo, d);
+      case Statement():
+        _addStatement(pdf, repo, d);
+      case ProjectStatement():
+        _addProjectStatement(pdf, repo, d);
+      case CostReport():
+        _addCostReport(pdf, repo, d);
+    }
+  }
+  return pdf.save();
+}
+
+/// Adds the internal cost and profit report: each work's income, money
+/// received and costs, its invoices and the chosen expenses. Marked as
+/// internal on every page.
+void _addCostReport(pw.Document pdf, Repository repo, CostReport r) {
+  final project = repo.project(r.projectId);
+  final client = repo.client(project?.clientId);
+  String m(double v) => v.abs() < .005 ? '—' : fmtMoney(v);
+  String code(String id) {
+    final p = repo.project(id);
+    return p == null ? '' : (p.code.isEmpty ? p.name : p.code);
+  }
+
+  final many = r.projects.length > 1 || r.projectId == null;
+  String workName(WorkProfit w) =>
+      many ? '${code(w.projectId)} · ${w.label(docLang)}' : w.label(docLang);
+  final period = r.from == null && r.to == null
+      ? 'All dates'.td
+      : '${r.from == null ? '…' : fmtDocDate(r.from)} – '
+            '${r.to == null ? '…' : fmtDocDate(r.to)}';
+
+  final summary = <List<String>>[
+    for (final w in r.works)
+      [
+        workName(w),
+        m(w.revenue),
+        m(w.received + w.held),
+        m(w.cost),
+        fmtMoney(w.profit),
+        w.margin == null ? '—' : '${w.margin!.round()}%',
+      ],
+    if (r.revenueOutside.abs() >= .005 || r.receivedOutside.abs() >= .005)
+      [
+        'Outside projects'.td,
+        m(r.revenueOutside),
+        m(r.receivedOutside),
+        '—',
+        fmtMoney(r.revenueOutside),
+        '—',
+      ],
+    if (r.outside.isNotEmpty)
+      [
+        'Company overheads'.td,
+        '—',
+        '—',
+        m(r.overheads),
+        fmtMoney(-r.overheads),
+        '—',
+      ],
+    [
+      'Total'.td,
+      m(r.revenue),
+      m(r.received),
+      m(r.cost),
+      fmtMoney(r.profit),
+      r.revenue.abs() < .005 ? '—' : '${(r.profit / r.revenue * 100).round()}%',
+    ],
+  ];
+
+  pw.Widget expensesTable(List<Expense> list) => _table(
+    [
+      'Date'.td,
+      'No.'.td,
+      'Supplier'.td,
+      'Description'.td,
+      'Without VAT'.td,
+      'VAT'.td,
+      'Total'.td,
+      'Paid'.td,
+    ],
+    [
+      for (final e in list)
+        [
+          fmtDocDate(e.date),
+          e.number,
+          e.vendor,
+          [
+            e.title.isEmpty
+                ? expenseCategoryLabel(e.category, docLang)
+                : e.title,
+            if (e.reference.isNotEmpty) e.reference,
+          ].join(' · '),
+          fmtMoney(e.net),
+          m(e.vat),
+          fmtMoney(e.amount),
+          e.paid ? 'Yes'.td : 'No'.td,
+        ],
+      [
+        '',
+        '',
+        '',
+        'Total'.td,
+        fmtMoney(list.fold(0.0, (s, e) => s + e.net)),
+        m(list.fold(0.0, (s, e) => s + e.vat)),
+        fmtMoney(list.fold(0.0, (s, e) => s + e.amount)),
+        '',
+      ],
+    ],
+    widths: {
+      0: pw.FixedColumnWidth(_dateWidth),
+      1: const pw.FixedColumnWidth(64),
+      2: const pw.FlexColumnWidth(2),
+      3: const pw.FlexColumnWidth(3),
+      4: const pw.FixedColumnWidth(58),
+      5: const pw.FixedColumnWidth(44),
+      6: const pw.FixedColumnWidth(58),
+      7: pw.FixedColumnWidth(_rtl ? 42 : 30),
+    },
+    right: {4, 5, 6},
+    boldRows: {list.length},
+    softRows: {list.length},
+  );
+
+  pw.Widget invoicesTable(WorkProfit w) => _table(
+    [
+      'Invoice'.td,
+      'Date'.td,
+      'Without VAT'.td,
+      'VAT'.td,
+      'Total'.td,
+      'Received'.td,
+    ],
+    [
+      for (final i in w.invoices)
+        [
+          i.number,
+          fmtDocDate(i.date),
+          fmtMoney(i.net),
+          m(i.vat),
+          fmtMoney(i.total),
+          m(w.receivedOn[i.id] ?? 0),
+        ],
+      if (w.receivedOutside.abs() >= .005)
+        [
+          'Received on invoices dated outside the period'.td,
+          '',
+          '',
+          '',
+          '',
+          m(w.receivedOutside),
+        ],
+      if (w.held.abs() >= .005)
+        ['Held, not yet set against an invoice'.td, '', '', '', '', m(w.held)],
+    ],
+    widths: {
+      0: const pw.FlexColumnWidth(2),
+      1: pw.FixedColumnWidth(_dateWidth),
+      2: const pw.FixedColumnWidth(66),
+      3: const pw.FixedColumnWidth(54),
+      4: const pw.FixedColumnWidth(66),
+      5: const pw.FixedColumnWidth(66),
+    },
+    right: {2, 3, 4, 5},
+  );
+
+  pw.Widget heading(String s, {String? note}) => pw.Padding(
+    padding: const pw.EdgeInsets.only(top: 16, bottom: 6),
+    child: pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.Expanded(
+          child: _text(
+            s,
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: _graphite,
+            ),
+          ),
+        ),
+        if (note != null)
+          _text(note, style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+      ],
+    ),
+  );
+
+  pdf.addPage(
+    _page(
+      pdf,
+      repo,
+      header: (ctx) => pw.Column(
+        children: [
+          _header(
+            repo,
+            'COST AND PROFIT REPORT'.td,
+            project == null
+                ? 'All projects'.td
+                : (project.code.isEmpty ? project.name : project.code),
+          ),
+          pw.Container(
+            width: double.infinity,
+            margin: const pw.EdgeInsets.only(bottom: 12),
+            padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: _graphite, width: .8),
+              borderRadius: pw.BorderRadius.circular(3),
+            ),
+            child: _text(
+              'Internal: AK only, not for the client'.td,
+              style: pw.TextStyle(
+                fontSize: 8,
+                fontWeight: pw.FontWeight.bold,
+                color: _graphite,
+                letterSpacing: _spacing(.6),
+              ),
+              align: pw.TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+      build: (ctx) => [
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (project != null) ...[
+                    _kv('Project'.td, '${project.code} ${project.name}'.trim()),
+                    if (client != null) _kv('Client'.td, client.name),
+                  ] else
+                    _kv('Projects'.td, '${r.projects.length}'),
+                  _kv('Period'.td, period),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 20),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _kv('Prepared on'.td, fmtDocDate(repo.now())),
+                  _kv('Expenses'.td, '${r.expenses.length}'),
+                  _kv('Currency'.td, 'USD'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Row(
+          children: [
+            _tile('Invoiced, without VAT'.td, fmtMoney(r.revenue)),
+            _tile('Received'.td, fmtMoney(r.received)),
+            _tile('Expenses, without VAT'.td, fmtMoney(r.cost)),
+            _tile('Profit'.td, fmtMoney(r.profit), strong: true),
+          ],
+        ),
+        heading('Profit by work'.td),
+        _table(
+          [
+            'Work'.td,
+            'Invoiced, without VAT'.td,
+            'Received'.td,
+            'Expenses, without VAT'.td,
+            'Profit'.td,
+            'Margin'.td,
+          ],
+          summary,
+          widths: {
+            0: const pw.FlexColumnWidth(3),
+            1: const pw.FixedColumnWidth(70),
+            2: const pw.FixedColumnWidth(66),
+            3: const pw.FixedColumnWidth(70),
+            4: const pw.FixedColumnWidth(66),
+            5: const pw.FixedColumnWidth(40),
+          },
+          right: {1, 2, 3, 4, 5},
+          boldRows: {summary.length - 1},
+          softRows: {summary.length - 1},
+        ),
+        for (final w in r.works)
+          if (w.invoices.isNotEmpty ||
+              w.expenses.isNotEmpty ||
+              w.received.abs() >= .005 ||
+              w.held.abs() >= .005) ...[
+            heading(
+              workName(w),
+              note: [
+                if (w.contractNet > .005)
+                  'Contract {0}'.tdArgs([fmtMoney(w.contractNet)]),
+                if (w.budgetCost > .005)
+                  'Budgeted cost {0}'.tdArgs([fmtMoney(w.budgetCost)]),
+                'Profit {0}'.tdArgs([fmtMoney(w.profit)]),
+              ].join(' · '),
+            ),
+            if (w.invoices.isNotEmpty ||
+                w.received.abs() >= .005 ||
+                w.held.abs() >= .005) ...[
+              _label('Income'.td),
+              pw.SizedBox(height: 3),
+              invoicesTable(w),
+              pw.SizedBox(height: 8),
+            ],
+            if (w.expenses.isNotEmpty) ...[
+              _label('Expenses'.td),
+              pw.SizedBox(height: 3),
+              expensesTable(w.expenses),
+            ],
+          ],
+        if (r.outside.isNotEmpty) ...[
+          heading('Company overheads'.td),
+          expensesTable(r.outside),
+        ],
+        pw.SizedBox(height: 14),
+        _text(
+          'Invoiced and expenses are without VAT: VAT is owed to, or '
+                  'recovered from, the tax office, so it is neither income '
+                  'nor cost. Received is the money received in the '
+                  'period, VAT included, whether set against an invoice or '
+                  'still held.'
+              .td,
+          style: pw.TextStyle(fontSize: 8, color: _muted),
+        ),
+      ],
+    ),
   );
 }

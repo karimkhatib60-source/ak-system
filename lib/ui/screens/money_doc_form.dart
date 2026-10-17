@@ -359,10 +359,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     final what = widget.isInvoice ? 'this invoice'.tr : 'this quotation'.tr;
     if (!await confirmDelete(context, what)) return;
     final now = repo.now();
+    // The saved document, not unsaved edits: an invoice's receipts move to
+    // its saved project and term.
     if (widget.isInvoice) {
-      await repo.deleteInvoice(_invoice(now));
+      await repo.deleteInvoice(repo.invoice(_id) ?? _invoice(now));
     } else {
-      await repo.deleteQuotation(_quotation(now));
+      await repo.deleteQuotation(repo.quotation(_id) ?? _quotation(now));
     }
     if (mounted) Navigator.pop(context);
   }

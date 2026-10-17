@@ -653,6 +653,15 @@ class Expense implements Record {
 
   /// Null for company overheads such as rent or software.
   final String? projectId;
+
+  /// The work on the project this cost belongs to, so it is matched with
+  /// the income from that work: a contract (an approved quotation of the
+  /// project)...
+  final String? quotationId;
+
+  /// ...or extra work outside the contract. With neither, it is a general
+  /// cost of the project, not linked to any one piece of work.
+  final bool extra;
   final DateTime date;
   final ExpenseCategory category;
 
@@ -687,6 +696,8 @@ class Expense implements Record {
     this.deleted = false,
     this.number = '',
     this.projectId,
+    this.quotationId,
+    this.extra = false,
     required this.date,
     this.category = ExpenseCategory.other,
     this.title = '',
@@ -699,6 +710,9 @@ class Expense implements Record {
     this.method,
     this.notes = '',
   });
+
+  /// The [copyWith] work value for extra work.
+  static const extraWork = '__extra';
 
   /// Total of a bill entered line by line, to the cent.
   static double totalOf(List<LineItem> items, double vatRate) {
@@ -725,6 +739,8 @@ class Expense implements Record {
     deleted: m['deleted'] == 1 || m['deleted'] == true,
     number: (m['number'] ?? '') as String,
     projectId: m['project_id'] as String?,
+    quotationId: m['quotation_id'] as String?,
+    extra: m['extra'] == 1 || m['extra'] == true,
     date: _date(m['date']) ?? _date(m['created_at'])!,
     category: _enumByName(
       ExpenseCategory.values,
@@ -749,6 +765,8 @@ class Expense implements Record {
     ..._base(this),
     'number': number,
     'project_id': projectId,
+    'quotation_id': quotationId,
+    'extra': extra ? 1 : 0,
     'date': _dateStr(date),
     'category': category.name,
     'title': title,
@@ -762,25 +780,34 @@ class Expense implements Record {
     'notes': notes,
   };
 
-  Expense copyWith({bool? deleted, bool? paid, String? number}) => Expense(
-    id: id,
-    createdAt: createdAt,
-    updatedAt: updatedAt,
-    deleted: deleted ?? this.deleted,
-    number: number ?? this.number,
-    projectId: projectId,
-    date: date,
-    category: category,
-    title: title,
-    vendor: vendor,
-    reference: reference,
-    items: items,
-    vatRate: vatRate,
-    amount: amount,
-    paid: paid ?? this.paid,
-    method: method,
-    notes: notes,
-  );
+  /// [work] links the expense to a contract (its quotation's id), to
+  /// extra work ([Expense.extraWork]) or to neither (an empty string).
+  Expense copyWith({bool? deleted, bool? paid, String? number, String? work}) =>
+      Expense(
+        id: id,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        deleted: deleted ?? this.deleted,
+        number: number ?? this.number,
+        projectId: projectId,
+        quotationId: work == null
+            ? quotationId
+            : work.isEmpty || work == extraWork
+            ? null
+            : work,
+        extra: work == null ? extra : work == extraWork,
+        date: date,
+        category: category,
+        title: title,
+        vendor: vendor,
+        reference: reference,
+        items: items,
+        vatRate: vatRate,
+        amount: amount,
+        paid: paid ?? this.paid,
+        method: method,
+        notes: notes,
+      );
 }
 
 /// A file kept with a record, such as the supplier's invoice behind an

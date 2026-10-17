@@ -40,7 +40,8 @@ const syncedTables = <String, String>{
   'expenses':
       'project_id TEXT, date TEXT, category TEXT, amount REAL, vendor TEXT, '
       'notes TEXT, number TEXT, title TEXT, reference TEXT, items TEXT, '
-      'vat_rate REAL, paid INTEGER, method TEXT',
+      'vat_rate REAL, paid INTEGER, method TEXT, quotation_id TEXT, '
+      'extra INTEGER',
   // Files kept with expenses (supplier invoices). Only the details are kept
   // here; the file itself is in the device's file store and the cloud's
   // file storage, so the database stays small.
@@ -64,7 +65,7 @@ class LocalDb {
 
   final Database db;
 
-  static const _version = 8;
+  static const _version = 9;
 
   /// Columns added after the first release, by the version that added them.
   static const _added = {
@@ -103,6 +104,10 @@ class LocalDb {
       'expenses ADD COLUMN paid INTEGER',
       'expenses ADD COLUMN method TEXT',
       'invoices ADD COLUMN extra INTEGER',
+    ],
+    9: [
+      'expenses ADD COLUMN quotation_id TEXT',
+      'expenses ADD COLUMN extra INTEGER',
     ],
   };
 
@@ -208,11 +213,21 @@ class LocalDb {
   }
 
   /// Writes a row that came from the cloud. It is already in sync.
-  Future<void> putRemote(String table, Map<String, Object?> row) => db.insert(
-    table,
-    {...row, 'dirty': 0},
-    conflictAlgorithm: ConflictAlgorithm.replace,
-  );
+  Future<void> putRemote(String table, Map<String, Object?> row) async {
+    // Columns a newer version added in the cloud are left out, so a device
+    // not yet updated keeps receiving the rest.
+    final known = _columns[table] ??= {
+      for (final c in await db.rawQuery('PRAGMA table_info($table)'))
+        c['name'] as String,
+    };
+    await db.insert(table, {
+      for (final MapEntry(:key, :value) in row.entries)
+        if (known.contains(key)) key: value,
+      'dirty': 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  final _columns = <String, Set<String>>{};
 
   /// Numbers of deleted documents, so a number is never given twice.
   Future<List<String>> deletedNumbers(String table) async => [

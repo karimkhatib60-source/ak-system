@@ -25,12 +25,85 @@ List<(String key, String where)> translatedTexts([List<String>? files]) {
     final src = f.readAsStringSync();
     for (final m in call.allMatches(src)) {
       final key = _literalBefore(src, m.start);
-      if (key == null) continue;
+      final keys = key != null ? [key] : _branchesBefore(src, m.start);
+      if (keys.isEmpty) continue;
       final line = '\n'.allMatches(src.substring(0, m.start)).length + 1;
-      out.add((key, '${f.path}:$line'));
+      for (final k in keys) {
+        out.add((k, '${f.path}:$line'));
+      }
     }
   }
   return out;
+}
+
+/// The texts of a call on a choice in brackets, `(c ? 'a' : 'b').tr`:
+/// each branch that is a literal.
+List<String> _branchesBefore(String src, int end) {
+  var j = end - 1;
+  while (j >= 0 && ' \t\r\n'.contains(src[j])) {
+    j--;
+  }
+  if (j < 0 || src[j] != ')') return const [];
+  final close = j;
+  // The opening bracket, stepping over strings.
+  var depth = 0;
+  var open = -1;
+  for (var i = close; i >= 0; i--) {
+    final c = src[i];
+    if (c == "'" || c == '"') {
+      final k = _openingQuote(src, i);
+      if (k < 0) return const [];
+      i = k;
+    } else if (c == ')') {
+      depth++;
+    } else if (c == '(') {
+      if (--depth == 0) {
+        open = i;
+        break;
+      }
+    }
+  }
+  if (open < 0) return const [];
+  // Branch ends: each ':' outside strings and nested brackets, and the end.
+  final ends = <int>[];
+  depth = 0;
+  for (var i = open + 1; i < close; i++) {
+    final c = src[i];
+    if (c == "'" || c == '"') {
+      final raw = i > 0 && src[i - 1] == 'r';
+      var k = i + 1;
+      while (k < close && (src[k] != c || (!raw && _escaped(src, k)))) {
+        k++;
+      }
+      i = k;
+    } else if ('([{'.contains(c)) {
+      depth++;
+    } else if (')]}'.contains(c)) {
+      depth--;
+    } else if (c == ':' && depth == 0) {
+      ends.add(i);
+    }
+  }
+  if (ends.isEmpty) return const [];
+  ends.add(close);
+  return [for (final e in ends) ?_literalBefore(src, e)];
+}
+
+bool _escaped(String src, int k) {
+  var slashes = 0;
+  for (var b = k - 1; b >= 0 && src[b] == r'\'; b--) {
+    slashes++;
+  }
+  return slashes.isOdd;
+}
+
+/// Where the string literal whose closing quote is at [j] opens, or -1.
+int _openingQuote(String src, int j) {
+  final q = src[j];
+  for (var k = j - 1; k >= 0; k--) {
+    if (src[k] == q && !_escaped(src, k)) return k;
+  }
+  return -1;
 }
 
 /// The (adjacent) string literals ending right before [end], joined, or

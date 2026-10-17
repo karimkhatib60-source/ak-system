@@ -135,7 +135,9 @@ class Repository extends ChangeNotifier {
     deliverables = (await local.all('deliverables'))
         .map(Deliverable.fromMap)
         .toList();
-    notes = (await local.all('project_notes')).map(ProjectNote.fromMap).toList();
+    notes = (await local.all('project_notes'))
+        .map(ProjectNote.fromMap)
+        .toList();
     quotations = (await local.all('quotations')).map(Quotation.fromMap).toList()
       ..sort((a, b) => b.number.compareTo(a.number));
     invoices = (await local.all('invoices')).map(Invoice.fromMap).toList()
@@ -241,6 +243,7 @@ class Repository extends ChangeNotifier {
   List<Deliverable> deliverablesFor(String projectId) =>
       deliverables.where((d) => d.projectId == projectId).toList()
         ..sort((a, b) => a.title.compareTo(b.title));
+
   /// A project's notes the current user may read: pinned first, then the
   /// newest.
   List<ProjectNote> notesFor(String projectId) =>
@@ -257,8 +260,7 @@ class Repository extends ChangeNotifier {
   /// Whether the current user may change or delete a note: the owner any
   /// note, the team the shared notes of their projects.
   bool canEditNote(ProjectNote n) =>
-      isOwner ||
-      (!n.ownerOnly && _visibleProjectIds.contains(n.projectId));
+      isOwner || (!n.ownerOnly && _visibleProjectIds.contains(n.projectId));
 
   List<Project> projectsFor(String clientId) =>
       projects.where((p) => p.clientId == clientId).toList();
@@ -924,6 +926,7 @@ class Repository extends ChangeNotifier {
   Future<void> saveTask(Task t) => _write('tasks', t.toMap());
   Future<void> saveDeliverable(Deliverable d) =>
       _write('deliverables', d.toMap());
+
   /// Saves a note. A shared note the owner makes "only me" is saved as a
   /// new note and the shared one is deleted, so the deletion reaches the
   /// team's devices: a note already shared cannot just change its flag
@@ -939,6 +942,7 @@ class Repository extends ChangeNotifier {
     }
     await _write('project_notes', n.toMap());
   }
+
   Future<void> saveStage(Stage s) => _write('stages', s.toMap());
   Future<void> saveMember(Member m) => _write('members', m.toMap());
   Future<void> saveQuotation(Quotation q) => _write('quotations', q.toMap());
@@ -1006,6 +1010,23 @@ class Repository extends ChangeNotifier {
       'expenses',
       (e.number.isEmpty ? e.copyWith(number: nextExpenseNumber()) : e).toMap(),
     );
+  }
+
+  /// Links expenses to a piece of work of their project in one step: a
+  /// contract's quotation id, [Expense.extraWork], or empty for none.
+  Future<void> linkExpenses(Iterable<Expense> list, String work) async {
+    final stamp = now().toUtc().toIso8601String();
+    final ids = {for (final e in list) e.id};
+    // As they are now: one deleted or changed meanwhile (a sync while the
+    // question was asked) stays so.
+    for (final e in expenses.where((e) => ids.contains(e.id)).toList()) {
+      await local.save('expenses', {
+        ...e.copyWith(work: work).toMap(),
+        'updated_at': stamp,
+      });
+    }
+    await reload();
+    onLocalChange?.call();
   }
 
   Future<void> _removeFile(Attachment a, String stamp) async {
