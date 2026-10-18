@@ -166,7 +166,9 @@ class SyncBadge extends StatelessWidget {
       SyncState.error => (
         Icons.error_outline,
         'Sync problem: {0}'.trArgs([
-          sync.lastError == null ? 'unknown'.tr : plainError(sync.lastError!),
+          sync.lastError == null
+              ? 'unknown'.tr
+              : syncProblemText(sync.lastError!),
         ]),
       ),
     };
@@ -278,6 +280,15 @@ String plainError(Object e) {
   if (has(['weak_password', 'password should be'])) {
     return 'Choose a longer password, at least 6 characters.'.tr;
   }
+  if (has(['pgrst205', 'could not find the table'])) {
+    return 'The cloud database is missing its tables.'.tr;
+  }
+  if (has(['bucket not found'])) {
+    return 'The cloud file storage is not set up.'.tr;
+  }
+  if (has(['row-level security', '42501'])) {
+    return 'This login is not allowed to change some records.'.tr;
+  }
   if (has([
     'socketexception',
     'failed host lookup',
@@ -292,4 +303,21 @@ String plainError(Object e) {
                 'connection, then try again.'
             .tr
       : '$e';
+}
+
+/// A sync round's problems in plain words: the same problem is said once,
+/// and only the first few are listed.
+String syncProblemText(String lastError) {
+  final lines = <String>[];
+  for (final e in lastError.split('\n')) {
+    if (e.trim().isEmpty) continue;
+    final line = plainError(e);
+    if (!lines.contains(line)) lines.add(line);
+  }
+  if (lines.isEmpty) return 'unknown'.tr;
+  if (lines.length <= 3) return lines.join('\n');
+  return [
+    ...lines.take(3),
+    'and {0} more'.trArgs(['${lines.length - 3}']),
+  ].join('\n');
 }

@@ -417,3 +417,11 @@ revoke execute on function public.is_owner() from public, anon;
 revoke execute on function public.on_project(uuid) from public, anon;
 grant execute on function public.is_owner() to authenticated;
 grant execute on function public.on_project(uuid) to authenticated;
+
+-- Pull speed for the money and file tables, like the first tables (the live
+-- database has these too). Safe to re-run.
+create index if not exists quotations_synced on public.quotations (synced_at);
+create index if not exists invoices_synced on public.invoices (synced_at);
+create index if not exists payments_synced on public.payments (synced_at);
+create index if not exists expenses_synced on public.expenses (synced_at);
+create index if not exists attachments_synced on public.attachments (synced_at);

@@ -258,8 +258,8 @@ void main() {
     expect(notes('Version 11').notesIn(AppLang.ar), 'Version 11');
   });
 
-  test('this build is version 15, released from the AK repository', () {
-    expect(appVersion, 15);
+  test('this build is version 16, released from the AK repository', () {
+    expect(appVersion, 16);
     expect(releaseRepo, 'karimkhatib60-source/ak-system');
   });
 }

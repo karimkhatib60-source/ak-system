@@ -218,6 +218,13 @@ const arSettings = <String, String>{
   'This email already has a login.': 'لهذا البريد الإلكتروني حساب دخول مسبقاً.',
   'Choose a longer password, at least 6 characters.':
       'اختر كلمة مرور أطول، 6 أحرف على الأقل.',
+  'The cloud database is missing its tables.':
+      'قاعدة البيانات السحابية تنقصها جداولها.',
+  'The cloud file storage is not set up.':
+      'مساحة تخزين الملفات السحابية غير مُعدّة.',
+  'This login is not allowed to change some records.':
+      'لا يُسمح لهذا الحساب بتعديل بعض السجلات.',
+  'and {0} more': 'و{0} غيرها',
   'No internet connection. Try again when online.':
       'لا يوجد اتصال بالإنترنت. حاول مجدداً عند الاتصال.',
   'Could not finish this. Check the details and the internet connection, '

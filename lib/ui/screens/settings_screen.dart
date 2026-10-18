@@ -420,7 +420,9 @@ class _CloudSection extends StatelessWidget {
             SyncState.offline =>
               'Offline. Changes are kept on this device until you reconnect.'
                   .tr,
-            SyncState.error => 'Sync problem: {0}'.trArgs([sync.lastError]),
+            SyncState.error => 'Sync problem: {0}'.trArgs([
+              syncProblemText(sync.lastError ?? ''),
+            ]),
             _ =>
               last == null
                   ? 'Signed in'.tr
