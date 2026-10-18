@@ -98,11 +98,11 @@ const arSettings = <String, String>{
 
   // Team.
   'No team logins yet': 'لا توجد حسابات للفريق بعد',
-  'Once cloud sync is set up, each person creates a login from this '
-          'screen. The first login becomes the owner; the next ones '
-          'join as architects.':
-      'بعد إعداد المزامنة السحابية، ينشئ كل شخص حساب دخول من هذه الشاشة. '
-      'يصبح أول حساب هو المالك، وتنضم الحسابات التالية بصفة مهندسين '
+  'Each person creates a login above, in Cloud sync and login. The '
+          'company owner\'s email gets the owner login; everyone else '
+          'joins as an architect.':
+      'ينشئ كل شخص حساب دخول في الأعلى، ضمن المزامنة السحابية وتسجيل الدخول. '
+      'يحصل بريد مالك الشركة على حساب المالك، وينضم الآخرون بصفة مهندسين '
       'معماريين.',
   '{0} (you)': '{0} (أنت)',
 
@@ -115,6 +115,11 @@ const arSettings = <String, String>{
       'السحابية للمزامنة بين الهاتف والكمبيوتر المحمول ولإضافة فريقك.',
   'Connect': 'ربط',
   'Connected, not signed in': 'متصل، دون تسجيل دخول',
+  'Not signed in': 'لم يتم تسجيل الدخول',
+  'Sign in to share your data between your phone and laptop. '
+          'Use the same email and password on each.':
+      'سجّل الدخول لمشاركة بياناتك بين الهاتف والكمبيوتر المحمول. '
+      'استخدم البريد الإلكتروني وكلمة المرور نفسيهما على كل جهاز.',
   'Sign in': 'تسجيل الدخول',
   'Offline. Changes are kept on this device until you reconnect.':
       'غير متصل. تبقى التغييرات محفوظة على هذا الجهاز حتى يعود الاتصال.',
@@ -123,15 +128,19 @@ const arSettings = <String, String>{
   'Sync now': 'زامن الآن',
   'Sign out': 'تسجيل الخروج',
   'Connect cloud database': 'ربط قاعدة البيانات السحابية',
-  'Paste the Project URL and the anon public key from your '
-          'Supabase project (Project Settings > API).':
-      'الصق رابط المشروع (Project URL) والمفتاح العام (anon public key) '
-      'من مشروعك على Supabase، في Project Settings > API.',
+  'Paste the Project URL and the publishable key from your '
+          'Supabase project (Project Settings > API Keys).':
+      'الصق رابط المشروع (Project URL) والمفتاح العام (publishable key) '
+      'من مشروعك على Supabase، في Project Settings > API Keys.',
   'Project URL': 'رابط المشروع (Project URL)',
-  'Anon public key': 'المفتاح العام (Anon public key)',
+  'Publishable key': 'المفتاح العام (Publishable key)',
   'Enter both the URL and the key.': 'أدخل الرابط والمفتاح معاً.',
-  'Login created. Confirm it from the email, then sign in.':
-      'تم إنشاء الحساب. أكّده من البريد الإلكتروني، ثم سجّل الدخول.',
+  'Login created. Open the email sent to {0} and tap its link '
+          'to confirm (if the page it opens shows an error, '
+          'that is fine), then sign in here.':
+      'تم إنشاء الحساب. افتح الرسالة المرسلة إلى {0} واضغط على الرابط '
+      'فيها للتأكيد (إن ظهر خطأ في الصفحة التي تفتح فلا بأس)، ثم سجّل '
+      'الدخول هنا.',
   'Create login': 'إنشاء حساب',
   'Your name': 'اسمك',
   'Password': 'كلمة المرور',

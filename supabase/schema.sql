@@ -124,7 +124,8 @@ begin
 end $$;
 
 -- ------------------------------------------------- new user -> member --
--- The first person to sign up becomes the owner; later sign-ups are architects.
+-- The first person to sign up becomes the owner; later sign-ups are architects
+-- (v15 below lets the owner be set by email instead).
 
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -366,3 +367,42 @@ create policy project_notes_team on public.project_notes for all to authenticate
 -- (an approved quotation) or extra work. Safe to re-run.
 alter table public.expenses add column if not exists quotation_id text;
 alter table public.expenses add column if not exists extra boolean;
+
+-- v15: the owner is the company owner's email, not whoever signs up first,
+-- because the apps carry the cloud address and anyone could create a login.
+-- Set the owner once (SQL Editor):
+--   insert into public.app_owner (email) values ('owner@example.com');
+-- With no owner email set, the first sign-up still becomes the owner.
+-- Logins must confirm their email (the Supabase default), so nobody else
+-- can claim the owner's address. Safe to re-run.
+
+create table if not exists public.app_owner (
+  email text primary key
+);
+-- No policies: only the database itself reads it.
+alter table public.app_owner enable row level security;
+
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.members (id, name, email, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'name', split_part(new.email, '@', 1)),
+    new.email,
+    case
+      when exists (select 1 from public.app_owner) then
+        case when exists (select 1 from public.app_owner
+                          where lower(email) = lower(new.email))
+             then 'owner' else 'architect' end
+      when exists (select 1 from public.members where role = 'owner')
+        then 'architect'
+      else 'owner'
+    end
+  );
+  return new;
+end $$;
+
+-- A receipt on account has no invoice, which the app sends as an empty
+-- value; a uuid column refused it, and with it every receipt. Safe to re-run.
+alter table public.payments alter column invoice_id type text;

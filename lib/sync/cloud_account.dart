@@ -3,23 +3,32 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/db.dart';
 import '../data/repository.dart';
+import 'cloud_config.dart';
 import 'supabase_remote.dart';
 import 'sync_service.dart';
 
 /// Connects the app to the company's cloud database and signs the user in.
 /// Until this is set up, the app works on this device only.
 class CloudAccount extends ChangeNotifier {
-  CloudAccount(this.local, this.repo, this.sync);
+  CloudAccount(this.local, this.repo, this.sync, {this.builtIn});
 
   final LocalDb local;
   final Repository repo;
   final SyncService sync;
+
+  /// The company database built into this app, used until another one is
+  /// saved on this device.
+  final CloudAddress? builtIn;
 
   String? url;
   String? anonKey;
   bool _initialized = false;
 
   bool get configured => url != null && anonKey != null;
+
+  /// Connected to the database built into the app, so there is no address
+  /// to show or change.
+  bool get usesBuiltIn => builtIn != null && url == builtIn!.url;
   User? get user =>
       _initialized ? Supabase.instance.client.auth.currentUser : null;
   bool get signedIn => user != null;
@@ -28,6 +37,10 @@ class CloudAccount extends ChangeNotifier {
   Future<void> restore() async {
     url = await local.getSetting('cloud_url');
     anonKey = await local.getSetting('cloud_key');
+    if (url == null || anonKey == null) {
+      url = builtIn?.url;
+      anonKey = builtIn?.key;
+    }
     if (configured) {
       await _init();
       if (signedIn) await _afterSignIn();

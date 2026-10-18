@@ -9,6 +9,7 @@ import 'platform/file_store.dart';
 import 'platform/installer.dart';
 import 'platform/open_db.dart';
 import 'sync/cloud_account.dart';
+import 'sync/cloud_config.dart';
 import 'sync/sync_service.dart';
 import 'ui/app_shell.dart';
 import 'ui/theme.dart';
@@ -26,7 +27,7 @@ Future<void> main() async {
   final repo = Repository(local, files: files);
   await repo.load();
   final sync = SyncService(local, repo);
-  final cloud = CloudAccount(local, repo, sync);
+  final cloud = CloudAccount(local, repo, sync, builtIn: builtInCloud);
   // Restoring the cloud session must never block opening the app offline.
   cloud.restore().catchError((_) {});
   // The Windows app looks for new versions and installs them.

@@ -322,9 +322,9 @@ class _TeamSection extends StatelessWidget {
         leading: const Icon(Icons.group_outlined),
         title: Text('No team logins yet'.tr),
         subtitle: Text(
-          'Once cloud sync is set up, each person creates a login from this '
-                  'screen. The first login becomes the owner; the next ones '
-                  'join as architects.'
+          'Each person creates a login above, in Cloud sync and login. The '
+                  'company owner\'s email gets the owner login; everyone else '
+                  'joins as an architect.'
               .tr,
         ),
       );
@@ -388,8 +388,18 @@ class _CloudSection extends StatelessWidget {
     if (!cloud.signedIn) {
       return ListTile(
         leading: const Icon(Icons.login),
-        title: Text('Connected, not signed in'.tr),
-        subtitle: Text(cloud.url ?? ''),
+        title: Text(
+          cloud.usesBuiltIn
+              ? 'Not signed in'.tr
+              : 'Connected, not signed in'.tr,
+        ),
+        subtitle: Text(
+          cloud.usesBuiltIn
+              ? 'Sign in to share your data between your phone and laptop. '
+                        'Use the same email and password on each.'
+                    .tr
+              : cloud.url ?? '',
+        ),
         trailing: FilledButton(
           onPressed: () => showDialog(
             context: context,
@@ -462,8 +472,8 @@ class _ConnectDialogState extends State<_ConnectDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Paste the Project URL and the anon public key from your '
-                      'Supabase project (Project Settings > API).'
+              'Paste the Project URL and the publishable key from your '
+                      'Supabase project (Project Settings > API Keys).'
                   .tr,
             ),
             const SizedBox(height: 12),
@@ -477,7 +487,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
             const SizedBox(height: 12),
             TextField(
               controller: _key,
-              decoration: InputDecoration(labelText: 'Anon public key'.tr),
+              decoration: InputDecoration(labelText: 'Publishable key'.tr),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -555,7 +565,10 @@ class _LoginDialogState extends State<_LoginDialog> {
             _busy = false;
             _create = false;
             _message =
-                'Login created. Confirm it from the email, then sign in.'.tr;
+                'Login created. Open the email sent to {0} and tap its link '
+                        'to confirm (if the page it opens shows an error, '
+                        'that is fine), then sign in here.'
+                    .trArgs([_email.text.trim()]);
           });
           return;
         }
