@@ -1,6 +1,7 @@
-# Temporary: builds the version 16 Android app once and keeps it in a draft
-# release (visible only to the owner) so it can be signed with the AK key
-# outside GitHub. Removed afterwards.
+# Temporary: adds the version 16 Android app, signed with the AK key, to
+# the v16 release so it can be downloaded on a phone. The app is the one
+# this workflow built (draft "apk-v16-draft"); .github/apk-temp holds only
+# what the AK signature adds to it (no key). Removed afterwards.
 name: APK once
 
 on:
@@ -10,30 +11,31 @@ on:
 permissions:
   contents: write
 
-env:
-  FLUTTER_VERSION: '3.47.7'
-
 jobs:
-  apk:
+  publish:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: 2355738b73a4aa8bd16035f0498bb48566db3c60
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter build apk --release
-      - name: Keep it in a draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Download the build
         run: |
-          gh release create apk-v16-draft build/app/outputs/flutter-apk/app-release.apk \
-            --draft --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" \
-            --title "Temporary build" --notes "Temporary, removed shortly."
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o built.apk "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/654025001"
+          echo "ab00227875a2f0165a782624ff29ca9a5d73ff3514154a635a8d868e8a5d6141  built.apk" | sha256sum -c -
+      - name: Add the AK signature
+        run: python3 .github/apk-temp/join.py built.apk .github/apk-temp/ak-signature.tail AK-System-android.apk
+      - name: The app is exactly the one signed and checked with the AK key
+        run: |
+          echo "3bdededb43b142401deb89ff4693ca50b6e15709b9498585970d43b01a1c1f0e  AK-System-android.apk" | sha256sum -c -
+          tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$tools/apksigner" verify --verbose --print-certs AK-System-android.apk | grep -E "Verifies|scheme|DN|SHA-256"
+      - name: Wait for the v16 release
+        run: |
+          for i in $(seq 1 60); do
+            if gh release view v16 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+            sleep 30
+          done
+          echo "::error::Release v16 did not appear"; exit 1
+      - name: Add it to the v16 release
+        run: gh release upload v16 AK-System-android.apk --clobber --repo "$GITHUB_REPOSITORY"
