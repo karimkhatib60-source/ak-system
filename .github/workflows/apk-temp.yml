@@ -1,34 +1,29 @@
-# Temporary: adds the Android app, signed with the AK key, to the v14
-# release so it can be downloaded on a phone. The app is the one this
-# workflow built earlier (draft "apk-temp-draft"); .github/apk-temp holds
-# only what the AK signature adds to it (no key). Removed afterwards.
-name: APK once
+# Temporary: checks the apps can reach the AK cloud database with the
+# publishable key built into them (the key is meant to be public).
+name: Cloud check once
 
 on:
   push:
     branches: [apk-temp]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
+  cloud:
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ github.token }}
+      URL: https://bycnaevdqprmnrypwebq.supabase.co
+      KEY: sb_publishable_oClYmgvGhotBFJCt2aQ_lQ_GgsKz_KW
     steps:
-      - uses: actions/checkout@v4
-      - name: Download the build
+      - name: The database answers with the key the apps send
         run: |
-          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o built.apk "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/653482158"
-          echo "8028a6347c551df98d49f64775a3fff31f23a9ddb475009b5ee9bad55f7726db  built.apk" | sha256sum -c -
-      - name: Add the AK signature
-        run: python3 .github/apk-temp/join.py built.apk .github/apk-temp/ak-signature.tail AK-System-android.apk
-      - name: The app is exactly the one signed and checked with the AK key
+          # The app sends the key as apikey and, before sign-in, as the bearer.
+          curl -sS -w '\nHTTP %{http_code}\n' -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$URL/rest/v1/stages?select=id&limit=1"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$URL/rest/v1/stages?select=id&limit=1")
+          test "$code" = 200
+      - name: Sign-in settings
         run: |
-          echo "9dcfc95c10bf3f9aacbc347f4b48d84d1a90c55d4039671e141b9e86163b29b1  AK-System-android.apk" | sha256sum -c -
-          tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
-          "$tools/apksigner" verify --verbose --print-certs AK-System-android.apk | grep -E "Verifies|scheme|DN|SHA-256"
-      - name: Add it to the v14 release
-        run: gh release upload v14 AK-System-android.apk --clobber
+          curl -sS -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$URL/auth/v1/settings" | jq '{external_email: .external.email, mailer_autoconfirm, disable_signup}'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$URL/auth/v1/settings")
+          test "$code" = 200
