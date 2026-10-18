@@ -1,6 +1,7 @@
-# Temporary: builds the Android app once and keeps it in a draft release
-# (visible only to the owner) so it can be signed with the AK key outside
-# GitHub. Removed afterwards.
+# Temporary: adds the Android app, signed with the AK key, to the v14
+# release so it can be downloaded on a phone. The app is the one this
+# workflow built earlier (draft "apk-temp-draft"); .github/apk-temp holds
+# only what the AK signature adds to it (no key). Removed afterwards.
 name: APK once
 
 on:
@@ -10,28 +11,24 @@ on:
 permissions:
   contents: write
 
-env:
-  FLUTTER_VERSION: '3.47.7'
-
 jobs:
-  apk:
+  publish:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - run: flutter build apk --release
-      - name: Keep it in a draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Download the build
         run: |
-          gh release create apk-temp-draft build/app/outputs/flutter-apk/app-release.apk \
-            --draft --target "$GITHUB_SHA" \
-            --title "Temporary build" --notes "Temporary, removed shortly."
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o built.apk "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/653482158"
+          echo "8028a6347c551df98d49f64775a3fff31f23a9ddb475009b5ee9bad55f7726db  built.apk" | sha256sum -c -
+      - name: Add the AK signature
+        run: python3 .github/apk-temp/join.py built.apk .github/apk-temp/ak-signature.tail AK-System-android.apk
+      - name: The app is exactly the one signed and checked with the AK key
+        run: |
+          echo "9dcfc95c10bf3f9aacbc347f4b48d84d1a90c55d4039671e141b9e86163b29b1  AK-System-android.apk" | sha256sum -c -
+          tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$tools/apksigner" verify --verbose --print-certs AK-System-android.apk | grep -E "Verifies|scheme|DN|SHA-256"
+      - name: Add it to the v14 release
+        run: gh release upload v14 AK-System-android.apk --clobber
