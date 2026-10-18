@@ -379,8 +379,9 @@ alter table public.expenses add column if not exists extra boolean;
 create table if not exists public.app_owner (
   email text primary key
 );
--- No policies: only the database itself reads it.
+-- No policies and no grants: only the database itself reads it.
 alter table public.app_owner enable row level security;
+revoke all on table public.app_owner from anon, authenticated;
 
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -406,3 +407,13 @@ end $$;
 -- A receipt on account has no invoice, which the app sends as an empty
 -- value; a uuid column refused it, and with it every receipt. Safe to re-run.
 alter table public.payments alter column invoice_id type text;
+
+-- Hardening (the live database has it too). Safe to re-run.
+alter function public.stamp_synced_at() set search_path = '';
+-- Only the sign-up trigger runs this.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+-- The access rules call these as the signed-in user.
+revoke execute on function public.is_owner() from public, anon;
+revoke execute on function public.on_project(uuid) from public, anon;
+grant execute on function public.is_owner() to authenticated;
+grant execute on function public.on_project(uuid) to authenticated;

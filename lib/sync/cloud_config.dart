@@ -7,11 +7,11 @@ import 'package:flutter/foundation.dart';
 /// --dart-define=AK_CLOUD_URL=... --dart-define=AK_CLOUD_KEY=...
 const _url = String.fromEnvironment(
   'AK_CLOUD_URL',
-  defaultValue: 'CLOUD_URL_PENDING',
+  defaultValue: 'https://bycnaevdqprmnrypwebq.supabase.co',
 );
 const _key = String.fromEnvironment(
   'AK_CLOUD_KEY',
-  defaultValue: 'CLOUD_KEY_PENDING',
+  defaultValue: 'sb_publishable_oClYmgvGhotBFJCt2aQ_lQ_GgsKz_KW',
 );
 
 typedef CloudAddress = ({String url, String key});
