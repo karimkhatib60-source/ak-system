@@ -286,7 +286,7 @@ String plainError(Object e) {
   if (has(['bucket not found'])) {
     return 'The cloud file storage is not set up.'.tr;
   }
-  if (has(['row-level security', '42501'])) {
+  if (has(['row-level security', 'code: 42501'])) {
     return 'This login is not allowed to change some records.'.tr;
   }
   if (has([
