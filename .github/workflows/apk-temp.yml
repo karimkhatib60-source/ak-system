@@ -1,0 +1,39 @@
+# Temporary: builds the version 19 Android app once and keeps it in a draft
+# release (visible only to the owner) so it can be signed with the AK key
+# outside GitHub. Removed afterwards.
+name: APK once
+
+on:
+  push:
+    branches: [claude/project-thread-g7diez]
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8a201315e122d3837aaada505b9c7a5e32133049
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter build apk --release
+      - name: Keep it in a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create apk-v19-draft build/app/outputs/flutter-apk/app-release.apk \
+            --draft --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" \
+            --title "Temporary build" --notes "Temporary, removed shortly."
