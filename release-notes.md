@@ -1,3 +1,15 @@
+Version 19
+
+- Client invoice first: on a project invoice, "Record these items as AK expenses" saves every item you type as an expense of the project, under its category. Change the item on the invoice and the expense follows; remove it and the expense goes. The supplier, VAT, paid and file you add on the expense are kept. It is on by itself for new invoices of a project with a cost-plus fee.
+- The cost-plus fee is set once for the whole project, on top of the project's Finance page, with what was billed at cost by category and the fee earned. Cost-plus invoices take it by themselves; invoices already sent keep theirs.
+- Each invoice shows its categories in the lists, and the Finance page can show the invoices of one category.
+
+## العربية
+
+- الفاتورة أولاً: في فاتورة المشروع، خيار "تسجيل هذه البنود مصاريف لـ AK" يحفظ كل بند تكتبه مصروفاً للمشروع تحت فئته. عدّل البند على الفاتورة فيتبعه المصروف، واحذفه فيُحذف المصروف. أما المورّد والضريبة والدفع والملف التي تضيفها على المصروف فتبقى. يكون مفعّلاً تلقائياً للفواتير الجديدة في مشروع له نسبة أتعاب.
+- نسبة الأتعاب تُحدَّد مرة واحدة لكامل المشروع، أعلى صفحة مالية المشروع، مع ما فُوتر بالكلفة حسب الفئة والأتعاب المكتسبة. فواتير الكلفة والأتعاب تأخذها تلقائياً، والفواتير المرسلة تبقى على نسبتها.
+- تظهر فئات كل فاتورة في القوائم، ويمكن لصفحة المالية عرض فواتير فئة واحدة.
+
 Version 18
 
 - Supplier bills come onto the invoice exactly as entered under Expenses: every item of the bill with its quantity, unit and price (a bill entered as a total stays one line).

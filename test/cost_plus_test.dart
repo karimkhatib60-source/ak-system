@@ -244,7 +244,7 @@ void main() {
       find.textContaining('Cost-plus bill 02 · from 3 Oct 2026 to 12 Oct 2026'),
       findsOneWidget,
     );
-    expect(find.text('15'), findsOneWidget);
+    expect(find.text('15%'), findsOneWidget);
     // The bills already on this invoice are not offered again.
     await tester.ensureVisible(find.text('From supplier bills'));
     await tester.tap(find.text('From supplier bills'));
@@ -360,5 +360,163 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('1 bill × $shown'), findsOneWidget);
     }
+  });
+
+  test('items typed on the invoice are recorded as expenses', () async {
+    Invoice inv(List<LineItem> items) => Invoice(
+      id: 'ci',
+      createdAt: t,
+      updatedAt: t,
+      number: 'INV-26-009',
+      projectId: 'p',
+      clientId: 'c',
+      date: DateTime(2026, 10, 30),
+      status: InvoiceStatus.sent,
+      markupRate: 15,
+      items: items,
+    );
+    const a = LineItem(
+      description: 'Paint, 20 buckets',
+      quantity: 20,
+      unit: 'bucket',
+      rate: 30,
+      section: 'Materials',
+      expenseId: 'xa',
+      fromInvoice: true,
+    );
+    const b = LineItem(
+      description: 'Painters, 3 days',
+      quantity: 3,
+      unit: 'day',
+      rate: 100,
+      section: 'Labour (daily workers)',
+      expenseId: 'xb',
+      fromInvoice: true,
+    );
+    final first = inv([a, b]);
+    await repo.saveInvoice(first);
+    await syncInvoiceCosts(repo, first, null);
+    Expense ex(String id) => repo.expenses.firstWhere((e) => e.id == id);
+    expect(ex('xa').category, ExpenseCategory.materials);
+    expect(ex('xa').amount, 600);
+    expect(ex('xa').number, startsWith('EXP-26-'));
+    expect(ex('xb').category, ExpenseCategory.labour);
+    expect(ex('xa').date, DateTime(2026, 10, 30));
+    // Profit on the invoice is the fee: 900 billed at cost + 15%.
+    expect(repo.billedExpenses()['xa']?.number, 'INV-26-009');
+    expect(costPlusBilled(repo, 'p').fold(0.0, (s, c) => s + c.fee), 135);
+    // The supplier is filled in on the expense, then the line is changed:
+    // the amount follows the invoice, the supplier stays.
+    final e = ex('xa');
+    await repo.saveExpense(
+      Expense(
+        id: e.id,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        number: e.number,
+        projectId: 'p',
+        date: e.date,
+        category: e.category,
+        title: e.title,
+        vendor: 'Colors Co',
+        items: e.items,
+        amount: e.amount,
+      ),
+    );
+    final second = inv([a.copyWith(quantity: 25)]);
+    await repo.saveInvoice(second);
+    await syncInvoiceCosts(repo, second, first);
+    expect(ex('xa').amount, 750);
+    expect(ex('xa').vendor, 'Colors Co');
+    // The painters line was removed, and its expense with it.
+    expect(repo.expenses.where((e) => e.id == 'xb'), isEmpty);
+  });
+
+  test('categories of an invoice, and the section names', () {
+    expect(categoryOfSection('Materials'), ExpenseCategory.materials);
+    expect(categoryOfSection('Masonry'), isNull);
+    final inv = Invoice(
+      id: 'i',
+      createdAt: t,
+      updatedAt: t,
+      number: 'INV-26-001',
+      date: t,
+      items: costPlusLines(repo.expensesFor('p')),
+    );
+    expect(invoiceCategories(inv), ['Materials', 'Labour (daily workers)']);
+  });
+
+  testWidgets('a new invoice in a cost-plus project records its items', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 2600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ChangeNotifierProvider<Repository>.value(
+        value: repo,
+        child: MaterialApp(
+          theme: buildTheme(Brightness.light),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => openInvoiceForm(context, projectId: 'p'),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    // On by itself, and the fee is the project's, not typed.
+    final sw = tester.widget<SwitchListTile>(
+      find.widgetWithText(SwitchListTile, 'Record these items as AK expenses'),
+    );
+    expect(sw.value, isTrue);
+    expect(find.text('15%'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Item 1'),
+      'Tiles 60x60',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'Rate'), '900');
+    await tester.pump();
+    final before = repo.expenses.length;
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Save'));
+      for (var k = 0; k < 40 && repo.expenses.length == before; k++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    });
+    await tester.pumpAndSettle();
+    final made = repo.expenses.firstWhere((e) => e.title == 'Tiles 60x60');
+    expect(made.amount, 900);
+    expect(repo.invoices.single.markupRate, 15);
+    expect(repo.billedExpenses()[made.id], isNotNull);
+  });
+
+  testWidgets('the project fee is set on top of the project money tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider<Repository>.value(
+        value: repo,
+        child: MaterialApp(
+          theme: buildTheme(Brightness.light),
+          home: Scaffold(body: ProjectFeeCard(project: repo.project('p')!)),
+        ),
+      ),
+    );
+    expect(find.text('Cost-plus fee 15% on the whole project'), findsOneWidget);
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '18');
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Save'));
+      for (var k = 0; k < 40 && repo.project('p')!.markupRate != 18; k++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(repo.project('p')!.markupRate, 18);
+    expect(find.text('Cost-plus fee 18% on the whole project'), findsOneWidget);
   });
 }

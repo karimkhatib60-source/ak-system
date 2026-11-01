@@ -9,6 +9,7 @@ import '../format.dart';
 import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'cost_plus.dart';
 import 'expenses.dart';
 import 'export_screen.dart';
 import 'money_doc_form.dart';
@@ -32,6 +33,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
   _Tab _tab = _Tab.invoices;
   _Period _period = _Period.year;
 
+  /// The invoice category shown, or all when null.
+  String? _category;
+
   @override
   Widget build(BuildContext context) {
     final repo = context.watch<Repository>();
@@ -43,6 +47,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
     };
     final m = repo.money(since: since);
     bool inRange(DateTime d) => since == null || !d.isBefore(since);
+    final categories = {
+      for (final i in repo.invoices)
+        if (inRange(i.date)) ...invoiceCategories(i),
+    }.toList();
+    if (_category != null && !categories.contains(_category)) {
+      _category = null;
+    }
 
     final list = switch (_tab) {
       _Tab.quotations => [
@@ -51,7 +62,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ],
       _Tab.invoices => [
         for (final i in repo.invoices)
-          if (inRange(i.date)) InvoiceTile(i, showProject: true),
+          if (inRange(i.date) &&
+              (_category == null || invoiceCategories(i).contains(_category)))
+            InvoiceTile(i, showProject: true),
       ],
       _Tab.receipts => [
         for (final p in repo.receipts())
@@ -158,6 +171,28 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 onSelectionChanged: (v) => setState(() => _tab = v.first),
               ),
             ),
+            if (_tab == _Tab.invoices && categories.isNotEmpty)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Wrap(
+                  spacing: 6,
+                  children: [
+                    ChoiceChip(
+                      label: Text('All categories'.tr),
+                      selected: _category == null,
+                      onSelected: (_) => setState(() => _category = null),
+                    ),
+                    for (final c in categories)
+                      ChoiceChip(
+                        label: Text(c.tr),
+                        selected: _category == c,
+                        onSelected: (on) =>
+                            setState(() => _category = on ? c : null),
+                      ),
+                  ],
+                ),
+              ),
             if (list.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 24),
@@ -373,6 +408,7 @@ class InvoiceTile extends StatelessWidget {
     final project = repo.project(i.projectId)?.name;
     final state = repo.paymentState(i);
     final balance = repo.balanceOf(i);
+    final cats = invoiceCategories(i);
     return ListTile(
       leading: const Icon(Icons.receipt_long_outlined),
       title: Text(
@@ -383,6 +419,10 @@ class InvoiceTile extends StatelessWidget {
       subtitle: Text(
         [
           i.number,
+          if (cats.isNotEmpty)
+            cats.length > 2
+                ? '${cats.take(2).map((c) => c.tr).join(', ')} +${cats.length - 2}'
+                : cats.map((c) => c.tr).join(', '),
           ?client,
           if (showProject && project != null) project,
           if (state == PaymentState.partlyPaid || state == PaymentState.overdue)
@@ -468,6 +508,10 @@ class _ProjectMoneyTabState extends State<ProjectMoneyTab> {
           ];
 
     final clientPart = <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: ProjectFeeCard(project: p),
+      ),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: ClientAccountCard(
