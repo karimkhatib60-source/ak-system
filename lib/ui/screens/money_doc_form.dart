@@ -85,6 +85,9 @@ class _Line {
 
   bool get isBlank => item.description.isEmpty && item.rate == 0;
 
+  /// Taken from a supplier bill: changed only under Expenses.
+  bool get locked => expenseId != null;
+
   void dispose() {
     section.dispose();
     description.dispose();
@@ -246,7 +249,16 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       text: q?.terms ?? (q == null ? repo.companyText('terms', docLang) : ''),
     );
     _notes = TextEditingController(text: q?.notes ?? i?.notes ?? '');
-    for (final item in doc?.items ?? [_blankLine()]) {
+    var items = doc?.items ?? [_blankLine()];
+    // A draft invoice takes its supplier bills again as they are now; an
+    // issued one keeps what was sent.
+    if (widget.isInvoice &&
+        (i == null || i.status == InvoiceStatus.draft) &&
+        items.any((l) => l.expenseId != null)) {
+      items = refreshCostPlus(items, {for (final e in repo.expenses) e.id: e});
+      if (items.isEmpty) items = [_blankLine()];
+    }
+    for (final item in items) {
       _lines.add(_Line(item));
     }
     _qStatus = q?.status ?? QuotationStatus.draft;
@@ -489,6 +501,15 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       }
     });
   }
+
+  /// Takes a supplier bill off the invoice: all of its lines together.
+  void _removeBill(String expenseId) => setState(() {
+    for (final l in _lines.where((l) => l.expenseId == expenseId).toList()) {
+      _lines.remove(l);
+      l.dispose();
+    }
+    if (_lines.isEmpty) _lines.add(_Line(_blankLine()));
+  });
 
   void _projectChanged(Repository repo, String? id) {
     _projectId = id;
@@ -876,15 +897,25 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
               ],
               SectionHeader('Items'.tr),
               for (var i = 0; i < _lines.length; i++)
-                _LineEditor(
-                  key: ObjectKey(_lines[i]),
-                  line: _lines[i],
-                  index: i,
-                  onChanged: () => setState(() {}),
-                  onRemove: _lines.length == 1
-                      ? null
-                      : () => setState(() => _lines.removeAt(i).dispose()),
-                ),
+                if (_lines[i].locked)
+                  _BillLine(
+                    key: ObjectKey(_lines[i]),
+                    line: _lines[i],
+                    bill: repo.expenses
+                        .where((e) => e.id == _lines[i].expenseId)
+                        .firstOrNull,
+                    onRemove: () => _removeBill(_lines[i].expenseId!),
+                  )
+                else
+                  _LineEditor(
+                    key: ObjectKey(_lines[i]),
+                    line: _lines[i],
+                    index: i,
+                    onChanged: () => setState(() {}),
+                    onRemove: _lines.length == 1
+                        ? null
+                        : () => setState(() => _lines.removeAt(i).dispose()),
+                  ),
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
@@ -1490,6 +1521,87 @@ class _LineEditor extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A line taken from a supplier bill, shown as it is: it is corrected in
+/// the bill under Expenses, never on the invoice.
+class _BillLine extends StatelessWidget {
+  const _BillLine({
+    super.key,
+    required this.line,
+    required this.bill,
+    required this.onRemove,
+  });
+
+  final _Line line;
+  final Expense? bill;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final ak = AkColors.of(context);
+    final i = line.item;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 4, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(Icons.lock_outline, size: 16, color: ak.muted),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (i.section.isNotEmpty)
+                    Text(
+                      i.section.tr,
+                      style: TextStyle(fontSize: 12, color: ak.muted),
+                    ),
+                  Text(i.description),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_Line._plain(i.quantity)} ${i.unit} × '
+                    '${fmtMoney(i.rate)}',
+                    style: TextStyle(fontSize: 13, color: ak.muted),
+                  ),
+                  Text(
+                    'From supplier bill {0}. Change it under Expenses.'.trArgs([
+                      bill == null || bill!.number.isEmpty
+                          ? (bill?.vendor ?? '')
+                          : bill!.number,
+                    ]),
+                    style: TextStyle(fontSize: 12, color: ak.muted),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  tooltip: 'Remove this supplier bill'.tr,
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: onRemove,
+                ),
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 8),
+                  child: Text(
+                    fmtMoney(i.amount),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

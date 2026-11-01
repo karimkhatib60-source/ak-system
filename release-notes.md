@@ -1,3 +1,15 @@
+Version 18
+
+- Supplier bills come onto the invoice exactly as entered under Expenses: every item of the bill with its quantity, unit and price (a bill entered as a total stays one line).
+- Those lines are locked on the invoice. To change one, correct the bill under Expenses; a draft invoice takes the correction by itself when you open it. An invoice already sent keeps what was sent.
+- The cross on a supplier bill line takes that whole bill off the invoice.
+
+## العربية
+
+- تدخل فواتير المورّدين على الفاتورة كما أُدخلت في المصاريف تماماً: كل بند من الفاتورة بكميته ووحدته وسعره (والفاتورة المُدخلة بمجموعها تبقى بنداً واحداً).
+- هذه البنود مقفلة على الفاتورة. لتعديل أي منها صحّح فاتورة المورّد في المصاريف، والفاتورة المسودة تأخذ التصحيح تلقائياً عند فتحها. أما الفاتورة المرسلة فتبقى كما أُرسلت.
+- علامة الإغلاق على بند فاتورة المورّد تزيل تلك الفاتورة كلها عن الفاتورة.
+
 Version 17
 
 - Cost-plus invoices from supplier bills. In a project invoice, tap "From supplier bills", tick the bills to charge, and each one becomes a line at its cost before VAT, under its category (Materials, Subcontractor, Labour...), with a subtotal per category.
