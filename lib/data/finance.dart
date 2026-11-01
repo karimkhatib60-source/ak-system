@@ -36,6 +36,7 @@ class LineItem {
     this.rate = 0,
     this.section = '',
     this.expenseId,
+    this.fromInvoice = false,
   });
 
   /// BOQ heading this line belongs to, e.g. "Masonry works".
@@ -49,6 +50,11 @@ class LineItem {
   /// cost-plus invoice. A bill is on one invoice at most.
   final String? expenseId;
 
+  /// True when the line was typed on the invoice and its expense was
+  /// recorded from it (client invoice first): the line is the source and
+  /// stays editable on the invoice. False when it was taken from a bill.
+  final bool fromInvoice;
+
   double get amount => quantity * rate;
 
   factory LineItem.fromJson(Map<String, Object?> m) => LineItem(
@@ -58,6 +64,7 @@ class LineItem {
     rate: (m['r'] as num?)?.toDouble() ?? 0,
     section: (m['s'] ?? '') as String,
     expenseId: m['x'] as String?,
+    fromInvoice: m['o'] == 1 || m['o'] == true,
   );
 
   Map<String, Object?> toJson() => {
@@ -67,6 +74,7 @@ class LineItem {
     'r': rate,
     if (section.isNotEmpty) 's': section,
     if (expenseId != null) 'x': expenseId,
+    if (fromInvoice) 'o': 1,
   };
 
   LineItem copyWith({
@@ -77,6 +85,7 @@ class LineItem {
     String? section,
   }) => LineItem(
     expenseId: expenseId,
+    fromInvoice: fromInvoice,
     description: description ?? this.description,
     quantity: quantity ?? this.quantity,
     unit: unit ?? this.unit,

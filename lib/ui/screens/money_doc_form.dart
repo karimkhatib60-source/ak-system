@@ -56,6 +56,7 @@ Future<void> openInvoiceForm(
 class _Line {
   _Line(LineItem i)
     : expenseId = i.expenseId,
+      fromInvoice = i.fromInvoice,
       section = TextEditingController(text: i.section),
       description = TextEditingController(text: i.description),
       quantity = TextEditingController(text: _plain(i.quantity)),
@@ -68,8 +69,12 @@ class _Line {
   final TextEditingController unit;
   final TextEditingController rate;
 
-  /// The supplier bill this line bills, kept while the line is edited.
-  final String? expenseId;
+  /// The supplier bill this line bills, kept while the line is edited, or
+  /// the expense recorded from this line when [fromInvoice].
+  String? expenseId;
+
+  /// Typed on the invoice, with its expense recorded from it.
+  bool fromInvoice;
 
   static String _plain(double v) =>
       v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
@@ -81,12 +86,13 @@ class _Line {
     rate: _parse(rate.text) ?? 0,
     section: section.text.trim(),
     expenseId: expenseId,
+    fromInvoice: fromInvoice,
   );
 
   bool get isBlank => item.description.isEmpty && item.rate == 0;
 
   /// Taken from a supplier bill: changed only under Expenses.
-  bool get locked => expenseId != null;
+  bool get locked => expenseId != null && !fromInvoice;
 
   void dispose() {
     section.dispose();
@@ -182,6 +188,10 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   late final TextEditingController _markup;
   bool _showMarkup = true;
   bool _feePerLine = false;
+
+  /// Client invoice first: the items typed here are AK's costs and are
+  /// recorded as expenses when the invoice is saved.
+  bool _recordCosts = false;
   late final TextEditingController _terms;
   late final TextEditingController _notes;
   final _lines = <_Line>[];
@@ -243,6 +253,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     );
     _showMarkup = doc?.showMarkup ?? true;
     _feePerLine = doc?.feePerLine ?? false;
+    _recordCosts =
+        widget.isInvoice &&
+        (i != null
+            ? i.items.any((l) => l.fromInvoice)
+            : (project?.markupRate ?? 0) != 0);
     _terms = TextEditingController(
       // The standard terms are written in the documents language while
       // they are still the app's default wording.
@@ -260,6 +275,13 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     }
     for (final item in items) {
       _lines.add(_Line(item));
+    }
+    // A cost-plus invoice still open to change uses the project's fee.
+    final projectFee = _projectFee(repo);
+    if (_billsOn &&
+        projectFee != null &&
+        (i == null || i.status == InvoiceStatus.draft)) {
+      _markup.text = _Line._plain(projectFee);
     }
     _qStatus = q?.status ?? QuotationStatus.draft;
     _iStatus = i?.status ?? InvoiceStatus.draft;
@@ -366,7 +388,11 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     final repo = context.read<Repository>();
     final now = repo.now();
     if (widget.isInvoice) {
-      await repo.saveInvoice(_invoice(now));
+      _markCosts(repo);
+      final before = repo.invoice(_id);
+      final inv = _invoice(now);
+      await repo.saveInvoice(inv);
+      await syncInvoiceCosts(repo, inv, before);
     } else {
       await repo.saveQuotation(_quotation(now));
     }
@@ -383,7 +409,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     // The saved document, not unsaved edits: an invoice's receipts move to
     // its saved project and term.
     if (widget.isInvoice) {
-      await repo.deleteInvoice(repo.invoice(_id) ?? _invoice(now));
+      final saved = repo.invoice(_id);
+      await repo.deleteInvoice(saved ?? _invoice(now));
+      // Expenses recorded from its items go with it.
+      if (saved != null) {
+        await syncInvoiceCosts(repo, saved.copyWith(items: const []), saved);
+      }
     } else {
       await repo.deleteQuotation(repo.quotation(_id) ?? _quotation(now));
     }
@@ -495,11 +526,35 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       _title.text = costPlusTitle(n, covered);
     }
     setState(() {
-      if (_markup.text.trim().isEmpty) {
-        final fee = project?.markupRate;
-        if (fee != null && fee != 0) _markup.text = _Line._plain(fee);
-      }
+      final fee = _projectFee(repo);
+      if (fee != null) _markup.text = _Line._plain(fee);
     });
+  }
+
+  /// Whether the invoice bills AK's costs (a cost-plus invoice): supplier
+  /// bills taken in, or items typed here recorded as expenses.
+  bool get _billsOn => _recordCosts || _lines.any((l) => l.locked);
+
+  /// Marks the typed lines as costs to record, giving each its expense id,
+  /// or clears them when the invoice no longer records its costs.
+  void _markCosts(Repository repo) {
+    for (final l in _lines) {
+      if (l.locked || l.isBlank) continue;
+      if (_recordCosts) {
+        l.fromInvoice = true;
+        l.expenseId ??= repo.newId();
+      } else if (l.fromInvoice) {
+        l.fromInvoice = false;
+        l.expenseId = null;
+      }
+    }
+  }
+
+  /// The cost-plus fee set once for the whole project, if any. Cost-plus
+  /// invoices take it instead of a fee typed on each invoice.
+  double? _projectFee(Repository repo) {
+    final f = repo.project(_projectId)?.markupRate;
+    return f == null || f == 0 ? null : f;
   }
 
   /// Takes a supplier bill off the invoice: all of its lines together.
@@ -896,6 +951,27 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 ),
               ],
               SectionHeader('Items'.tr),
+              if (widget.isInvoice)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _recordCosts,
+                  onChanged: (v) => setState(() {
+                    _recordCosts = v;
+                    final fee = _projectFee(repo);
+                    if (v && fee != null) _markup.text = _Line._plain(fee);
+                  }),
+                  title: Text('Record these items as AK expenses'.tr),
+                  subtitle: Text(
+                    _recordCosts
+                        ? 'Each item is saved as an expense of the project '
+                                  'under its category. Change it here; the '
+                                  'expense follows.'
+                              .tr
+                        : 'For cost-plus: what you bill here is what you '
+                                  'spent, so it is entered once.'
+                              .tr,
+                  ),
+                ),
               for (var i = 0; i < _lines.length; i++)
                 if (_lines[i].locked)
                   _BillLine(
@@ -911,6 +987,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                     key: ObjectKey(_lines[i]),
                     line: _lines[i],
                     index: i,
+                    costs: widget.isInvoice && _recordCosts,
                     onChanged: () => setState(() {}),
                     onRemove: _lines.length == 1
                         ? null
@@ -948,18 +1025,34 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      controller: _markup,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Cost-plus fee'.tr,
-                        suffixText: '%',
-                        hintText: 'e.g. 15'.tr,
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
+                    child:
+                        widget.isInvoice &&
+                            _billsOn &&
+                            _projectFee(repo) != null &&
+                            _iStatus == InvoiceStatus.draft
+                        ? InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Cost-plus fee'.tr,
+                              helperMaxLines: 3,
+                              helperText:
+                                  'Set for the whole project. Change it on '
+                                          'the project\'s Finance page.'
+                                      .tr,
+                            ),
+                            child: Text('${_markup.text}%'),
+                          )
+                        : TextFormField(
+                            controller: _markup,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Cost-plus fee'.tr,
+                              suffixText: '%',
+                              hintText: 'e.g. 15'.tr,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1413,10 +1506,14 @@ class _LineEditor extends StatelessWidget {
     required this.index,
     required this.onChanged,
     required this.onRemove,
+    this.costs = false,
   });
 
   final _Line line;
   final int index;
+
+  /// The line is an AK cost: its section is an expense category.
+  final bool costs;
   final VoidCallback onChanged;
   final VoidCallback? onRemove;
 
@@ -1442,7 +1539,11 @@ class _LineEditor extends StatelessWidget {
                 items: [
                   DropdownMenuItem(value: '', child: Text('No section'.tr)),
                   for (final name in {
-                    ...boqSections,
+                    if (costs)
+                      for (final c in ExpenseCategory.values)
+                        expenseCategoryLabel(c, AppLang.en)
+                    else
+                      ...boqSections,
                     if (line.section.text.isNotEmpty) line.section.text,
                   })
                     DropdownMenuItem(value: name, child: Text(name.tr)),

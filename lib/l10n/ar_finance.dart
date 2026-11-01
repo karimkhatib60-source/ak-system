@@ -475,4 +475,30 @@ const arFinance = <String, String>{
   'One line on the total': 'سطر واحد على المجموع',
   'Next to each line and on the total': 'بجانب كل بند وعلى المجموع',
   'Fee {0}%': 'الأتعاب {0}%',
+  'All categories':
+      'كل الفئات',
+  'Billed on sent invoices, by category':
+      'ما فُوتر على الفواتير المرسلة، حسب الفئة',
+  'Change':
+      'تغيير',
+  'Cost-plus fee for this project':
+      'نسبة الأتعاب لهذا المشروع',
+  'Cost-plus fee {0}% on the whole project':
+      'نسبة الأتعاب {0}% على كامل المشروع',
+  'Each item is saved as an expense of the project under its category. Change it here; the expense follows.':
+      'يُحفظ كل بند مصروفاً للمشروع تحت فئته. عدّله هنا، ويتبعه المصروف.',
+  'Every cost-plus invoice of this project takes this fee by itself. Invoices already sent keep theirs.':
+      'كل فاتورة كلفة وأتعاب في هذا المشروع تأخذ هذه النسبة تلقائياً. أما الفواتير المرسلة فتبقى على نسبتها.',
+  'Fee':
+      'الأتعاب',
+  'For cost-plus: what you bill here is what you spent, so it is entered once.':
+      'للكلفة والأتعاب: ما تفوتره هنا هو ما صرفته، فيُدخل مرة واحدة.',
+  'From invoice {0}':
+      'من الفاتورة {0}',
+  'No cost-plus fee set for this project':
+      'لا نسبة أتعاب محددة لهذا المشروع',
+  'Record these items as AK expenses':
+      'تسجيل هذه البنود مصاريف لـ AK',
+  'Set for the whole project. Change it on the project\'s Finance page.':
+      'محددة لكامل المشروع. تُغيَّر من صفحة مالية المشروع.',
 };
