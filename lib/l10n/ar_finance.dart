@@ -462,7 +462,10 @@ const arFinance = <String, String>{
   'Bill supplier invoices': 'فوترة فواتير المورّدين',
   'This project has no supplier bills yet. Add them under Expenses first.':
       'لا فواتير مورّدين لهذا المشروع بعد. أضفها أولاً في المصاريف.',
-  'Each bill becomes one line at its cost before VAT, under its category. The cost-plus fee is added on top.': 'كل فاتورة تصبح بنداً واحداً بكلفتها قبل الضريبة، تحت فئتها. وتُضاف نسبة الأتعاب فوقها.',
+  'Each bill comes in with all its items at cost before VAT, under its category, and cannot be edited on the invoice. The cost-plus fee is added on top.': 'تدخل كل فاتورة بكل بنودها بكلفتها قبل الضريبة، تحت فئتها، ولا يمكن تعديلها على الفاتورة. وتُضاف نسبة الأتعاب فوقها.',
+  'From supplier bill {0}. Change it under Expenses.':
+      'من فاتورة المورّد {0}. يُعدَّل في المصاريف.',
+  'Remove this supplier bill': 'إزالة فاتورة المورّد هذه',
   'Select all': 'تحديد الكل',
   'Cost {0}': 'الكلفة {0}',
   'Add 1 bill': 'إضافة فاتورة واحدة',

@@ -89,7 +89,7 @@ void main() {
     ]);
     expect(lines[1].rate, 1000);
     expect(lines[1].quantity, 1);
-    expect(lines[1].description, startsWith('Ghandour Steel · Goods · '));
+    expect(lines[1].description, startsWith('Goods · Ghandour Steel · '));
     expect(lines[1].description, contains('Ref. 4471'));
   });
 
@@ -253,5 +253,112 @@ void main() {
     expect(find.text('Select all'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
+    // The bill lines are locked: no field to type in, only a note and the
+    // remove button, which takes a whole bill off.
+    expect(find.textContaining('Change it under Expenses.'), findsNWidgets(2));
+    expect(find.text('Item 1'), findsNothing);
+    await tester.tap(find.byTooltip('Remove this supplier bill').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Change it under Expenses.'), findsOneWidget);
+  });
+
+  test('a bill entered item by item brings every item', () {
+    final e = Expense(
+      id: 'x',
+      createdAt: t,
+      updatedAt: t,
+      projectId: 'p',
+      date: DateTime(2026, 10, 9),
+      category: ExpenseCategory.materials,
+      vendor: 'Ghandour Steel',
+      reference: '4471',
+      vatRate: 11,
+      items: const [
+        LineItem(description: 'Rebar 12 mm', quantity: 4, unit: 't', rate: 800),
+        LineItem(description: 'Tie wire', quantity: 10, unit: 'roll', rate: 12),
+      ],
+      amount: Expense.totalOf(const [
+        LineItem(quantity: 4, rate: 800),
+        LineItem(quantity: 10, rate: 12),
+      ], 11),
+    );
+    final lines = costPlusLinesOf(e);
+    expect(lines, hasLength(2));
+    expect(lines.map((l) => l.expenseId).toSet(), {'x'});
+    expect(lines.first.description, startsWith('Rebar 12 mm · Ghandour Steel'));
+    expect(lines.first.quantity, 4);
+    expect(lines.first.unit, 't');
+    expect(lines.first.rate, 800);
+    expect(lines.fold(0.0, (s, l) => s + l.amount), e.net);
+  });
+
+  test('refreshing takes each bill again as it is now', () {
+    final bills = {for (final e in repo.expensesFor('p')) e.id: e};
+    final typed = const LineItem(description: 'Site visit', rate: 50);
+    final lines = [typed, ...costPlusLines(bills.values)];
+    // The steel bill is corrected and the sand bill deleted.
+    final fixed = {
+      ...bills,
+      'steel': bill(
+        'steel',
+        ExpenseCategory.materials,
+        2220,
+        vat: 11,
+        day: 12,
+        vendor: 'Ghandour Steel',
+        ref: '4471',
+      ),
+    }..remove('sand');
+    final again = refreshCostPlus(lines, fixed);
+    expect(again.first.description, 'Site visit');
+    expect(again.map((l) => l.expenseId), [null, 'steel', 'crew']);
+    expect(again[1].rate, 2000);
+  });
+
+  testWidgets('a draft invoice follows its bills; a sent one does not', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Invoice inv(String id, InvoiceStatus st) => Invoice(
+      id: id,
+      createdAt: t,
+      updatedAt: t,
+      number: id,
+      projectId: 'p',
+      clientId: 'c',
+      date: t,
+      status: st,
+      items: costPlusLines([repo.expenses.firstWhere((e) => e.id == 'crew')]),
+    );
+    await tester.runAsync(() async {
+      await repo.saveInvoice(inv('INV-D', InvoiceStatus.draft));
+      await repo.saveInvoice(inv('INV-S', InvoiceStatus.sent));
+      // The crew bill is corrected from 400 to 450 after both were made.
+      await repo.saveExpense(
+        bill('crew', ExpenseCategory.labour, 450, day: 5, vendor: 'Crew'),
+      );
+    });
+    for (final (id, shown) in [('INV-D', '\$450.00'), ('INV-S', '\$400.00')]) {
+      await tester.pumpWidget(
+        ChangeNotifierProvider<Repository>.value(
+          value: repo,
+          child: MaterialApp(
+            key: ValueKey(id),
+            theme: buildTheme(Brightness.light),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () =>
+                    openInvoiceForm(context, invoice: repo.invoice(id)),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 bill × $shown'), findsOneWidget);
+    }
   });
 }

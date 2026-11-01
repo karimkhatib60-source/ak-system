@@ -5,23 +5,53 @@ import '../../data/repository.dart';
 import '../format.dart';
 import '../theme.dart';
 
-/// The line billing one supplier bill on a cost-plus invoice. Named by a
-/// fixed pattern so nobody types a name: supplier · what · ref. · date,
-/// under its expense category. The rate is the bill before the supplier's
-/// VAT (AK gets that VAT back), and the cost-plus fee is added on top.
-LineItem costPlusLine(Expense e) => LineItem(
-  expenseId: e.id,
-  section: expenseCategoryLabel(e.category, AppLang.en),
-  description: [
-    e.vendor.trim(),
-    e.title.trim(),
-    if (e.reference.trim().isNotEmpty) 'Ref. {0}'.tdArgs([e.reference.trim()]),
-    fmtDocDate(e.date),
-  ].where((s) => s.isNotEmpty).join(' · '),
-  quantity: 1,
-  unit: 'bill'.td,
-  rate: e.net,
-);
+/// Where a line comes from, in the fixed pattern nobody types:
+/// supplier · ref. · date.
+String _source(Expense e) => [
+  e.vendor.trim(),
+  if (e.reference.trim().isNotEmpty) 'Ref. {0}'.tdArgs([e.reference.trim()]),
+  fmtDocDate(e.date),
+].where((s) => s.isNotEmpty).join(' · ');
+
+/// The lines billing one supplier bill on a cost-plus invoice, taken from
+/// the bill as entered under Expenses: each of its items with quantity,
+/// unit and rate, or one line for the whole bill when only its total was
+/// entered. Rates are before the supplier's VAT (AK gets that VAT back),
+/// and the cost-plus fee is added on top. All lines sit under the bill's
+/// category.
+List<LineItem> costPlusLinesOf(Expense e) {
+  final section = expenseCategoryLabel(e.category, AppLang.en);
+  final from = _source(e);
+  if (e.items.isEmpty) {
+    return [
+      LineItem(
+        expenseId: e.id,
+        section: section,
+        description: [
+          if (e.title.trim().isNotEmpty) e.title.trim(),
+          from,
+        ].where((s) => s.isNotEmpty).join(' · '),
+        quantity: 1,
+        unit: 'bill'.td,
+        rate: e.net,
+      ),
+    ];
+  }
+  return [
+    for (final i in e.items)
+      LineItem(
+        expenseId: e.id,
+        section: section,
+        description: [
+          i.description.trim(),
+          from,
+        ].where((s) => s.isNotEmpty).join(' · '),
+        quantity: i.quantity,
+        unit: i.unit,
+        rate: i.rate,
+      ),
+  ];
+}
 
 /// Lines for [bills], by category in the usual order, oldest first in each.
 List<LineItem> costPlusLines(Iterable<Expense> bills) {
@@ -30,7 +60,24 @@ List<LineItem> costPlusLines(Iterable<Expense> bills) {
       final c = a.category.index.compareTo(b.category.index);
       return c != 0 ? c : a.date.compareTo(b.date);
     });
-  return sorted.map(costPlusLine).toList();
+  return [for (final e in sorted) ...costPlusLinesOf(e)];
+}
+
+/// [lines] with every supplier bill's lines taken again from the bill as
+/// it is now, so a correction made under Expenses reaches a draft invoice.
+/// A bill deleted since is dropped; other lines stay as they are.
+List<LineItem> refreshCostPlus(
+  List<LineItem> lines,
+  Map<String, Expense> bills,
+) {
+  final done = <String>{};
+  return [
+    for (final l in lines)
+      if (l.expenseId == null)
+        l
+      else if (done.add(l.expenseId!) && bills[l.expenseId] != null)
+        ...costPlusLinesOf(bills[l.expenseId]!),
+  ];
 }
 
 /// The title of a cost-plus invoice: its number among the project's
@@ -147,9 +194,10 @@ Future<List<Expense>?> pickSupplierBills(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Each bill becomes one line at its cost before VAT, '
-                                'under its category. The cost-plus fee is '
-                                'added on top.'
+                        'Each bill comes in with all its items at cost '
+                                'before VAT, under its category, and cannot '
+                                'be edited on the invoice. The cost-plus fee '
+                                'is added on top.'
                             .tr,
                         style: TextStyle(fontSize: 13, color: ak.muted),
                       ),
