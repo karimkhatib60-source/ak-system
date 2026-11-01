@@ -1121,6 +1121,27 @@ class Repository extends ChangeNotifier {
     await _write('invoices', i.copyWith(deleted: true).toMap());
   }
 
+  /// Supplier bills already billed to the client, each with the invoice it
+  /// is on. Cancelled and deleted invoices free their bills again.
+  /// [except] leaves out one invoice, the one being edited.
+  Map<String, Invoice> billedExpenses({String? except}) => {
+    for (final i in invoices)
+      if (i.id != except && i.status != InvoiceStatus.cancelled)
+        for (final l in i.items)
+          if (l.expenseId != null) l.expenseId!: i,
+  };
+
+  /// How many cost-plus invoices (invoices billing supplier bills) the
+  /// project has, besides [except]: the next one is numbered after them.
+  int costPlusCount(String? projectId, {String? except}) => invoices
+      .where(
+        (i) =>
+            i.projectId == projectId &&
+            i.id != except &&
+            i.items.any((l) => l.expenseId != null),
+      )
+      .length;
+
   /// A new draft invoice carrying the quotation's lines.
   Invoice invoiceFromQuotation(Quotation q) {
     final t = now();

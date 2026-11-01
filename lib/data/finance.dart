@@ -35,6 +35,7 @@ class LineItem {
     this.unit = 'lump sum',
     this.rate = 0,
     this.section = '',
+    this.expenseId,
   });
 
   /// BOQ heading this line belongs to, e.g. "Masonry works".
@@ -44,6 +45,10 @@ class LineItem {
   final String unit;
   final double rate;
 
+  /// The supplier bill (expense) this line bills the client for, on a
+  /// cost-plus invoice. A bill is on one invoice at most.
+  final String? expenseId;
+
   double get amount => quantity * rate;
 
   factory LineItem.fromJson(Map<String, Object?> m) => LineItem(
@@ -52,6 +57,7 @@ class LineItem {
     unit: (m['u'] ?? '') as String,
     rate: (m['r'] as num?)?.toDouble() ?? 0,
     section: (m['s'] ?? '') as String,
+    expenseId: m['x'] as String?,
   );
 
   Map<String, Object?> toJson() => {
@@ -60,6 +66,7 @@ class LineItem {
     'u': unit,
     'r': rate,
     if (section.isNotEmpty) 's': section,
+    if (expenseId != null) 'x': expenseId,
   };
 
   LineItem copyWith({
@@ -69,6 +76,7 @@ class LineItem {
     double? rate,
     String? section,
   }) => LineItem(
+    expenseId: expenseId,
     description: description ?? this.description,
     quantity: quantity ?? this.quantity,
     unit: unit ?? this.unit,
@@ -215,6 +223,10 @@ mixin PricedDocument {
   /// Whether the PDF shows the cost-plus fee as its own line. When false the
   /// fee is spread into the item rates and the client sees final prices.
   bool get showMarkup;
+
+  /// Whether the PDF shows the fee next to each line (cost, fee, amount)
+  /// as well as on the total. Only used while [showMarkup] is on.
+  bool get feePerLine => false;
 
   /// Cost of the items before the cost-plus fee.
   double get subtotal => items.fold(0, (s, i) => s + i.amount);
@@ -395,6 +407,8 @@ class Invoice with PricedDocument implements Record {
   final double markupRate;
   @override
   final bool showMarkup;
+  @override
+  final bool feePerLine;
   final InvoiceStatus status;
   final String notes;
 
@@ -418,6 +432,7 @@ class Invoice with PricedDocument implements Record {
     this.vatRate = 11,
     this.markupRate = 0,
     this.showMarkup = true,
+    this.feePerLine = false,
     this.status = InvoiceStatus.draft,
     this.notes = '',
   });
@@ -442,6 +457,7 @@ class Invoice with PricedDocument implements Record {
     vatRate: _num(m['vat_rate'], 11),
     markupRate: _num(m['markup_rate']),
     showMarkup: m['show_markup'] != 0 && m['show_markup'] != false,
+    feePerLine: m['fee_per_line'] == 1 || m['fee_per_line'] == true,
     status: _enumByName(InvoiceStatus.values, m['status'], InvoiceStatus.draft),
     notes: (m['notes'] ?? '') as String,
   );
@@ -464,6 +480,7 @@ class Invoice with PricedDocument implements Record {
     'vat_rate': vatRate,
     'markup_rate': markupRate,
     'show_markup': showMarkup ? 1 : 0,
+    'fee_per_line': feePerLine ? 1 : 0,
     'status': status.name,
     'notes': notes,
   };
@@ -494,6 +511,7 @@ class Invoice with PricedDocument implements Record {
     vatRate: vatRate,
     markupRate: markupRate,
     showMarkup: showMarkup,
+    feePerLine: feePerLine,
     status: status ?? this.status,
     notes: notes,
   );

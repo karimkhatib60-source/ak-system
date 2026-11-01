@@ -425,3 +425,7 @@ create index if not exists invoices_synced on public.invoices (synced_at);
 create index if not exists payments_synced on public.payments (synced_at);
 create index if not exists expenses_synced on public.expenses (synced_at);
 create index if not exists attachments_synced on public.attachments (synced_at);
+
+-- v17: cost-plus invoices can show the fee next to each supplier bill.
+-- Safe to re-run.
+alter table public.invoices add column if not exists fee_per_line boolean;

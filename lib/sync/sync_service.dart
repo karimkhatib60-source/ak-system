@@ -249,6 +249,7 @@ class SyncService extends ChangeNotifier {
     'deleted',
     'abroad',
     'show_markup',
+    'fee_per_line',
     'paid',
     'extra',
     'pinned',
