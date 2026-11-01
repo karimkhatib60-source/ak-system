@@ -32,7 +32,7 @@ const syncedTables = <String, String>{
       'quotation_id TEXT, date TEXT, due_date TEXT, items TEXT, '
       'discount REAL, vat_rate REAL, status TEXT, notes TEXT, '
       'markup_rate REAL, show_markup INTEGER, stage_id TEXT, '
-      'term_index INTEGER, extra INTEGER',
+      'term_index INTEGER, extra INTEGER, fee_per_line INTEGER',
   'payments':
       'invoice_id TEXT, date TEXT, amount REAL, method TEXT, reference TEXT, '
       'number TEXT, client_id TEXT, project_id TEXT, quotation_id TEXT, '
@@ -65,7 +65,7 @@ class LocalDb {
 
   final Database db;
 
-  static const _version = 9;
+  static const _version = 10;
 
   /// Columns added after the first release, by the version that added them.
   static const _added = {
@@ -109,6 +109,7 @@ class LocalDb {
       'expenses ADD COLUMN quotation_id TEXT',
       'expenses ADD COLUMN extra INTEGER',
     ],
+    10: ['invoices ADD COLUMN fee_per_line INTEGER'],
   };
 
   /// Tables added after the first release, by the version that added them.

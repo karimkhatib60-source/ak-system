@@ -9,6 +9,7 @@ import '../format.dart';
 import '../pdf_docs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'cost_plus.dart';
 import 'receipts.dart';
 
 /// Opens a quotation for editing, or a new one when [quotation] is null.
@@ -54,7 +55,8 @@ Future<void> openInvoiceForm(
 
 class _Line {
   _Line(LineItem i)
-    : section = TextEditingController(text: i.section),
+    : expenseId = i.expenseId,
+      section = TextEditingController(text: i.section),
       description = TextEditingController(text: i.description),
       quantity = TextEditingController(text: _plain(i.quantity)),
       unit = TextEditingController(text: i.unit),
@@ -66,6 +68,9 @@ class _Line {
   final TextEditingController unit;
   final TextEditingController rate;
 
+  /// The supplier bill this line bills, kept while the line is edited.
+  final String? expenseId;
+
   static String _plain(double v) =>
       v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
 
@@ -75,6 +80,7 @@ class _Line {
     unit: unit.text.trim(),
     rate: _parse(rate.text) ?? 0,
     section: section.text.trim(),
+    expenseId: expenseId,
   );
 
   bool get isBlank => item.description.isEmpty && item.rate == 0;
@@ -172,6 +178,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   late final TextEditingController _vat;
   late final TextEditingController _markup;
   bool _showMarkup = true;
+  bool _feePerLine = false;
   late final TextEditingController _terms;
   late final TextEditingController _notes;
   final _lines = <_Line>[];
@@ -232,6 +239,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
       text: fee == null || fee == 0 ? '' : _Line._plain(fee),
     );
     _showMarkup = doc?.showMarkup ?? true;
+    _feePerLine = doc?.feePerLine ?? false;
     _terms = TextEditingController(
       // The standard terms are written in the documents language while
       // they are still the app's default wording.
@@ -333,6 +341,7 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
     vatRate: _parse(_vat.text) ?? 0,
     markupRate: _parse(_markup.text.replaceAll('%', '')) ?? 0,
     showMarkup: _showMarkup,
+    feePerLine: _showMarkup && _feePerLine,
     status: _iStatus,
     notes: _notes.text.trim(),
   );
@@ -441,6 +450,44 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
   Future<void> _paste() async {
     final items = await showPasteItems(context);
     if (items != null) _addItems(items);
+  }
+
+  /// Bills the client for supplier bills of the project (cost-plus): one
+  /// line per bill under its category, and the invoice named by the usual
+  /// pattern unless a title of its own was typed.
+  Future<void> _fromBills() async {
+    final repo = context.read<Repository>();
+    final projectId = _projectId;
+    if (projectId == null) return;
+    final bills = await pickSupplierBills(
+      context,
+      repo: repo,
+      projectId: projectId,
+      invoiceId: _id,
+      inForm: {
+        for (final l in _lines)
+          if (l.expenseId != null) l.expenseId!,
+      },
+    );
+    if (bills == null || bills.isEmpty || !mounted) return;
+    _addItems(costPlusLines(bills));
+    final all = {for (final e in repo.expensesFor(projectId)) e.id: e};
+    final covered = [for (final l in _lines) ?all[l.expenseId]];
+    final t = _title.text.trim();
+    final project = repo.project(projectId);
+    final n = repo.costPlusCount(projectId, except: _id) + 1;
+    // A title typed by hand is kept; the default or an earlier pattern
+    // title is renewed for the bills now on the invoice.
+    final pattern = 'Cost-plus bill {0}'.td.split('{0}').first;
+    if (t.isEmpty || t == project?.name || t.startsWith(pattern)) {
+      _title.text = costPlusTitle(n, covered);
+    }
+    setState(() {
+      if (_markup.text.trim().isEmpty) {
+        final fee = project?.markupRate;
+        if (fee != null && fee != 0) _markup.text = _Line._plain(fee);
+      }
+    });
   }
 
   void _projectChanged(Repository repo, String? id) {
@@ -857,6 +904,12 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                     icon: const Icon(Icons.content_paste),
                     label: Text('Paste items'.tr),
                   ),
+                  if (widget.isInvoice && _projectId != null)
+                    TextButton.icon(
+                      onPressed: _fromBills,
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: Text('From supplier bills'.tr),
+                    ),
                 ],
               ),
               gap,
@@ -879,19 +932,42 @@ class _MoneyDocFormState extends State<MoneyDocForm> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: SwitchListTile(
-                      contentPadding: const EdgeInsetsDirectional.only(
-                        start: 4,
-                      ),
-                      dense: true,
-                      value: _showMarkup,
-                      onChanged: (v) => setState(() => _showMarkup = v),
-                      title: Text('Show fee on PDF'.tr),
-                      subtitle: Text(
-                        _showMarkup
-                            ? 'As its own line'.tr
-                            : 'Included in the rates'.tr,
-                      ),
+                    child: DropdownButtonFormField<int>(
+                      initialValue: !_showMarkup
+                          ? 2
+                          : widget.isInvoice && _feePerLine
+                          ? 1
+                          : 0,
+                      isExpanded: true,
+                      decoration: InputDecoration(labelText: 'Fee on PDF'.tr),
+                      items: [
+                        DropdownMenuItem(
+                          value: 0,
+                          child: Text(
+                            'One line on the total'.tr,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (widget.isInvoice)
+                          DropdownMenuItem(
+                            value: 1,
+                            child: Text(
+                              'Next to each line and on the total'.tr,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        DropdownMenuItem(
+                          value: 2,
+                          child: Text(
+                            'Included in the rates'.tr,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _showMarkup = v != 2;
+                        _feePerLine = v == 1;
+                      }),
                     ),
                   ),
                 ],

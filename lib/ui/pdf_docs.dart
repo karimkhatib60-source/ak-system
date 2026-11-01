@@ -645,6 +645,9 @@ Future<void> sharePdf(Repository repo, PricedDocument doc) async {
 /// each. When the cost-plus fee is not shown, it is spread into the rates
 /// so the lines add up to the same total.
 pw.Widget _itemsTable(PricedDocument doc) {
+  if (doc.showMarkup && doc.feePerLine && doc.markupRate != 0) {
+    return _feeTable(doc);
+  }
   final factor = doc.showMarkup ? 1.0 : 1 + doc.markupRate / 100;
   final sectioned = doc.items.any((i) => i.section.isNotEmpty);
   const cell = pw.TextStyle(fontSize: 9);
@@ -772,6 +775,113 @@ pw.Widget _itemsTable(PricedDocument doc) {
       4: const pw.FixedColumnWidth(68),
       5: const pw.FixedColumnWidth(76),
     }, 6),
+    children: rows,
+  );
+}
+
+/// The lines of a cost-plus invoice with the fee next to each: cost, fee
+/// and amount, grouped under their categories with a subtotal after each.
+pw.Widget _feeTable(PricedDocument doc) {
+  final rate = doc.markupRate / 100;
+  final sectioned = doc.items.any((i) => i.section.isNotEmpty);
+  const cell = pw.TextStyle(fontSize: 9);
+  final bold = pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold);
+  final head = pw.TextStyle(
+    color: PdfColors.white,
+    fontWeight: pw.FontWeight.bold,
+    fontSize: 8.5,
+  );
+  const pad = pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6);
+  const cols = 5;
+
+  pw.Widget c(String t, int col, pw.TextStyle style) => pw.Padding(
+    padding: pad,
+    child: _text(t, style: style, align: col >= 2 ? _endAlign : null),
+  );
+  pw.TableRow row(
+    List<String> cells, {
+    pw.TextStyle style = cell,
+    PdfColor? fill,
+  }) => pw.TableRow(
+    decoration: pw.BoxDecoration(
+      color: fill,
+      border: pw.Border(bottom: pw.BorderSide(color: _line, width: .6)),
+    ),
+    children: _cols([for (var k = 0; k < cols; k++) c(cells[k], k, style)]),
+  );
+
+  final rows = <pw.TableRow>[
+    row(
+      [
+        '#',
+        'Description'.td,
+        'Cost'.td,
+        'Fee {0}%'.tdArgs([_qty(doc.markupRate)]),
+        'Amount'.td,
+      ],
+      style: head,
+      fill: _graphite,
+    ),
+  ];
+  final groups = <String, List<LineItem>>{};
+  for (final i in doc.items) {
+    (groups[i.section] ??= []).add(i);
+  }
+  var g = 0;
+  var n = 0;
+  for (final MapEntry(key: name, value: items) in groups.entries) {
+    g++;
+    if (sectioned) {
+      rows.add(
+        row(
+          [
+            '$g',
+            name.isEmpty ? 'General'.td : name.td.toUpperCase(),
+            '',
+            '',
+            '',
+          ],
+          style: bold,
+          fill: _soft,
+        ),
+      );
+    }
+    var cost = 0.0;
+    for (var k = 0; k < items.length; k++) {
+      final i = items[k];
+      n++;
+      cost += i.amount;
+      rows.add(
+        row([
+          sectioned ? '$g.${k + 1}' : '$n',
+          i.description.td,
+          fmtMoney(i.amount),
+          fmtMoney(i.amount * rate),
+          fmtMoney(i.amount * (1 + rate)),
+        ]),
+      );
+    }
+    if (sectioned && groups.length > 1) {
+      rows.add(
+        row([
+          '',
+          'Total {0}'.tdArgs([name.isEmpty ? 'general'.td : name.td]),
+          fmtMoney(cost),
+          fmtMoney(cost * rate),
+          fmtMoney(cost * (1 + rate)),
+        ], style: bold),
+      );
+    }
+  }
+
+  return pw.Table(
+    columnWidths: _colWidths({
+      0: const pw.FixedColumnWidth(26),
+      1: const pw.FlexColumnWidth(5),
+      2: const pw.FixedColumnWidth(70),
+      3: const pw.FixedColumnWidth(64),
+      4: const pw.FixedColumnWidth(76),
+    }, cols),
     children: rows,
   );
 }
